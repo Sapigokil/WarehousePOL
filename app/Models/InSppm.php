@@ -14,6 +14,8 @@ class InSppm extends Model
         'material_category_id',
         'status',
         'notes',
+        'created_by',
+        'updated_by',
     ];
 
     public function category(): BelongsTo
@@ -29,5 +31,16 @@ class InSppm extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(InLog::class, 'in_sppm_id');
+    }
+
+    // Tambahkan 2 fungsi relasi ini di bagian bawah
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 }

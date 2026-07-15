@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Penerimaan Barang (SPPM)')
+@section('title', 'Materiel Masuk')
 
 @push('styles')
 <style>
@@ -85,8 +85,8 @@
     <i class="fa-solid fa-truck-ramp-box header-banner-icon"></i>
     
     <div class="header-content">
-        <h4 class="fw-bold mb-1"><i class="fa-solid fa-file-signature me-2"></i> Surat Perintah Pengiriman (SPPM)</h4>
-        <p class="mb-0 text-white-50 small">Monitoring dokumen target masuk dan realisasi kedatangan fisik barang di gudang.</p>
+        <h4 class="fw-bold mb-1"><i class="fa-solid fa-file-signature me-2"></i> Materiel Masuk</h4>
+        <p class="mb-0 text-white-50 small">Pencatatan Materiel Masuk berdasarkan SPPM</p>
     </div>
     <div class="header-content">
         <a href="{{ route('inbound.create') }}" class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2">
@@ -102,20 +102,20 @@
     </div>
 @endif
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <form method="GET" action="{{ route('inbound.index') }}" class="d-flex align-items-center w-100">
-        <div class="me-3 d-flex align-items-center">
-            <span class="text-muted small me-2 fw-semibold">Tampilkan:</span>
-            <select name="limit" class="form-select form-select-sm shadow-sm border-0 bg-white" onchange="this.form.submit()" style="width: 80px; border-radius: 6px;">
+<form method="GET" action="{{ route('inbound.index') }}" class="mb-3">
+    <div class="row g-2 align-items-center bg-white p-2 rounded shadow-sm border border-light">
+        <div class="col-12 col-md-auto d-flex align-items-center">
+            <span class="text-muted small me-2 fw-semibold d-none d-md-inline">Tampil:</span>
+            <select name="limit" class="form-select form-select-sm shadow-none bg-light" onchange="this.form.submit()" style="width: 70px;">
                 <option value="10" {{ $limit == 10 ? 'selected' : '' }}>10</option>
                 <option value="25" {{ $limit == 25 ? 'selected' : '' }}>25</option>
                 <option value="50" {{ $limit == 50 ? 'selected' : '' }}>50</option>
-                <option value="all" {{ $limit == 'all' ? 'selected' : '' }}>ALL</option>
+                <option value="all" {{ $limit == 'all' ? 'selected' : '' }}>All</option>
             </select>
         </div>
         
-        <div class="me-3">
-            <select name="category_id" class="form-select form-select-sm shadow-sm border-0 bg-white" onchange="this.form.submit()" style="border-radius: 6px; min-width: 180px;">
+        <div class="col-12 col-md-auto">
+            <select name="category_id" class="form-select form-select-sm shadow-none bg-light" onchange="this.form.submit()" style="min-width: 150px;">
                 <option value="">-- Semua Kategori --</option>
                 @foreach($categories as $category)
                     <option value="{{ $category->id }}" {{ (isset($category_id) && $category_id == $category->id) ? 'selected' : '' }}>{{ $category->name }}</option>
@@ -123,25 +123,52 @@
             </select>
         </div>
 
-        <div class="flex-grow-1"></div>
-
-        <div class="input-group input-group-sm shadow-sm" style="width: 300px; border-radius: 6px; overflow: hidden;">
-            <input type="text" name="search" class="form-control border-0 px-3 py-2" placeholder="Cari No SPPM..." value="{{ $search }}">
-            <button class="btn btn-white border-0 bg-white px-3" type="submit">
-                <i class="fa-solid fa-magnifying-glass text-muted"></i>
-            </button>
+        <div class="col-6 col-md-auto">
+            <select name="bulan" class="form-select form-select-sm shadow-none bg-light" onchange="this.form.submit()">
+                <option value="">-- Semua Bulan --</option>
+                @php
+                    $months = [
+                        '01' => 'Januari', '02' => 'Februari', '03' => 'Maret', '04' => 'April', 
+                        '05' => 'Mei', '06' => 'Juni', '07' => 'Juli', '08' => 'Agustus', 
+                        '09' => 'September', '10' => 'Oktober', '11' => 'November', '12' => 'Desember'
+                    ];
+                @endphp
+                @foreach($months as $num => $name)
+                    <option value="{{ $num }}" {{ (isset($bulan) && $bulan == $num) ? 'selected' : '' }}>{{ $name }}</option>
+                @endforeach
+            </select>
         </div>
-    </form>
-</div>
+
+        <div class="col-6 col-md-auto">
+            <select name="tahun" class="form-select form-select-sm shadow-none bg-light" onchange="this.form.submit()">
+                <option value="">-- Semua Tahun --</option>
+                @foreach($availableYears as $y)
+                    <option value="{{ $y }}" {{ (isset($tahun) && $tahun == $y) ? 'selected' : '' }}>{{ $y }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="col flex-grow-1"></div>
+
+        <div class="col-12 col-md-auto">
+            <div class="input-group input-group-sm" style="min-width: 280px;">
+                <input type="text" name="search" class="form-control shadow-none bg-light" placeholder="Cari SPPM, Nama, Kode, Seri..." value="{{ $search }}">
+                <button class="btn btn-dark px-3 shadow-none" type="submit">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
 
 <div class="table-responsive shadow-sm" style="border-radius: 8px;">
     <table class="table-dense">
         <thead>
             <tr>
-                <th width="35%">No. SPPM / Dokumen</th>
+                <th width="32%">No. SPPM / Dokumen</th>
                 <th width="15%">Kategori</th>
-                <th width="15%">Tgl Dokumen</th>
-                <th width="15%">Pembaruan Terakhir</th>
+                <th width="13%">Tgl Dokumen</th>
+                <th width="20%">Pembaruan Terakhir</th>
                 <th width="12%" class="text-center">Status</th>
                 <th width="8%" class="text-center">Aksi</th>
             </tr>
@@ -162,9 +189,12 @@
                 <td class="fw-semibold">
                     {{ \Carbon\Carbon::parse($sppm->sppm_date)->format('d M Y') }}
                 </td>
-                <td class="text-muted small">
-                    {{ $sppm->updated_at->diffForHumans() }}
+                
+                <td>
+                    <span class="text-dark d-block fw-semibold" style="font-size: 0.8rem;">{{ $sppm->updated_at->diffForHumans() }}</span>
+                    <span class="text-muted d-block mt-0.5" style="font-size: 0.75rem;"><i class="fa-solid fa-user-pen me-1 opacity-50"></i>{{ $sppm->updater->name ?? 'Sistem' }}</span>
                 </td>
+
                 <td class="text-center">
                     @if($sppm->status == 'completed')
                         <span class="status-badge bg-success bg-opacity-10 text-success border border-success">SELESAI</span>
@@ -229,7 +259,7 @@
                                                     @if($detail->material->pakai_seri == 1)
                                                         @if($detail->sppm_serial_start || $detail->sppm_serial_end)
                                                             <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: {{ $detail->sppm_serial_start ?? '?' }} s/d {{ $detail->sppm_serial_end ?? '?' }}
+                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: <span class="fw-bold">{{ $detail->sppm_serial_start ?? '?' }}</span> s/d <span class="fw-bold">{{ $detail->sppm_serial_end ?? '?' }}</span>
                                                             </small>
                                                         @endif
                                                     @endif
@@ -248,7 +278,7 @@
                                                         
                                                         @if($stock && $stock->serial_start)
                                                             <small class="text-muted d-block mt-1" style="font-size: 0.65rem; background:#f8fafc; border-radius:4px; padding:2px;">
-                                                                {{ $stock->serial_start }} - {{ $stock->serial_end }}
+                                                                <span class="fw-bold">{{ $stock->serial_start }}</span> - <span class="fw-bold">{{ $stock->serial_end }}</span>
                                                             </small>
                                                         @endif
                                                     </td>
@@ -274,7 +304,7 @@
             <tr>
                 <td colspan="6" class="text-center py-5 text-muted bg-white">
                     <i class="fa-solid fa-file-circle-xmark fs-2 mb-2 opacity-25"></i>
-                    <p class="mb-0 small">Belum ada dokumen SPPM yang diregistrasikan.</p>
+                    <p class="mb-0 small">Belum ada dokumen yang diregistrasikan.</p>
                 </td>
             </tr>
             @endforelse

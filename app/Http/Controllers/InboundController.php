@@ -20,6 +20,8 @@ class InboundController extends Controller
         $search = $request->input('search');
         $limit = $request->input('limit', 10);
         $category_id = $request->input('category_id');
+        $bulan = $request->input('bulan');
+        $tahun = $request->input('tahun');
         $perPage = $limit === 'all' ? 999999 : $limit;
 
         $sppms = InSppm::with([
@@ -28,21 +30,49 @@ class InboundController extends Controller
                 'logs' => function($q) {
                     $q->orderBy('batch_number', 'asc');
                 }, 
-                'logs.stocks'
+                'logs.stocks',
+                'updater', // Relasi user pengubah terakhir
+                'creator'  // Relasi user pembuat awal
             ])
             ->when($search, function ($query, $search) {
-                return $query->where('sppm_no', 'like', '%' . $search . '%');
+                return $query->where(function($q) use ($search) {
+                    // Cari berdasarkan Nomor SPPM
+                    $q->where('sppm_no', 'like', '%' . $search . '%')
+                      // Cari berdasarkan Nama atau Kode Barang
+                      ->orWhereHas('details.material', function($q2) use ($search) {
+                          $q2->where('name', 'like', '%' . $search . '%')
+                             ->orWhere('code', 'like', '%' . $search . '%');
+                      })
+                      // Cari berdasarkan Seri Kertas SPPM
+                      ->orWhereHas('details', function($q3) use ($search) {
+                          $q3->where('sppm_serial_start', 'like', '%' . $search . '%')
+                             ->orWhere('sppm_serial_end', 'like', '%' . $search . '%');
+                      })
+                      // Cari berdasarkan Seri Fisik Masuk Realita
+                      ->orWhereHas('logs.stocks', function($q4) use ($search) {
+                          $q4->where('serial_start', 'like', '%' . $search . '%')
+                             ->orWhere('serial_end', 'like', '%' . $search . '%');
+                      });
+                });
             })
             ->when($category_id, function ($query, $category_id) {
                 return $query->where('material_category_id', $category_id);
+            })
+            ->when($bulan, function ($query, $bulan) {
+                return $query->whereMonth('sppm_date', $bulan);
+            })
+            ->when($tahun, function ($query, $tahun) {
+                return $query->whereYear('sppm_date', $tahun);
             })
             ->orderBy('created_at', 'DESC')
             ->paginate($perPage)
             ->withQueryString();
 
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        // Mengambil daftar tahun unik dari database dokumen untuk filter
+        $availableYears = InSppm::selectRaw('YEAR(sppm_date) as year')->distinct()->orderBy('year', 'desc')->pluck('year');
 
-        return view('inbound.index', compact('sppms', 'categories', 'search', 'limit', 'category_id'));
+        return view('inbound.index', compact('sppms', 'categories', 'search', 'limit', 'category_id', 'bulan', 'tahun', 'availableYears'));
     }
 
     public function create()
@@ -82,7 +112,9 @@ class InboundController extends Controller
                 'batch_number' => 1,
                 'receive_date' => $batchDate,
                 'receiver_name'=> auth()->user()->name ?? 'Admin Gudang',
-                'notes'        => $request->batch_notes ?? 'Penerimaan Tahap 1'
+                'notes'        => $request->batch_notes ?? 'Penerimaan Tahap 1',
+                'created_by'           => auth()->id(), // Tambahkan ini
+                'updated_by'           => auth()->id(), // Tambahkan ini
             ]);
 
             $isAllCompleted = true;
@@ -194,7 +226,10 @@ class InboundController extends Controller
                     }
                 }
 
-                $sppm->update(['status' => $isAllCompleted ? 'completed' : 'partial']);
+                $sppm->update([
+                    'status' => $isAllCompleted ? 'completed' : 'partial',
+                    'updated_by' => auth()->id()
+                ]);
             });
 
             return redirect()->route('inbound.index')->with('success', 'Penerimaan fisik Tahap Baru berhasil ditambahkan.');
@@ -210,7 +245,8 @@ class InboundController extends Controller
             $sppm->update([
                 'sppm_no'   => $request->sppm_no,
                 'sppm_date' => $request->sppm_date,
-                'notes'     => $request->notes_manifes
+                'notes'     => $request->notes_manifes,
+                'updated_by' => auth()->id()
             ]);
 
             foreach ($request->items as $item) {
