@@ -1,6 +1,6 @@
 <nav id="sidebar">
-    <a href="{{ route('dashboard') }}" class="sidebar-brand">
-        <i class="fa-solid fa-boxes-stacked me-2" style="color: #01a9ac;"></i> INVENTORY
+    <a href="{{ route('dashboard') }}" class="sidebar-brand text-theme">
+        <i class="fa-solid fa-boxes-stacked me-2"></i> INVENTORY
     </a>
     
     <ul class="sidebar-menu">
@@ -24,7 +24,7 @@
         
             @can('Inbound Menu')
             <li>
-                <a href="#" class="sidebar-link">
+                <a href="{{ route('inbound.index') }}" class="sidebar-link">
                     <i class="fa-solid fa-arrow-right-to-bracket"></i> Barang Masuk
                 </a>
             </li>
@@ -32,8 +32,8 @@
 
             @can('Warehouse Menu')
             <li>
-                <a href="#" class="sidebar-link">
-                    <i class="fa-solid fa-warehouse"></i> Master Warehouse
+                <a href="{{ route('stocks.index') }}" class="sidebar-link {{ request()->routeIs('stocks.*') ? 'active' : '' }}">
+                    <i class="fa-solid fa-layer-group"></i> Stok Gudang
                 </a>
             </li>
             @endcan
@@ -66,7 +66,7 @@
         </li>
         @endcan
 
-        @canany(['Setting Menu', 'User Menu'])
+        @canany(['Setting Menu', 'User Menu', 'Warehouse Menu'])
         <li class="sidebar-menu-header">Sistem</li>
 
             @can('User Menu')        
@@ -74,19 +74,19 @@
                 <a class="sidebar-link {{ request()->is('users*') || request()->is('roles*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#userMenu" role="button" aria-expanded="{{ request()->is('users*') || request()->is('roles*') ? 'true' : 'false' }}" aria-controls="userMenu">
                     <div class="d-flex w-100 justify-content-between align-items-center">
                         <div><i class="fa-solid fa-users-gear"></i> Manajemen User</div>
-                        <i class="fa-solid fa-chevron-down" style="font-size: 0.8rem;"></i>
+                        <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem;"></i>
                     </div>
                 </a>
                 <div class="collapse {{ request()->is('users*') || request()->is('roles*') ? 'show' : '' }}" id="userMenu">
-                    <ul style="list-style: none; padding-left: 20px; margin-top: 5px; margin-bottom: 5px;">
+                    <ul style="list-style: none; padding-left: 20px; margin-top: 2px; margin-bottom: 2px;">
                         <li class="mb-1">
-                            <a href="{{ route('users.index') }}" class="sidebar-link {{ request()->routeIs('users.*') ? 'active' : '' }}" style="padding: 8px 25px; border-left: none;">
-                                <i class="fa-solid fa-angle-right" style="width: 15px;"></i> Daftar Pengguna
+                            <a href="{{ route('users.index') }}" class="sidebar-link {{ request()->routeIs('users.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-users me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Pengguna
                             </a>
                         </li>
                         <li>
-                            <a href="{{ route('roles.index') }}" class="sidebar-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" style="padding: 8px 25px; border-left: none;">
-                                <i class="fa-solid fa-angle-right" style="width: 15px;"></i> Role & Permission
+                            <a href="{{ route('roles.index') }}" class="sidebar-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-user-shield me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Role & Permission
                             </a>
                         </li>
                     </ul>
@@ -104,6 +104,33 @@
                 <a href="#" class="sidebar-link">
                     <i class="fa-solid fa-sliders"></i> Pengaturan Global
                 </a>
+            </li>
+            <li class="nav-item mb-1">
+                <a class="sidebar-link {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#warehouseSettingMenu" role="button" aria-expanded="{{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? 'true' : 'false' }}" aria-controls="warehouseSettingMenu">
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <div><i class="fa-solid fa-gear"></i> Pengaturan Warehouse</div>
+                        <i class="fa-solid fa-chevron-down" style="font-size: 0.8rem;"></i>
+                    </div>
+                </a>
+                <div class="collapse {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? 'show' : '' }}" id="warehouseSettingMenu">
+                    <ul style="list-style: none; padding-left: 20px; margin-top: 5px; margin-bottom: 5px;">
+                        <li class="mb-1">
+                            <a href="{{ route('materials.index') }}" class="sidebar-link {{ request()->routeIs('materials.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-box me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Barang
+                            </a>
+                        </li>
+                        <li class="mb-1">
+                            <a href="{{ route('categories.index') }}" class="sidebar-link {{ request()->routeIs('categories.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-tags me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Kategori Materiel
+                            </a>
+                        </li>
+                        <li class="mb-1">
+                            <a href="{{ route('warehouses.index') }}" class="sidebar-link {{ request()->routeIs('warehouses.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-warehouse me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Gudang
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </li>
             @endcan
             

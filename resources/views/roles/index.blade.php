@@ -5,12 +5,11 @@
 <style>
     /* 1. Header Banner Styling */
     .header-banner {
-        background: linear-gradient(135deg, #01a9ac 0%, #01898c 100%);
+        /* background dan box-shadow dihapus, digantikan oleh class .header-banner-theme */
         border-radius: 12px;
         padding: 30px;
         color: white;
         margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(1, 169, 172, 0.2);
         position: relative;
         overflow: hidden;
     }
@@ -84,7 +83,7 @@
 
     /* Baris Group Header Spesifik */
     .table-excel tr.group-header:hover {
-        background-color: #d9e2ec !important; /* Matikan efek hover biru pada baris group */
+        background-color: #d9e2ec !important;
     }
     .table-excel tr.group-header td {
         background-color: #d9e2ec !important;
@@ -100,7 +99,7 @@
 
 @section('content')
 
-<div class="header-banner d-flex justify-content-between align-items-center">
+<div class="header-banner header-banner-theme d-flex justify-content-between align-items-center">
     <i class="fa-solid fa-shield-halved header-banner-icon"></i>
     
     <div class="header-content">
@@ -108,7 +107,7 @@
         <p class="mb-0 text-white-50">Atur izin secara detail untuk setiap posisi kerja atau role di sistem.</p>
     </div>
     <div class="header-content">
-        <button class="btn btn-light fw-bold text-primary shadow-sm" style="color: #01a9ac !important;" data-bs-toggle="modal" data-bs-target="#modalAddRole">
+        <button class="btn btn-light fw-bold text-theme shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddRole">
             <i class="fa-solid fa-plus me-1"></i> Tambah Role Baru
         </button>
     </div>
@@ -203,7 +202,7 @@
     </div>
     
     <div class="mt-4 mb-5 text-end">
-        <button type="submit" class="btn text-white px-5 py-2 fw-bold shadow-sm" style="background-color: #01a9ac; border-radius: 8px;">
+        <button type="submit" class="btn px-5 py-2 fw-bold shadow-sm btn-theme" style="border-radius: 8px;">
             <i class="fa-solid fa-floppy-disk me-2"></i> Simpan Matriks
         </button>
     </div>
@@ -215,7 +214,7 @@
             <form action="{{ route('roles.store') }}" method="POST">
                 @csrf
                 <div class="modal-header border-0 bg-light">
-                    <h5 class="modal-title fw-bold" style="color: #01a9ac;"><i class="fa-solid fa-plus-circle me-2"></i> Tambah Role Baru</h5>
+                    <h5 class="modal-title fw-bold text-theme"><i class="fa-solid fa-plus-circle me-2"></i> Tambah Role Baru</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
@@ -226,7 +225,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-0 bg-light">
-                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background-color: #01a9ac; border-radius: 8px;">Simpan Role</button>
+                    <button type="submit" class="btn px-4 fw-bold shadow-sm btn-theme" style="border-radius: 8px;">Simpan Role</button>
                 </div>
             </form>
         </div>

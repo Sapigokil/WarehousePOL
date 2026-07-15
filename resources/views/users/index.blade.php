@@ -3,24 +3,16 @@
 
 @push('styles')
 <style>
-    /* 1. Pengaturan Master Color Background Layout */
-    body {
-        background-color: #f4f7fa !important; /* Warna abu-abu kebiruan lembut untuk memisahkan bg layout dengan data */
-    }
-
-    /* 2. Header Banner Styling (Dengan Watermark Icon) */
+    /* 1. Header Banner Styling (Menggunakan CSS Variable dari app.blade.php) */
     .header-banner {
-        background: linear-gradient(135deg, #01a9ac 0%, #01898c 100%);
         border-radius: 12px;
         padding: 30px;
         color: white;
         margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(1, 169, 172, 0.2);
-        position: relative; /* Wajib untuk menahan icon watermark */
-        overflow: hidden; /* Agar bagian icon yang besar terpotong rapi */
+        position: relative; 
+        overflow: hidden; 
     }
     
-    /* Ikon Raksasa sebagai Penghias Banner */
     .header-banner-icon {
         position: absolute;
         right: 0%;
@@ -28,21 +20,20 @@
         transform: translateY(-50%);
         font-size: 12rem;
         color: #ffffff;
-        opacity: 0.15; /* Transparansi untuk efek watermark */
+        opacity: 0.15; 
         pointer-events: none;
         z-index: 1;
     }
 
-    /* Memastikan teks dan tombol tetap bisa diklik/di atas icon */
     .header-content {
         position: relative;
         z-index: 2;
     }
 
-    /* 3. Desain Opsi 3: Soft Striped Card */
+    /* 2. Desain Opsi 3: Soft Striped Card */
     .table-modern {
         border-collapse: separate;
-        border-spacing: 0 8px; /* Memberikan jarak atas-bawah antar baris */
+        border-spacing: 0 8px; 
         width: 100%;
     }
     .table-modern thead th {
@@ -55,7 +46,7 @@
         font-weight: 700;
     }
     .table-modern tbody tr {
-        box-shadow: 0 2px 10px rgba(0,0,0,0.03); /* Bayangan sangat halus */
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03); 
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .table-modern tbody tr:hover {
@@ -63,12 +54,11 @@
         box-shadow: 0 5px 15px rgba(0,0,0,0.08);
     }
     
-    /* Pewarnaan Belang Klasik-Modern */
     .table-modern tbody tr:nth-child(odd) td {
-        background-color: #ffffff; /* Putih bersih, kontras dengan bg layout */
+        background-color: #ffffff; 
     }
     .table-modern tbody tr:nth-child(even) td {
-        background-color: #eef4f9; /* Biru sangat pudar agar belangnya terasa lembut */
+        background-color: rgba(0,0,0,0.02); /* Diubah jadi neutral transparan agar membaur ke semua warna tema */
     }
     .table-modern td {
         border: none;
@@ -77,7 +67,6 @@
         color: #444;
     }
     
-    /* Melengkungkan sudut pada awal dan akhir sel setiap baris */
     .table-modern td:first-child { border-radius: 8px 0 0 8px; }
     .table-modern td:last-child { border-radius: 0 8px 8px 0; }
 </style>
@@ -85,7 +74,7 @@
 
 @section('content')
 
-<div class="header-banner d-flex justify-content-between align-items-center">
+<div class="header-banner header-banner-theme d-flex justify-content-between align-items-center">
     <i class="fa-solid fa-users-gear header-banner-icon"></i>
     
     <div class="header-content">
@@ -93,7 +82,7 @@
         <p class="mb-0 text-white-50">Kelola daftar akun, tetapkan hak akses, dan pantau aktivitas pengguna sistem.</p>
     </div>
     <div class="header-content">
-        <button class="btn btn-light fw-bold text-primary shadow-sm" style="color: #01a9ac !important;" data-bs-toggle="modal" data-bs-target="#modalAddUser">
+        <button class="btn btn-light fw-bold text-theme shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddUser">
             <i class="fa-solid fa-plus me-1"></i> Tambah Pengguna
         </button>
     </div>
@@ -161,7 +150,7 @@
                 </td>
                 <td>
                     <div class="d-flex align-items-center">
-                        <img src="https://ui-avatars.com/api/?name={{ urlencode($user->name) }}&background=e0f2f1&color=01a9ac&rounded=true" alt="Avatar" width="40" height="40" class="me-3 shadow-sm">
+                        <img src="https://ui-avatars.com/api/?name={{ urlencode($user->name) }}&background=f1f1f1&color=444444&rounded=true" alt="Avatar" width="40" height="40" class="me-3 shadow-sm">
                         <div>
                             <div class="fw-bold text-dark">{{ $user->name }}</div>
                             <div class="text-muted small">{{ $user->email }}</div>
@@ -171,11 +160,11 @@
                 <td><span class="badge bg-white text-dark border shadow-sm"><i class="fa-solid fa-at text-muted me-1"></i>{{ $user->username }}</span></td>
                 <td>
                     @foreach($user->roles as $role)
-                        <span class="badge" style="background-color: #01a9ac;">{{ strtoupper(str_replace('_', ' ', $role->name)) }}</span>
+                        <span class="badge bg-theme">{{ strtoupper(str_replace('_', ' ', $role->name)) }}</span>
                     @endforeach
                 </td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-white bg-white text-primary shadow-sm rounded-circle me-1" style="width: 34px; height: 34px; border: 1px solid #e0e0e0;" data-bs-toggle="modal" data-bs-target="#modalEditUser{{ $user->id }}" title="Edit">
+                    <button class="btn btn-sm btn-white bg-white text-theme shadow-sm rounded-circle me-1" style="width: 34px; height: 34px; border: 1px solid #e0e0e0;" data-bs-toggle="modal" data-bs-target="#modalEditUser{{ $user->id }}" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     <form action="{{ route('users.destroy', $user->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Yakin ingin menghapus pengguna ini?');">
@@ -193,7 +182,7 @@
                         <form action="{{ route('users.update', $user->id) }}" method="POST">
                             @csrf @method('PUT')
                             <div class="modal-header border-0 bg-light">
-                                <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square me-2 text-primary"></i> Edit Pengguna</h5>
+                                <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square me-2 text-theme"></i> Edit Pengguna</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body p-4">
@@ -225,7 +214,7 @@
                                 </div>
                             </div>
                             <div class="modal-footer border-0 bg-light">
-                                <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background-color: #01a9ac; border-radius: 8px;">Simpan Perubahan</button>
+                                <button type="submit" class="btn px-4 fw-bold shadow-sm btn-theme" style="border-radius: 8px;">Simpan Perubahan</button>
                             </div>
                         </form>
                     </div>
@@ -258,7 +247,7 @@
             <form action="{{ route('users.store') }}" method="POST">
                 @csrf
                 <div class="modal-header border-0 bg-light">
-                    <h5 class="modal-title fw-bold" style="color: #01a9ac;"><i class="fa-solid fa-user-plus me-2"></i> Tambah Pengguna Baru</h5>
+                    <h5 class="modal-title fw-bold text-theme"><i class="fa-solid fa-user-plus me-2"></i> Tambah Pengguna Baru</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
@@ -289,7 +278,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-0 bg-light">
-                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background-color: #01a9ac; border-radius: 8px;">Simpan Pengguna</button>
+                    <button type="submit" class="btn px-4 fw-bold shadow-sm btn-theme" style="border-radius: 8px;">Simpan Pengguna</button>
                 </div>
             </form>
         </div>

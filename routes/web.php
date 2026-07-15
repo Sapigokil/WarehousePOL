@@ -4,6 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\MaterialCategoryController;
+use App\Http\Controllers\WarehouseController;
+use App\Http\Controllers\MaterialController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\InboundController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -19,10 +24,42 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // Area Dashboard 
 Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(function () {
     
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    /* ==============================================
+       UTAMA
+       ============================================== */
+    Route::middleware(['can:Dashboard Menu'])->group(function () {
+        Route::get('/dashboard', function () {
+            return view('dashboard');
+        })->name('dashboard');
+    });
 
+    /* ==============================================
+       OPERASIONAL
+       ============================================== */
+    Route::middleware(['can:Inbound Menu'])->group(function () {
+        Route::get('inbound/materials-by-category/{category_id}', [App\Http\Controllers\InboundController::class, 'getMaterialsByCategory'])->name('inbound.materials-by-category');
+        Route::resource('inbound', App\Http\Controllers\InboundController::class);
+        
+    });
+
+    Route::middleware(['can:Warehouse Menu'])->group(function () {
+        Route::resource('stocks', StockController::class)->except(['show']);
+    });
+
+    Route::middleware(['can:Outbound Menu'])->group(function () {
+        
+    });
+
+    /* ==============================================
+       ANALITIK
+       ============================================== */
+    Route::middleware(['can:Report Menu'])->group(function () {
+        
+    });
+
+    /* ==============================================
+       SISTEM
+       ============================================== */
     // Manajemen User Group
     Route::middleware(['can:User Menu'])->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
@@ -30,5 +67,15 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // Rute khusus untuk menyimpan data matriks permission
         Route::post('roles/sync', [RoleController::class, 'sync'])->name('roles.sync');
         Route::resource('roles', RoleController::class)->except(['show', 'edit', 'update']);
+    });
+
+    // Pengaturan Global & Warehouse Group
+    Route::middleware(['can:Setting Menu'])->group(function () {
+        Route::post('categories/reorder', [ MaterialCategoryController::class, 'reorder' ])->name('categories.reorder');
+        Route::resource('categories', MaterialCategoryController::class);
+        Route::post('warehouses/reorder', [WarehouseController::class, 'reorder'])->name('warehouses.reorder');
+        Route::resource('warehouses', WarehouseController::class)->except(['show']);
+        Route::post('materials/reorder', [MaterialController::class, 'reorder'])->name('materials.reorder');
+        Route::resource('materials', MaterialController::class)->except(['show']);
     });
 });

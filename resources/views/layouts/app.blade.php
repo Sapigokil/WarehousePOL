@@ -4,17 +4,125 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Warehouse Inventory - @yield('title', 'Dashboard')</title>
+    <title>SIFASMAT - @yield('title', 'Dashboard')</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 
+    @php
+        // $activeTheme = 'dark'; 
+        $activeTheme = 'light-blue';
+    @endphp
+
     <style>
+        /* =========================================
+           SISTEM TEMA DINAMIS (CSS VARIABLES)
+           ========================================= */
+        
+        :root {
+            --sidebar-bg: #23272a;
+            --sidebar-brand-bg: #1e2124;
+            --sidebar-hover-bg: #353f54;
+            --sidebar-text: #b0b3b8;
+            --sidebar-text-hover: #ffffff;
+            --sidebar-border: #333333;
+            
+            --primary-color: #01a9ac;
+            --primary-hover: #01898c;
+            --primary-gradient-1: #01a9ac;
+            --primary-gradient-2: #01898c;
+            
+            --layout-bg: #e4e9f0;
+        }
+
+        body.theme-navy-blue {
+            --sidebar-bg: #0f172a;
+            --sidebar-brand-bg: #020617;
+            --sidebar-hover-bg: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #ffffff;
+            --sidebar-border: #1e293b;
+
+            --primary-color: #1e40af;
+            --primary-hover: #1d4ed8;
+            --primary-gradient-1: #1e40af;
+            --primary-gradient-2: #1d4ed8;
+            
+            --layout-bg: #f0f4f8; 
+        }
+
+        body.theme-modern-blue {
+            --sidebar-bg: #1e1b4b;
+            --sidebar-brand-bg: #11102e;
+            --sidebar-hover-bg: #2e2970;
+            --sidebar-text: #a5b4fc;
+            --sidebar-text-hover: #ffffff;
+            --sidebar-border: #2e2970;
+
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-gradient-1: #4f46e5;
+            --primary-gradient-2: #4338ca;
+            
+            --layout-bg: #f5f7fa;
+        }
+
+        body.theme-ocean-blue {
+            --sidebar-bg: #0f172a; 
+            --sidebar-brand-bg: #020617;
+            --sidebar-hover-bg: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #ffffff;
+            --sidebar-border: #1e293b;
+
+            --primary-color: #0284c7;
+            --primary-hover: #0369a1;
+            --primary-gradient-1: #0284c7;
+            --primary-gradient-2: #0369a1;
+            
+            --layout-bg: #f1f5f9;
+        }
+
+        body.theme-light-blue {
+            --sidebar-bg: #0c4a6e;
+            --sidebar-brand-bg: #082f49;
+            --sidebar-hover-bg: #075985;
+            --sidebar-text: #bae6fd;
+            --sidebar-text-hover: #ffffff;
+            --sidebar-border: #075985;
+
+            --primary-color: #0ea5e9;
+            --primary-hover: #0284c7;
+            --primary-gradient-1: #0ea5e9;
+            --primary-gradient-2: #0284c7;
+            
+            --layout-bg: #f0f9ff;
+        }
+
+        /* =========================================
+           KELAS BANTUAN GLOBAL (UTILITY CLASSES)
+           ========================================= */
+        .text-theme { color: var(--primary-color) !important; }
+        .bg-theme { background-color: var(--primary-color) !important; }
+        .btn-theme { 
+            background-color: var(--primary-color) !important; 
+            color: #ffffff !important; 
+            border: none; 
+        }
+        .btn-theme:hover { background-color: var(--primary-hover) !important; }
+        
+        .header-banner-theme {
+            background: linear-gradient(135deg, var(--primary-gradient-1) 0%, var(--primary-gradient-2) 100%);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        /* =========================================
+           PENGATURAN LAYOUT UTAMA
+           ========================================= */
         body {
             font-family: 'Open Sans', sans-serif;
             overflow-x: hidden;
@@ -23,10 +131,9 @@
             display: flex;
         }
 
-        /* 1. Sidebar Component */
         #sidebar {
             width: 260px;
-            background-color: #23272a; /* Dark grey konsisten dengan tema login */
+            background-color: var(--sidebar-bg); 
             position: fixed;
             top: 0;
             left: 0;
@@ -34,81 +141,83 @@
             z-index: 1030;
             overflow-y: auto;
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            transition: background-color 0.3s ease;
         }
         
-        /* Custom Scrollbar untuk Sidebar */
         #sidebar::-webkit-scrollbar { width: 6px; }
         #sidebar::-webkit-scrollbar-track { background: transparent; }
-        #sidebar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        #sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
 
         .sidebar-brand {
             height: 70px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #1e2124;
-            color: #ffffff;
+            background-color: var(--sidebar-brand-bg);
+            color: var(--sidebar-text-hover);
             font-size: 1.25rem;
             font-weight: 700;
             text-decoration: none;
             letter-spacing: 1px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--sidebar-border);
+            transition: background-color 0.3s ease;
         }
 
-        .sidebar-brand:hover { color: #01a9ac; }
+        .sidebar-brand:hover { color: var(--primary-color); }
 
+        /* PERUBAHAN TATA LETAK MENU SIDEBAR YANG LEBIH PADAT */
         .sidebar-menu {
-            padding: 15px 0;
+            padding: 10px 0; /* Diperkecil dari 15px */
             list-style: none;
             margin: 0;
         }
 
         .sidebar-menu-header {
-            padding: 10px 25px;
-            font-size: 0.75rem;
-            color: #888;
+            padding: 8px 25px; /* Diperkecil dari 10px */
+            font-size: 0.7rem; /* Diperkecil dari 0.75rem */
+            color: rgba(255,255,255,0.4);
             text-transform: uppercase;
             font-weight: 700;
             letter-spacing: 0.5px;
-            margin-top: 10px;
+            margin-top: 5px; /* Diperkecil dari 10px */
+            margin-bottom: 2px;
         }
 
         .sidebar-link {
             display: flex;
             align-items: center;
-            padding: 12px 25px;
-            color: #b0b3b8;
+            padding: 8px 25px; /* Diperkecil dari 12px */
+            color: var(--sidebar-text);
             text-decoration: none;
-            font-size: 0.95rem;
+            font-size: 0.85rem; /* Diperkecil dari 0.95rem */
             border-left: 4px solid transparent;
             transition: all 0.2s ease-in-out;
         }
 
         .sidebar-link i {
-            width: 30px;
-            font-size: 1.1rem;
+            width: 26px; /* Diperkecil dari 30px */
+            font-size: 1rem; /* Diperkecil dari 1.1rem */
             text-align: left;
         }
 
         .sidebar-link:hover, .sidebar-link.active {
-            color: #ffffff;
-            background-color: #353f54;
-            border-left: 4px solid #01a9ac;
+            color: var(--sidebar-text-hover);
+            background-color: var(--sidebar-hover-bg);
+            border-left: 4px solid var(--primary-color);
         }
 
         .sidebar-link.active { font-weight: 600; }
 
-        /* Area Kanan (Navbar + Konten + Footer) */
         #right-wrapper {
             margin-left: 260px;
             width: calc(100% - 260px);
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            background-color: #e4e9f0 !important; /* TAMBAHKAN BARIS INI */
+            background-color: var(--layout-bg) !important; 
+            transition: background-color 0.3s ease;
         }
 
-        /* 2. Navbar Component */
         #navbar {
             height: 70px;
             background-color: #ffffff;
@@ -131,15 +240,13 @@
             transition: color 0.2s;
         }
 
-        .navbar-icon:hover { color: #01a9ac; }
+        .navbar-icon:hover { color: var(--primary-color); }
 
-        /* 3. View Display Component */
         #main-content {
-            flex: 1; /* Membuat konten mengisi ruang kosong antara navbar dan footer */
+            flex: 1; 
             padding: 30px;
         }
 
-        /* 4. Footer Component */
         #footer {
             background-color: #ffffff;
             border-top: 1px solid #e9ecef;
@@ -151,7 +258,6 @@
             align-items: center;
         }
 
-        /* Global Card Styling */
         .card {
             border: none;
             border-radius: 8px;
@@ -170,7 +276,7 @@
     </style>
     @stack('styles')
 </head>
-<body>
+<body class="theme-{{ $activeTheme }}">
 
     @include('partials.sidebar')
 
