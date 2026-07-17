@@ -8,14 +8,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class InDetail extends Model
 {
     protected $fillable = [
-        'in_sppm_id',
-        'material_id',
-        'target_qty',
-        'qty_huruf',
-        'harga_satuan',
-        'harga_total',
-        'sppm_serial_start',
-        'sppm_serial_end'
+        'in_sppm_id', 'material_id', 'target_qty', 'qty_huruf', 
+        'harga_satuan', 'harga_total', 
+        'sppm_serial_prefix', 'sppm_serial_start', 'sppm_serial_end'
     ];
 
     public function sppm(): BelongsTo

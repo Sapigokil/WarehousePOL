@@ -12,6 +12,7 @@ class InSppm extends Model
         'sppm_no',
         'sppm_date',
         'material_category_id',
+        'warehouse_id', // Tambahkan field warehouse_id ke dalam fillable
         'status',
         'notes',
         'created_by',
@@ -42,5 +43,11 @@ class InSppm extends Model
     public function updater()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    // Tambahkan relasi warehouse di bagian bawah
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'warehouse_id');
     }
 }

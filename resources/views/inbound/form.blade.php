@@ -21,20 +21,7 @@
     .form-check-input-custom { width: 1.8em; height: 1rem; background-color: #fff; border: 1px solid rgba(0,0,0,.25); border-radius: 2em; cursor: pointer; transition: background-color .15s;}
     .form-check-input-custom:checked { background-color: var(--primary-color); border-color: var(--primary-color); }
     
-    .text-letter-span { 
-        font-size: 0.7rem; 
-        font-weight: 600; 
-        color: #4b5563; 
-        text-transform: uppercase; 
-        background-color: #f3f4f6; 
-        padding: 2px 8px; 
-        border-radius: 6px; 
-        display: flex; 
-        align-items: center; 
-        min-height: 31px; 
-        border: 1px dashed #cbd5e1; 
-        word-wrap: break-word;
-    }
+    .text-letter-span { font-size: 0.7rem; font-weight: 600; color: #4b5563; text-transform: uppercase; background-color: #f3f4f6; padding: 2px 8px; border-radius: 6px; display: flex; align-items: center; min-height: 31px; border: 1px dashed #cbd5e1; word-wrap: break-word; }
     .text-price-total { font-size: 0.8rem; font-weight: 700; color: var(--primary-color); }
     
     .th-real-batch { border-left: 2px solid #e2e8f0; background-color: #fdfdfd; }
@@ -61,6 +48,14 @@
     <a href="{{ route('inbound.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
 </div>
 
+<!-- Alert Pesan Error Overlap -->
+@if(session('error'))
+    <div class="alert alert-danger shadow-sm border-0 py-2 d-flex align-items-center" role="alert">
+        <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
+        <div>{{ session('error') }}</div>
+    </div>
+@endif
+
 <form action="{{ isset($inbound) ? route('inbound.update', $inbound->id) : route('inbound.store') }}" method="POST" id="formMainInbound">
     @csrf
     @if(isset($inbound)) @method('PUT') @endif
@@ -68,6 +63,7 @@
     <input type="hidden" name="inbound_mode" id="inbound_mode_value" value="{{ old('inbound_mode', $inboundMode) }}">
 
     <div class="row">
+        <!-- HEADER (INFORMASI DOKUMEN & GUDANG) -->
         <div class="col-12 mb-3">
             <div class="form-card p-4 shadow-sm">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -79,18 +75,29 @@
                 </div>
                 
                 <div class="row">
-                    <div class="col-12 col-sm-6 col-md-4 col-xl-3 mb-3">
+                    <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Nomor SPPM</label>
-                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', isset($inbound) ? $inbound->sppm_no : '') }}" required {{ isset($inbound) ? 'readonly' : '' }} placeholder="SPPM/001/VI/2026">
+                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', isset($inbound) ? $inbound->sppm_no : '') }}" required {{ isset($inbound) ? 'readonly' : '' }} placeholder="SPPM/001/VI/2026/KORLANTAS">
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
-                        <label class="field-label">Tgl Surat SPPM</label>
+                        <label class="field-label">Tgl Surat</label>
                         <input type="date" name="sppm_date" class="form-control custom-input w-100" value="{{ old('sppm_date', isset($inbound) ? $inbound->sppm_date : date('Y-m-d')) }}" required {{ isset($inbound) ? 'readonly' : '' }}>
                     </div>
-                    <div class="col-12 col-sm-6 col-md-4 col-xl-3 mb-3">
+                    <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
+                        <label class="field-label">Gudang Tujuan</label>
+                        <select name="warehouse_id" class="form-select custom-input w-100" required {{ isset($inbound) ? 'disabled' : '' }}>
+                            @foreach($warehouses as $warehouse)
+                                <option value="{{ $warehouse->id }}" {{ isset($inbound) && $inbound->warehouse_id == $warehouse->id ? 'selected' : '' }}>{{ $warehouse->name }}</option>
+                            @endforeach
+                        </select>
+                        @if(isset($inbound))
+                            <input type="hidden" name="warehouse_id" value="{{ $inbound->warehouse_id }}">
+                        @endif
+                    </div>
+                    <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Kategori Komoditas</label>
                         <select name="material_category_id" id="category-selector" class="form-select custom-input w-100" required {{ isset($inbound) ? 'disabled' : '' }}>
-                            <option value="">-- Pilih Kategori --</option>
+                            <option value="">-- Pilih --</option>
                             @foreach($categories as $category)
                                 <option value="{{ $category->id }}" {{ isset($inbound) && $inbound->material_category_id == $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
                             @endforeach
@@ -99,22 +106,11 @@
                             <input type="hidden" name="material_category_id" value="{{ $inbound->material_category_id }}">
                         @endif
                     </div>
-                    <div class="col-12 col-sm-6 col-md-12 col-xl-4 mb-3">
+                    <div class="col-12 col-sm-12 col-md-8 col-xl-4 mb-3">
                         <label class="field-label">Keterangan SPPM (Umum)</label>
-                        <input type="text" name="notes_manifes" class="form-control custom-input w-100" value="{{ old('notes_manifes', isset($inbound) ? $inbound->notes : '') }}" placeholder="Catatan materiel masuk...">
+                        <input type="text" name="notes_manifes" class="form-control custom-input w-100" value="{{ old('notes_manifes', isset($inbound) ? $inbound->notes : '') }}" placeholder="Catatan dokumen surat...">
                     </div>
                 </div>
-
-                @if(isset($inbound) && $inbound->logs->count() > 0)
-                    <div class="mb-3 mt-2">
-                        <label class="field-label text-muted">Riwayat Catatan Realisasi Fisik Sebelumnya</label>
-                        @foreach($inbound->logs as $log)
-                            <div class="alert alert-secondary py-2 mb-1" style="font-size: 0.8rem;">
-                                <strong>Tahap {{ $log->batch_number }} ({{ \Carbon\Carbon::parse($log->receive_date)->format('d M Y') }}):</strong> {{ $log->notes }}
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
                 
                 <div class="section-realita-date d-none">
                     <div class="row bg-warning bg-opacity-10 border border-warning rounded p-3 mt-2">
@@ -133,6 +129,7 @@
             </div>
         </div>
 
+        <!-- SEKSI TABEL MANIFES MATRIX -->
         <div class="col-12 mb-4">
             <div class="form-card shadow-sm overflow-hidden">
                 <div class="bg-light px-4 py-3 border-bottom d-flex justify-content-between align-items-center">
@@ -154,15 +151,7 @@
                                 
                                 @for($b=1; $b<=$maxBatches; $b++)
                                     <th width="10%" class="text-center th-real-batch col-tahap-{{ $b }} d-none">
-                                        Tahap {{ $b }} <br>
-                                        @if(isset($inbound) && $b < $currentBatch)
-                                            @php $logForBatch = $inbound->logs->where('batch_number', $b)->first(); @endphp
-                                            @if($logForBatch)
-                                                <small class="fw-normal text-muted">{{ \Carbon\Carbon::parse($logForBatch->receive_date)->format('d/m/Y') }}</small>
-                                            @endif
-                                        @elseif($b == $currentBatch)
-                                            <span class="badge bg-warning text-dark mt-1">INPUT REALITA</span>
-                                        @endif
+                                        Tahap {{ $b }}
                                     </th>
                                 @endfor
                                 
@@ -180,6 +169,12 @@
                                 @php
                                     $isParent = is_null($detail->material->parent_id);
                                     $hasChildren = $detail->material->children()->count() > 0;
+                                    
+                                    // Helper visual pemisah titik di Blade untuk edit mode
+                                    $fmtSerial = function($val) {
+                                        if(!$val) return '';
+                                        return number_format($val, 0, '', '.');
+                                    };
                                 @endphp
                                 <tr>
                                     <input type="hidden" name="items[{{ $index }}][material_id]" value="{{ $detail->material_id }}">
@@ -203,12 +198,13 @@
                                                         @php $isFirstSerial = false; @endphp
                                                     @endif
                                                 </small>
+                                                <!-- Struktur Baru Kolom Prefix, Awal, Akhir -->
                                                 <div class="d-flex gap-1 mt-1">
-                                                    @if($isParent && $hasChildren)
-                                                    @else
-                                                        <input type="text" name="items[{{ $index }}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_start }}" placeholder="Awal">
-                                                        <input type="text" name="items[{{ $index }}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_end }}" placeholder="Akhir">
-                                                    @endif
+                                                    <input type="text" name="items[{{ $index }}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px; max-width:40px;" value="{{ $detail->sppm_serial_prefix }}" placeholder="CODE">
+                                                    
+                                                    <input type="text" name="items[{{ $index }}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_start ? str_pad($detail->sppm_serial_start, 9, '0', STR_PAD_LEFT) : '' }}" placeholder="Awal">
+                                                    
+                                                    <input type="text" name="items[{{ $index }}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input format-seri" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_end ? str_pad($detail->sppm_serial_end, 9, '0', STR_PAD_LEFT) : '' }}" placeholder="Akhir">
                                                 </div>
                                             </div>
                                         @endif
@@ -226,16 +222,13 @@
                                         <td>
                                             <input type="number" name="items[{{ $index }}][target_qty]" id="target_{{ $index }}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="{{ $index }}" value="{{ $detail->target_qty }}" min="0">
                                         </td>
-                                        
                                         <td>
                                             <span id="letter-span-{{ $index }}" class="text-letter-span">{{ $detail->qty_huruf ?? '-' }}</span>
                                             <input type="hidden" name="items[{{ $index }}][qty_huruf]" id="qty_huruf_hidden_{{ $index }}" value="{{ $detail->qty_huruf }}">
                                         </td>
-                                        
                                         <td>
                                             <input type="number" name="items[{{ $index }}][harga_satuan]" id="price_{{ $index }}" step="0.01" class="form-control form-control-sm text-end text-secondary data-price-input" data-index="{{ $index }}" value="{{ number_format($detail->harga_satuan, 2, '.', '') }}" placeholder="0.00" min="0">
                                         </td>
-                                        
                                         <td>
                                             <div class="text-end"><span id="total-span-{{ $index }}" class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></div>
                                             <input type="hidden" name="items[{{ $index }}][harga_total]" id="harga_total_hidden_{{ $index }}" value="{{ $detail->harga_total }}">
@@ -253,7 +246,7 @@
                                                     @endphp
                                                     <div class="text-center fw-bold text-dark">{{ $qty }}</div>
                                                     @if($detail->material->pakai_seri == 1 && $oldStock && $oldStock->serial_start)
-                                                        <div class="text-center text-muted mt-1" style="font-size:0.6rem;">{{ $oldStock->serial_start }} - {{ $oldStock->serial_end }}</div>
+                                                        <div class="text-center text-muted mt-1" style="font-size:0.6rem;">{{ str_pad($oldStock->serial_start, 9, '0', STR_PAD_LEFT) }} - {{ str_pad($oldStock->serial_end, 9, '0', STR_PAD_LEFT) }}</div>
                                                     @endif
                                                 @elseif($b == $currentBatch)
                                                     @php
@@ -264,8 +257,9 @@
                                                     
                                                     @if($detail->material->pakai_seri == 1)
                                                         <div class="d-flex gap-1 mt-1">
-                                                            <input type="text" name="items[{{ $index }}][serial_start]" class="form-control form-control-sm real-serial-start-input" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
-                                                            <input type="text" name="items[{{ $index }}][serial_end]" class="form-control form-control-sm real-serial-end-input" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
+                                                            <input type="text" name="items[{{ $index }}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="PFX">
+                                                            <input type="text" name="items[{{ $index }}][serial_start]" class="form-control form-control-sm real-serial-start-input format-seri" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
+                                                            <input type="text" name="items[{{ $index }}][serial_end]" class="form-control form-control-sm real-serial-end-input format-seri" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
                                                         </div>
                                                     @endif
                                                 @endif
@@ -294,11 +288,6 @@
                             @endif
                         </tbody>
                     </table>
-                </div>
-
-                <div class="px-4 py-3 border-top bg-light bg-opacity-50">
-                    <label class="field-label"><i class="fa-solid fa-comment-dots me-1"></i> Keterangan / Berita Acara Penerimaan Manifes</label>
-                    <textarea name="notes_manifes" class="form-control custom-input bg-white w-100" rows="3" placeholder="Tulis catatan lengkap jika terdapat kerusakan, selisih jumlah barang, atau nomor seri berkas..."></textarea>
                 </div>
 
                 <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
@@ -330,6 +319,39 @@
         if(document.activeElement.type === "number"){ document.activeElement.blur(); }
     });
 
+    // PENGATUR FORMAT ANGKA 9 DIGIT DENGAN TITIK (Visual Engine)
+    function applyVisualFormat(value) {
+        let numericVal = value.replace(/\D/g, ''); // Buang semua kecuali angka
+        if (!numericVal) return '';
+        // Tambahkan padStart '0' agar selalu 9 digit
+        let paddedVal = numericVal.padStart(9, '0');
+        // Sisipkan titik ribuan
+        return paddedVal.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+
+    function calculateAutoEndSerial(idx, isRealita) {
+        const startName = isRealita ? `items[${idx}][serial_start]` : `items[${idx}][sppm_serial_start]`;
+        const endName = isRealita ? `items[${idx}][serial_end]` : `items[${idx}][sppm_serial_end]`;
+        const qtyId = isRealita ? `received_${idx}` : `target_${idx}`;
+
+        const qtyInput = document.getElementById(qtyId);
+        const startInput = document.querySelector(`input[name="${startName}"]`);
+        const endInput = document.querySelector(`input[name="${endName}"]`);
+
+        if (qtyInput && startInput && endInput) {
+            const qty = parseInt(qtyInput.value) || 0;
+            const startValRaw = startInput.value.replace(/\D/g, '');
+
+            if (qty > 0 && startValRaw !== '') {
+                const startNum = parseInt(startValRaw, 10);
+                const endNum = startNum + qty - 1;
+                
+                startInput.value = applyVisualFormat(startNum.toString());
+                endInput.value = applyVisualFormat(endNum.toString());
+            }
+        }
+    }
+
     function terbilang(n) {
         const bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
         n = parseInt(n);
@@ -353,9 +375,7 @@
     function recalculateRowNumbers() {
         let num = 1;
         itemsContainer.querySelectorAll('.row-number-span').forEach(span => {
-            if(span.textContent.trim() !== '') {
-                span.textContent = num++;
-            }
+            if(span.textContent.trim() !== '') { span.textContent = num++; }
         });
     }
 
@@ -383,20 +403,14 @@
             if(letterSpan) letterSpan.textContent = teksHuruf || '-';
             if(hiddenHuruf) hiddenHuruf.value = teksHuruf;
 
-            if (modeValueInput.value === 'mode-1' && realInput) {
-                realInput.value = qty; 
-            }
+            if (modeValueInput.value === 'mode-1' && realInput) { realInput.value = qty; }
 
             if (sisaSpan) {
                 let pastReceived = parseInt(sisaSpan.dataset.past) || 0;
                 let currentReal = realInput ? (parseInt(realInput.value) || 0) : 0;
                 let sisa = qty - (pastReceived + currentReal);
                 sisaSpan.textContent = sisa;
-                if(sisa === 0) {
-                    sisaSpan.style.color = '#16a34a'; 
-                } else {
-                    sisaSpan.style.color = '#dc2626'; 
-                }
+                sisaSpan.style.color = (sisa === 0) ? '#16a34a' : '#dc2626';
             }
         }
     }
@@ -413,79 +427,81 @@
         if (mode === 'mode-2') {
             if(dateSection) dateSection.classList.remove('d-none');
             kekuranganCols.forEach(col => col.classList.remove('d-none'));
-            
             for(let b=1; b<=maxBatches; b++) {
-                if (b <= currentBatch) {
-                    document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.remove('d-none'));
-                } else {
-                    document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none'));
-                }
+                if (b <= currentBatch) { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.remove('d-none')); } 
+                else { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none')); }
             }
             if(empRow) empRow.setAttribute('colspan', '15');
         } else {
             if(dateSection) dateSection.classList.add('d-none');
             kekuranganCols.forEach(col => col.classList.add('d-none'));
-            
-            for(let b=1; b<=maxBatches; b++) {
-                document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none'));
-            }
+            for(let b=1; b<=maxBatches; b++) { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none')); }
             if(empRow) empRow.setAttribute('colspan', '15');
         }
 
-        document.querySelectorAll('.data-qty-input').forEach(el => {
-            calculateRowValues(el.dataset.index);
-        });
+        document.querySelectorAll('.data-qty-input').forEach(el => { calculateRowValues(el.dataset.index); });
     }
 
-    if(toggleModeCheckbox) {
-        toggleModeCheckbox.addEventListener('change', syncModeColumns);
-    }
+    if(toggleModeCheckbox) { toggleModeCheckbox.addEventListener('change', syncModeColumns); }
 
+    // EVENT DELEGATION
     itemsContainer.addEventListener('input', function(e) {
         if (e.target.classList.contains('data-qty-input') || e.target.classList.contains('data-price-input') || e.target.classList.contains('data-real-input')) {
             const idx = e.target.dataset.index;
-            if (e.target.classList.contains('data-real-input')) {
-                e.target.dataset.edited = "true"; 
-            }
+            if (e.target.classList.contains('data-real-input')) { e.target.dataset.edited = "true"; }
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 calculateRowValues(idx);
+                // Trigger auto calculate end-serial upon quantity change
+                calculateAutoEndSerial(idx, false); // For SPPM target
+                calculateAutoEndSerial(idx, true);  // For Realita
             }, 300);
         }
     });
 
-    // Pemicu tombol Copy Semua dan tombol Hapus Baris
+    // Pemicu Formatting pada saat kehilangan fokus (blur) di input seri
+    itemsContainer.addEventListener('focusout', function(e) {
+        if (e.target.classList.contains('format-seri')) {
+            const idx = e.target.dataset.index;
+            const isRealita = e.target.classList.contains('real-serial-start-input') || e.target.classList.contains('real-serial-end-input');
+            
+            // Format input ini sendiri secara visual
+            if (e.target.value) { e.target.value = applyVisualFormat(e.target.value); }
+            
+            // Hitung otomatis nomor akhir (Berdasarkan Qty + Start)
+            calculateAutoEndSerial(idx, isRealita);
+        }
+    });
+
     itemsContainer.addEventListener('click', function(e) {
-        // Tombol Hapus Baris
         if (e.target.classList.contains('btn-remove-row') || e.target.closest('.btn-remove-row')) {
             e.preventDefault();
             const row = e.target.closest('tr');
             if (row) {
                 row.remove();
-                recalculateRowNumbers(); // Susun ulang penomoran
+                recalculateRowNumbers();
             }
         }
 
-        // Tombol Copy Semua Seri
         if (e.target.classList.contains('btn-copy-serial') || e.target.closest('.btn-copy-serial')) {
             e.preventDefault();
-
+            
+            const firstPrefix = itemsContainer.querySelector('.sppm-serial-prefix-input');
             const firstStartInput = itemsContainer.querySelector('.sppm-serial-start-input');
             const firstEndInput = itemsContainer.querySelector('.sppm-serial-end-input');
 
             if (firstStartInput && firstEndInput) {
-                const startVal = firstStartInput.value;
-                const endVal = firstEndInput.value;
-
+                const pVal = firstPrefix ? firstPrefix.value : '';
+                const sVal = firstStartInput.value;
+                const eVal = firstEndInput.value;
+                
+                const allPrefixes = itemsContainer.querySelectorAll('.sppm-serial-prefix-input');
                 const allStarts = itemsContainer.querySelectorAll('.sppm-serial-start-input');
                 const allEnds = itemsContainer.querySelectorAll('.sppm-serial-end-input');
 
-                allStarts.forEach(input => {
-                    input.value = startVal;
-                });
-                allEnds.forEach(input => {
-                    input.value = endVal;
-                });
+                allPrefixes.forEach(input => { input.value = pVal; });
+                allStarts.forEach(input => { input.value = sVal; });
+                allEnds.forEach(input => { input.value = eVal; });
             }
         }
     });
@@ -526,15 +542,17 @@
                                         <i class="fa-solid fa-tags"></i> Seri SPPM: ${copyBtnHtml}
                                     </small>
                                     <div class="d-flex gap-1 mt-1">
-                                        <input type="text" name="items[${gIndex}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Awal">
-                                        <input type="text" name="items[${gIndex}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Akhir">
+                                        <input type="text" name="items[${gIndex}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="${gIndex}" style="font-size:0.7rem; padding:2px; max-width:40px;" placeholder="CODE">
+                                        <input type="text" name="items[${gIndex}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Awal">
+                                        <input type="text" name="items[${gIndex}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Akhir">
                                     </div>
                                 </div>`;
 
                                 realSerialHtml = `
                                 <div class="d-flex gap-1 mt-1">
-                                    <input type="text" name="items[${gIndex}][serial_start]" class="form-control form-control-sm real-serial-start-input" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
-                                    <input type="text" name="items[${gIndex}][serial_end]" class="form-control form-control-sm real-serial-end-input" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
+                                    <input type="text" name="items[${gIndex}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="${gIndex}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="CODE">
+                                    <input type="text" name="items[${gIndex}][serial_start]" class="form-control form-control-sm real-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
+                                    <input type="text" name="items[${gIndex}][serial_end]" class="form-control form-control-sm real-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
                                 </div>`;
                             }
                         }
@@ -588,7 +606,6 @@
                             </td>`;
                         }
 
-                        // Menambahkan tombol Hapus Baris di ujung setiap baris
                         html += `
                             <td class="text-center">
                                 <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" title="Hapus Baris Ini">
@@ -605,8 +622,7 @@
 
                     materials.forEach((material) => {
                         let row = document.createElement('tr');
-                        // No. urut hanya digenerate untuk Parent, anak kirim string kosong
-                        let currentNoText = true ? (parentNo++) : ''; // Always true here since it's parent loop
+                        let currentNoText = true ? (parentNo++) : ''; 
                         row.innerHTML = buildRow(material, globalIndex, currentNoText, true);
                         itemsContainer.appendChild(row);
                         globalIndex++;
@@ -625,6 +641,11 @@
                 });
         });
     }
+
+    // Eksekusi trigger pemformatan titik bagi data yang di-load saat mode Edit
+    document.querySelectorAll('.format-seri').forEach(el => {
+        if(el.value) { el.value = applyVisualFormat(el.value); }
+    });
 
     document.querySelectorAll('.data-qty-input').forEach(el => { calculateRowValues(el.dataset.index); });
     syncModeColumns();

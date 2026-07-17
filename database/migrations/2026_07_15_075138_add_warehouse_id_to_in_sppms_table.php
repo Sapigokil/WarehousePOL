@@ -6,23 +6,19 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::table('in_sppms', function (Blueprint $table) {
-            //
+            $table->unsignedBigInteger('warehouse_id')->nullable()->after('material_category_id');
+            $table->foreign('warehouse_id')->references('id')->on('warehouses')->onDelete('restrict');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::table('in_sppms', function (Blueprint $table) {
-            //
+            $table->dropForeign(['warehouse_id']);
+            $table->dropColumn('warehouse_id');
         });
     }
 };

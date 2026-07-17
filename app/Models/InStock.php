@@ -8,11 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class InStock extends Model
 {
     protected $fillable = [
-        'in_log_id',
-        'material_id',
-        'qty_received',
-        'serial_start',
-        'serial_end',
+        'in_log_id', 'material_id', 'qty_received', 
+        'serial_prefix', 'serial_start', 'serial_end'
     ];
 
     public function log(): BelongsTo

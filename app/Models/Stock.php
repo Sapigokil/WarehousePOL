@@ -10,17 +10,9 @@ class Stock extends Model
     protected $table = 'stocks';
 
     protected $fillable = [
-        'no_surat_masuk',
-        'tgl_masuk',
-        'material_id',
-        'warehouse_id',
-        'seri_awal',
-        'seri_akhir',
-        'qty',
-        'harga_satuan',
-        'total_harga',
-        'status',
-        'keterangan',
+        'no_surat_masuk', 'tgl_masuk', 'material_id', 'warehouse_id',
+        'prefix', 'seri_awal', 'seri_akhir', // Tambahkan prefix
+        'qty', 'harga_satuan', 'total_harga', 'status', 'keterangan'
     ];
 
     public function material(): BelongsTo
