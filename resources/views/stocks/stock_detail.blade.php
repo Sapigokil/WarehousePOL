@@ -102,7 +102,7 @@
                         </td>
                         <td class="text-end">
                             <span class="badge bg-primary bg-opacity-10 text-primary border border-primary fs-6 px-2 py-1">
-                                + {{ number_format($detail->qty, 0, ',', '.') }}
+                                 {{ number_format($detail->qty, 0, ',', '.') }}
                             </span>
                         </td>
                         <td class="text-muted" style="font-size: 0.75rem;">

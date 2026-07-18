@@ -174,6 +174,24 @@
             </tr>
         </thead>
         <tbody>
+            @php
+                // Helper visual format angka seri 9 digit dengan titik ribuan dan prefix
+                $formatSeri = function($prefix, $start, $end) {
+                    if (is_null($start) && is_null($end)) return '-';
+                    
+                    $padAndDot = function($num) {
+                        $s = str_pad($num ?? 0, 9, '0', STR_PAD_LEFT);
+                        return substr($s, 0, 3) . '.' . substr($s, 3, 3) . '.' . substr($s, 6, 3);
+                    };
+
+                    $s_formatted = $padAndDot($start);
+                    $e_formatted = $padAndDot($end);
+                    
+                    $p = $prefix ? "<span class='text-primary fw-bold me-1'>{$prefix}</span>" : '';
+                    return "{$p}<span class='fw-bold'>{$s_formatted}</span> s/d <span class='fw-bold'>{$e_formatted}</span>";
+                };
+            @endphp
+
             @forelse($sppms as $sppm)
             <tr class="main-row">
                 <td>
@@ -259,7 +277,7 @@
                                                     @if($detail->material->pakai_seri == 1)
                                                         @if($detail->sppm_serial_start || $detail->sppm_serial_end)
                                                             <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: <span class="fw-bold">{{ $detail->sppm_serial_start ?? '?' }}</span> s/d <span class="fw-bold">{{ $detail->sppm_serial_end ?? '?' }}</span>
+                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: {!! $formatSeri($detail->sppm_serial_prefix, $detail->sppm_serial_start, $detail->sppm_serial_end) !!}
                                                             </small>
                                                         @endif
                                                     @endif
@@ -276,9 +294,9 @@
                                                     <td class="text-center border-start text-muted align-middle">
                                                         <span class="d-block {{ $qty > 0 ? 'fw-bold text-dark' : '' }}">{{ $qty > 0 ? number_format($qty, 0, ',', '.') : '-' }}</span>
                                                         
-                                                        @if($stock && $stock->serial_start)
+                                                        @if($stock && ($stock->serial_start || $stock->serial_end))
                                                             <small class="text-muted d-block mt-1" style="font-size: 0.65rem; background:#f8fafc; border-radius:4px; padding:2px;">
-                                                                <span class="fw-bold">{{ $stock->serial_start }}</span> - <span class="fw-bold">{{ $stock->serial_end }}</span>
+                                                                {!! $formatSeri($stock->serial_prefix, $stock->serial_start, $stock->serial_end) !!}
                                                             </small>
                                                         @endif
                                                     </td>

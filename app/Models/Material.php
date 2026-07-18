@@ -36,4 +36,9 @@ class Material extends Model
     {
         return $this->hasMany(Material::class, 'parent_id');
     }
+
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(Stock::class, 'material_id');
+    }
 }

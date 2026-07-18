@@ -40,7 +40,7 @@
 
             @can('Outbound Menu')
             <li>
-                <a href="#" class="sidebar-link">
+                <a href="{{ route('outbounds.index') }}" class="sidebar-link {{ request()->routeIs('outbounds.*') ? 'active' : '' }}">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Barang Keluar
                 </a>
             </li>
@@ -127,6 +127,11 @@
                         <li class="mb-1">
                             <a href="{{ route('warehouses.index') }}" class="sidebar-link {{ request()->routeIs('warehouses.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                 <i class="fa-solid fa-warehouse me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Gudang
+                            </a>
+                        </li>
+                        <li class="mb-1">
+                            <a href="{{ route('destinations.index') }}" class="sidebar-link {{ request()->routeIs('destinations.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-map-location-dot me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Penerima
                             </a>
                         </li>
                     </ul>

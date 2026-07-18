@@ -31,17 +31,23 @@
 
 <!-- Area Filter -->
 <div class="d-flex gap-2 mb-3">
-    <form method="GET" action="{{ route('stocks.index') }}" class="d-flex gap-2 align-items-center">
+    <form method="GET" action="{{ route('stocks.index') }}" class="d-flex gap-2 align-items-center w-100">
         <select name="category_id" class="form-select form-select-sm shadow-none" style="width: 200px;" onchange="this.form.submit()">
             <option value="">-- Semua Kategori --</option>
             @foreach($allCategories as $cat)
                 <option value="{{ $cat->id }}" {{ $category_filter == $cat->id ? 'selected' : '' }}>{{ $cat->name }}</option>
             @endforeach
         </select>
-        <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
-            <input type="text" name="search" class="form-control border-0" placeholder="Cari nama barang..." value="{{ $search }}">
+        <div class="input-group input-group-sm shadow-sm flex-grow-1" style="max-width: 400px;">
+            <input type="text" name="search" class="form-control border-0" placeholder="Cari Nama, Kode, SPPM, atau No. Seri..." value="{{ $search }}">
             <button class="btn btn-white bg-white border-0" type="submit"><i class="fa-solid fa-search"></i></button>
         </div>
+        
+        @if($search || $category_filter)
+            <a href="{{ route('stocks.index') }}" class="btn btn-sm btn-light border shadow-sm px-3 text-secondary" title="Reset Filter Pencarian">
+                <i class="fa-solid fa-rotate-left me-1"></i> Reset
+            </a>
+        @endif
     </form>
 </div>
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\InboundController;
+USe App\Http\Controllers\DestinationController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -48,7 +49,10 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
     });
 
     Route::middleware(['can:Outbound Menu'])->group(function () {
-        
+        // AJAX Route untuk memanggil material berdasarkan kategori beserta sisa stoknya
+        Route::get('outbounds/materials-by-category/{category_id}', [\App\Http\Controllers\OutboundController::class, 'getMaterialsByCategory']);
+
+        Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
     });
 
     /* ==============================================
@@ -78,5 +82,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::resource('warehouses', WarehouseController::class)->except(['show']);
         Route::post('materials/reorder', [MaterialController::class, 'reorder'])->name('materials.reorder');
         Route::resource('materials', MaterialController::class)->except(['show']);
+        Route::post('destinations/reorder', [\App\Http\Controllers\DestinationController::class, 'reorder'])->name('destinations.reorder');
+        Route::resource('destinations', \App\Http\Controllers\DestinationController::class)->except(['show']);
     });
 });

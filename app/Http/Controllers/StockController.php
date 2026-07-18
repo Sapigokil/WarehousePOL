@@ -17,14 +17,54 @@ class StockController extends Controller
 
         $categories = MaterialCategory::with(['materials' => function($q) use ($search) {
             $q->whereNull('parent_id')
-            ->when($search, function($query) use ($search) {
-                $query->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%");
-            })
-            ->with(['children' => function($q2) {
-                $q2->orderBy('nomor_urut', 'asc');
-            }])
-            ->orderBy('nomor_urut', 'asc');
+              ->when($search, function($query) use ($search) {
+                  
+                  // Helper Subquery untuk mencari berdasarkan SPPM, Prefix, dan Rentang Seri Gudang
+                  $stockSearchQuery = function($sub) use ($search) {
+                      // Ambil murni angka saja (Misal: 000.103.456 menjadi 103456)
+                      $cleanNum = preg_replace('/[^0-9]/', '', $search);
+                      $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
+                      
+                      // Ambil murni huruf saja sebagai asumsi pencarian prefix
+                      $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
+
+                      $sub->select('material_id')
+                          ->from('stocks')
+                          ->where('no_surat_masuk', 'like', "%{$search}%")
+                          ->orWhere('prefix', 'like', "%{$search}%");
+
+                      // Jika ada angka, cek apakah masuk ke dalam rentang seri awal dan akhir
+                      if ($cleanNum !== null) {
+                          $sub->orWhere(function($q) use ($cleanNum, $prefixStr) {
+                              $q->where('seri_awal', '<=', $cleanNum)
+                                ->where('seri_akhir', '>=', $cleanNum);
+                              
+                              // Jika user juga mengetik huruf, filter rentang berdasarkan prefix tersebut
+                              if (!empty($prefixStr)) {
+                                  $q->where('prefix', 'like', "%{$prefixStr}%");
+                              }
+                          });
+                      }
+                  };
+
+                  $query->where(function($q2) use ($search, $stockSearchQuery) {
+                      // 1. Cocokkan Nama & Kode Parent
+                      $q2->where('name', 'like', "%{$search}%")
+                         ->orWhere('code', 'like', "%{$search}%")
+                      // 2. Cocokkan Stok Parent (SPPM / Rentang Seri)
+                         ->orWhereIn('id', $stockSearchQuery)
+                      // 3. Cocokkan Nama, Kode, atau Stok milik Child
+                         ->orWhereHas('children', function($q3) use ($search, $stockSearchQuery) {
+                             $q3->where('name', 'like', "%{$search}%")
+                                ->orWhere('code', 'like', "%{$search}%")
+                                ->orWhereIn('id', $stockSearchQuery);
+                         });
+                  });
+              })
+              ->with(['children' => function($q2) {
+                  $q2->orderBy('nomor_urut', 'asc');
+              }])
+              ->orderBy('nomor_urut', 'asc');
         }])
         ->when($category_filter, function($q) use ($category_filter) {
             return $q->where('id', $category_filter);
