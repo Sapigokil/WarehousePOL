@@ -48,7 +48,6 @@
     <a href="{{ route('inbound.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
 </div>
 
-<!-- Alert Pesan Error Overlap -->
 @if(session('error'))
     <div class="alert alert-danger shadow-sm border-0 py-2 d-flex align-items-center" role="alert">
         <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
@@ -85,10 +84,18 @@
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Gudang Tujuan</label>
-                        <select name="warehouse_id" class="form-select custom-input w-100" required {{ isset($inbound) ? 'disabled' : '' }}>
-                            @foreach($warehouses as $warehouse)
-                                <option value="{{ $warehouse->id }}" {{ isset($inbound) && $inbound->warehouse_id == $warehouse->id ? 'selected' : '' }}>{{ $warehouse->name }}</option>
-                            @endforeach
+                        <select name="warehouse_id" id="warehouse-selector" class="form-select custom-input w-100" required {{ isset($inbound) ? 'disabled' : '' }}>
+                            @if(count($warehouses) > 0)
+                                <option value="">-- Pilih --</option>
+                                @foreach($warehouses as $warehouse)
+                                    <option value="{{ $warehouse->id }}" {{ isset($inbound) && $inbound->warehouse_id == $warehouse->id ? 'selected' : '' }}>{{ $warehouse->name }}</option>
+                                @endforeach
+                            @else
+                                <option value="">-- Kosong --</option>
+                            @endif
+                            @if(!isset($inbound))
+                                <option value="create_new" class="fw-bold text-theme bg-light">&#43; Buat Gudang Baru</option>
+                            @endif
                         </select>
                         @if(isset($inbound))
                             <input type="hidden" name="warehouse_id" value="{{ $inbound->warehouse_id }}">
@@ -170,7 +177,6 @@
                                     $isParent = is_null($detail->material->parent_id);
                                     $hasChildren = $detail->material->children()->count() > 0;
                                     
-                                    // Helper visual pemisah titik di Blade untuk edit mode
                                     $fmtSerial = function($val) {
                                         if(!$val) return '';
                                         return number_format($val, 0, '', '.');
@@ -198,9 +204,8 @@
                                                         @php $isFirstSerial = false; @endphp
                                                     @endif
                                                 </small>
-                                                <!-- Struktur Baru Kolom Prefix, Awal, Akhir -->
                                                 <div class="d-flex gap-1 mt-1">
-                                                    <input type="text" name="items[{{ $index }}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px; max-width:40px;" value="{{ $detail->sppm_serial_prefix }}" placeholder="CODE">
+                                                    <input type="text" name="items[{{ $index }}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px; max-width:40px;" value="{{ $detail->sppm_serial_prefix }}" placeholder="PFX">
                                                     
                                                     <input type="text" name="items[{{ $index }}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_start ? str_pad($detail->sppm_serial_start, 9, '0', STR_PAD_LEFT) : '' }}" placeholder="Awal">
                                                     
@@ -301,6 +306,46 @@
     </div>
 </form>
 
+<!-- REVISI: MODAL TAMBAH GUDANG BARU -->
+<div class="modal fade" id="modalAddWarehouse" tabindex="-1" aria-labelledby="modalAddWarehouseLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-bottom-0 pb-0">
+                <h6 class="modal-title fw-bold" id="modalAddWarehouseLabel"><i class="fa-solid fa-warehouse me-2 text-theme"></i>Buat Gudang Baru</h6>
+                <button type="button" class="btn-close shadow-none btn-cancel-warehouse" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pb-2">
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label class="field-label">Kode Gudang</label>
+                        <input type="text" id="new_warehouse_code" class="form-control form-control-sm custom-input w-100" placeholder="Cth: GDG-A">
+                    </div>
+                    <div class="col-md-8 mb-2">
+                        <label class="field-label">Nama Gudang <span class="text-danger">*</span></label>
+                        <input type="text" id="new_warehouse_name" class="form-control form-control-sm custom-input w-100" placeholder="Misal: Gudang Utama">
+                        <div id="warehouse_error" class="text-danger mt-1 d-none" style="font-size: 0.7rem;">Nama gudang wajib diisi.</div>
+                    </div>
+                    <div class="col-md-12 mb-2">
+                        <label class="field-label">Lokasi</label>
+                        <input type="text" id="new_warehouse_lokasi" class="form-control form-control-sm custom-input w-100" placeholder="Misal: Gedung B, Sayap Kanan">
+                    </div>
+                    <div class="col-md-12 mb-2">
+                        <label class="field-label">Keterangan Tambahan</label>
+                        <textarea id="new_warehouse_keterangan" class="form-control form-control-sm custom-input w-100" rows="2" placeholder="Catatan internal..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0">
+                <button type="button" class="btn btn-sm btn-light border fw-bold btn-cancel-warehouse">Batal</button>
+                <button type="button" id="btn-save-warehouse" class="btn btn-sm btn-theme fw-bold px-3">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="warehouse-spinner" role="status" aria-hidden="true"></span>
+                    Simpan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -319,13 +364,11 @@
         if(document.activeElement.type === "number"){ document.activeElement.blur(); }
     });
 
-    // PENGATUR FORMAT ANGKA 9 DIGIT DENGAN TITIK (Visual Engine)
+    // PENGATUR FORMAT ANGKA 9 DIGIT DENGAN TITIK
     function applyVisualFormat(value) {
-        let numericVal = value.replace(/\D/g, ''); // Buang semua kecuali angka
+        let numericVal = value.replace(/\D/g, ''); 
         if (!numericVal) return '';
-        // Tambahkan padStart '0' agar selalu 9 digit
         let paddedVal = numericVal.padStart(9, '0');
-        // Sisipkan titik ribuan
         return paddedVal.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     }
 
@@ -444,7 +487,6 @@
 
     if(toggleModeCheckbox) { toggleModeCheckbox.addEventListener('change', syncModeColumns); }
 
-    // EVENT DELEGATION
     itemsContainer.addEventListener('input', function(e) {
         if (e.target.classList.contains('data-qty-input') || e.target.classList.contains('data-price-input') || e.target.classList.contains('data-real-input')) {
             const idx = e.target.dataset.index;
@@ -452,23 +494,18 @@
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 calculateRowValues(idx);
-                // Trigger auto calculate end-serial upon quantity change
-                calculateAutoEndSerial(idx, false); // For SPPM target
-                calculateAutoEndSerial(idx, true);  // For Realita
+                calculateAutoEndSerial(idx, false);
+                calculateAutoEndSerial(idx, true); 
             }, 300);
         }
     });
 
-    // Pemicu Formatting pada saat kehilangan fokus (blur) di input seri
     itemsContainer.addEventListener('focusout', function(e) {
         if (e.target.classList.contains('format-seri')) {
             const idx = e.target.dataset.index;
             const isRealita = e.target.classList.contains('real-serial-start-input') || e.target.classList.contains('real-serial-end-input');
             
-            // Format input ini sendiri secara visual
             if (e.target.value) { e.target.value = applyVisualFormat(e.target.value); }
-            
-            // Hitung otomatis nomor akhir (Berdasarkan Qty + Start)
             calculateAutoEndSerial(idx, isRealita);
         }
     });
@@ -542,7 +579,7 @@
                                         <i class="fa-solid fa-tags"></i> Seri SPPM: ${copyBtnHtml}
                                     </small>
                                     <div class="d-flex gap-1 mt-1">
-                                        <input type="text" name="items[${gIndex}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="${gIndex}" style="font-size:0.7rem; padding:2px; max-width:40px;" placeholder="CODE">
+                                        <input type="text" name="items[${gIndex}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="${gIndex}" style="font-size:0.7rem; padding:2px; max-width:40px;" placeholder="PFX">
                                         <input type="text" name="items[${gIndex}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Awal">
                                         <input type="text" name="items[${gIndex}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Akhir">
                                     </div>
@@ -550,7 +587,7 @@
 
                                 realSerialHtml = `
                                 <div class="d-flex gap-1 mt-1">
-                                    <input type="text" name="items[${gIndex}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="${gIndex}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="CODE">
+                                    <input type="text" name="items[${gIndex}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="${gIndex}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="PFX">
                                     <input type="text" name="items[${gIndex}][serial_start]" class="form-control form-control-sm real-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
                                     <input type="text" name="items[${gIndex}][serial_end]" class="form-control form-control-sm real-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
                                 </div>`;
@@ -642,12 +679,125 @@
         });
     }
 
-    // Eksekusi trigger pemformatan titik bagi data yang di-load saat mode Edit
     document.querySelectorAll('.format-seri').forEach(el => {
         if(el.value) { el.value = applyVisualFormat(el.value); }
     });
 
     document.querySelectorAll('.data-qty-input').forEach(el => { calculateRowValues(el.dataset.index); });
     syncModeColumns();
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const warehouseSelector = document.getElementById('warehouse-selector');
+        let previousWarehouseValue = warehouseSelector ? warehouseSelector.value : '';
+        
+        let warehouseModalEl = document.getElementById('modalAddWarehouse');
+        let warehouseModal;
+        if(warehouseModalEl) {
+            warehouseModal = new bootstrap.Modal(warehouseModalEl);
+        }
+
+        if (warehouseSelector) {
+            warehouseSelector.addEventListener('focus', function() {
+                previousWarehouseValue = this.value;
+            });
+
+            warehouseSelector.addEventListener('change', function() {
+                if (this.value === 'create_new') {
+                    warehouseModal.show();
+                    this.value = previousWarehouseValue; 
+                } else {
+                    previousWarehouseValue = this.value;
+                }
+            });
+        }
+
+        const btnCancelList = document.querySelectorAll('.btn-cancel-warehouse');
+        btnCancelList.forEach(btn => {
+            btn.addEventListener('click', function() {
+                warehouseModal.hide();
+                document.getElementById('new_warehouse_name').value = '';
+                document.getElementById('new_warehouse_code').value = '';
+                document.getElementById('new_warehouse_lokasi').value = '';
+                document.getElementById('new_warehouse_keterangan').value = '';
+                document.getElementById('warehouse_error').classList.add('d-none');
+            });
+        });
+
+        const btnSaveWarehouse = document.getElementById('btn-save-warehouse');
+        if (btnSaveWarehouse) {
+            btnSaveWarehouse.addEventListener('click', function() {
+                const warehouseCode = document.getElementById('new_warehouse_code').value.trim();
+                const warehouseName = document.getElementById('new_warehouse_name').value.trim();
+                const warehouseLokasi = document.getElementById('new_warehouse_lokasi').value.trim();
+                const warehouseKeterangan = document.getElementById('new_warehouse_keterangan').value.trim();
+                
+                const errorText = document.getElementById('warehouse_error');
+                const spinner = document.getElementById('warehouse-spinner');
+
+                if (warehouseName === '') {
+                    errorText.textContent = "Nama gudang tidak boleh kosong.";
+                    errorText.classList.remove('d-none');
+                    return;
+                }
+
+                errorText.classList.add('d-none');
+                btnSaveWarehouse.disabled = true;
+                spinner.classList.remove('d-none');
+
+                // Payload lengkap
+                fetch("{{ route('warehouses.ajax.store') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        name: warehouseName,
+                        code: warehouseCode,
+                        lokasi: warehouseLokasi,
+                        keterangan: warehouseKeterangan
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    btnSaveWarehouse.disabled = false;
+                    spinner.classList.add('d-none');
+
+                    if (data.success) {
+                        const newOption = document.createElement('option');
+                        newOption.value = data.warehouse.id;
+                        newOption.text = data.warehouse.name;
+
+                        const createNewOption = warehouseSelector.querySelector('option[value="create_new"]');
+                        if (createNewOption) {
+                            warehouseSelector.insertBefore(newOption, createNewOption);
+                        } else {
+                            warehouseSelector.appendChild(newOption);
+                        }
+
+                        warehouseSelector.value = data.warehouse.id;
+                        previousWarehouseValue = data.warehouse.id;
+
+                        warehouseModal.hide();
+                        document.getElementById('new_warehouse_code').value = '';
+                        document.getElementById('new_warehouse_name').value = '';
+                        document.getElementById('new_warehouse_lokasi').value = '';
+                        document.getElementById('new_warehouse_keterangan').value = '';
+                    } else {
+                        errorText.textContent = data.message || "Gagal menyimpan gudang.";
+                        errorText.classList.remove('d-none');
+                    }
+                })
+                .catch(error => {
+                    btnSaveWarehouse.disabled = false;
+                    spinner.classList.add('d-none');
+                    errorText.textContent = "Terjadi kesalahan. Pastikan koneksi atau inputan Anda benar (tidak duplikat).";
+                    errorText.classList.remove('d-none');
+                });
+            });
+        }
+    });
+
 </script>
 @endpush

@@ -426,4 +426,33 @@ class InboundController extends Controller
             ->where('material_category_id', $category_id)->whereNull('parent_id')->orderBy('nomor_urut', 'asc')->get();
         return response()->json($materials);
     }
+
+    /// Fungsi untuk memproses pembuatan Gudang Baru secara AJAX
+    public function storeWarehouseAjax(Request $request)
+    {
+        $request->validate([
+            'name'       => 'required|string|max:255|unique:warehouses,name',
+            'code'       => 'nullable|string|max:255',
+            'lokasi'     => 'nullable|string|max:255',
+            'keterangan' => 'nullable|string'
+        ]);
+
+        // Auto-generate nomor_urut berdasarkan nilai tertinggi saat ini
+        $lastUrut = Warehouse::max('nomor_urut');
+        $nextUrut = $lastUrut ? $lastUrut + 1 : 1;
+
+        $warehouse = Warehouse::create([
+            'nomor_urut' => $nextUrut,
+            'name'       => $request->name,
+            'code'       => $request->code,
+            'lokasi'     => $request->lokasi,
+            'keterangan' => $request->keterangan,
+        ]);
+
+        return response()->json([
+            'success'   => true,
+            'message'   => 'Gudang berhasil ditambahkan',
+            'warehouse' => $warehouse
+        ]);
+    }
 }

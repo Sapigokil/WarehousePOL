@@ -39,11 +39,12 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
     Route::middleware(['can:Inbound Menu'])->group(function () {
         Route::get('inbound/materials-by-category/{category_id}', [App\Http\Controllers\InboundController::class, 'getMaterialsByCategory'])->name('inbound.materials-by-category');
         Route::resource('inbound', App\Http\Controllers\InboundController::class);
-        
+        // Tambahkan di dalam route group yang sesuai
+        Route::post('/warehouses/ajax-store', [\App\Http\Controllers\InboundController::class, 'storeWarehouseAjax'])->name('warehouses.ajax.store');
     });
 
     Route::middleware(['can:Warehouse Menu'])->group(function () {
-        Route::resource('stocks', StockController::class)->except(['show']);
+        Route::resource('stocks', StockController::class);
     });
 
     Route::middleware(['can:Outbound Menu'])->group(function () {

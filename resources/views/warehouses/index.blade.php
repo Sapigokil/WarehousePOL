@@ -178,13 +178,13 @@
                     {{ $warehouse->nomor_urut }}
                 </td>
                 <td>
-                    <span class="badge bg-light text-secondary border px-2 py-1"><i class="fa-solid fa-barcode text-muted me-1"></i>{{ $warehouse->code }}</span>
+                    <span class="badge bg-light text-secondary border px-2 py-1"><i class="fa-solid fa-barcode text-muted me-1"></i>{{ $warehouse->code ?? '-' }}</span>
                 </td>
                 <td class="fw-bold text-dark">
                     {{ $warehouse->name }}
                 </td>
                 <td>
-                    <i class="fa-solid fa-location-dot text-muted me-1" style="font-size: 0.85rem;"></i>{{ $warehouse->lokasi }}
+                    <i class="fa-solid fa-location-dot text-muted me-1" style="font-size: 0.85rem;"></i>{{ $warehouse->lokasi ?? '-' }}
                 </td>
                 <td class="text-muted small">
                     {{ Str::limit($warehouse->keterangan, 30, '...') ?? '-' }}
@@ -204,6 +204,7 @@
                 </td>
             </tr>
 
+            <!-- MODAL UBAH GUDANG -->
             <div class="modal fade" id="modalEditWarehouse{{ $warehouse->id }}" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered border-0">
                     <div class="modal-content border-0 shadow-lg">
@@ -216,15 +217,15 @@
                             <div class="modal-body p-4 bg-white text-start">
                                 <div class="mb-3">
                                     <label class="form-label modal-label">Kode Gudang</label>
-                                    <input type="text" name="code" class="form-control modal-custom-input" value="{{ old('code', $warehouse->code) }}" required>
+                                    <input type="text" name="code" class="form-control modal-custom-input" value="{{ old('code', $warehouse->code) }}">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label modal-label">Nama Gudang</label>
+                                    <label class="form-label modal-label">Nama Gudang <span class="text-danger">*</span></label>
                                     <input type="text" name="name" class="form-control modal-custom-input" value="{{ old('name', $warehouse->name) }}" required>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label modal-label">Lokasi Wilayah/Alamat</label>
-                                    <input type="text" name="lokasi" class="form-control modal-custom-input" value="{{ old('lokasi', $warehouse->lokasi) }}" required>
+                                    <input type="text" name="lokasi" class="form-control modal-custom-input" value="{{ old('lokasi', $warehouse->lokasi) }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label modal-label">Keterangan Opsional</label>
@@ -259,6 +260,7 @@
     </div>
 </div>
 
+<!-- MODAL TAMBAH GUDANG BARU -->
 <div class="modal fade" id="modalAddWarehouse" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered border-0">
         <div class="modal-content border-0 shadow-lg">
@@ -271,15 +273,15 @@
                 <div class="modal-body p-4 bg-white text-start">
                     <div class="mb-3">
                         <label class="form-label modal-label">Kode Gudang</label>
-                        <input type="text" name="code" class="form-control modal-custom-input" placeholder="Contoh: WH-SMG01" value="{{ old('code') }}" required>
+                        <input type="text" name="code" class="form-control modal-custom-input" placeholder="Contoh: WH-SMG01" value="{{ old('code') }}">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label modal-label">Nama Gudang</label>
+                        <label class="form-label modal-label">Nama Gudang <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control modal-custom-input" placeholder="Contoh: Gudang Utama Transit" value="{{ old('name') }}" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label modal-label">Lokasi Wilayah/Alamat</label>
-                        <input type="text" name="lokasi" class="form-control modal-custom-input" placeholder="Contoh: Kawasan Industri Semarang" value="{{ old('lokasi') }}" required>
+                        <input type="text" name="lokasi" class="form-control modal-custom-input" placeholder="Contoh: Kawasan Industri Semarang" value="{{ old('lokasi') }}">
                     </div>
                     <div class="mb-2">
                         <label class="form-label modal-label">Keterangan Opsional</label>
