@@ -4,255 +4,296 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cetak SPPM - {{ $sppm->sppm_no }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman:wght@400;700&display=swap');
-        
-        body { background-color: transparent; font-family: 'Times New Roman', Times, serif; margin: 0; color: #000; overflow-x: hidden; }
-        
-        #paperWrapper { width: 100%; display: flex; justify-content: center; padding: 20px 0; transition: height 0.3s ease; }
+        /* Menggunakan Arial / sans-serif */
+        body { 
+            background-color: #f1f5f9; 
+            font-family: Arial, Helvetica, sans-serif; 
+            margin: 0; 
+            color: #000; 
+            -webkit-text-size-adjust: 100%;
+        }
 
-        /* Container Kertas */
-        .paper-container { background-color: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.1); padding: 20mm; transform-origin: top center; transition: transform 0.3s ease; }
+        .paper-preview {
+            background-color: #fff;
+            width: 210mm; /* Standar A4 / F4 */
+            min-height: 297mm;
+            margin: 20px auto;
+            padding: 15mm 20mm;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
         
-        /* Ukuran Kertas Dinamis (Ukuran Fisik Asli) */
-        .paper-A4.portrait { width: 210mm; min-height: 297mm; }
-        .paper-A4.landscape { width: 297mm; min-height: 210mm; }
-        .paper-F4.portrait { width: 215.9mm; min-height: 330.2mm; }
-        .paper-F4.landscape { width: 330.2mm; min-height: 215.9mm; }
+        /* Kop Surat */
+        .header-table { width: 100%; margin-bottom: 25px; border: none; }
+        .kop-kiri-container { 
+            display: inline-block; 
+            text-align: center; 
+            border-bottom: 1px solid #000; 
+            padding-bottom: 4px; 
+        }
+        .kop-kiri-text { font-size: 12pt; font-weight: bold; line-height: 1.2; }
+        .kop-kanan { font-size: 10pt; line-height: 1.2; text-align: left; vertical-align: top; }
 
-        /* Typography Surat */
-        .kop-surat { border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
-        .kop-surat h4 { font-weight: bold; margin: 0; font-size: 16pt; }
-        .kop-surat p { margin: 0; font-size: 10pt; }
-        .surat-title { text-align: center; font-weight: bold; text-decoration: underline; font-size: 14pt; margin-bottom: 2px; }
-        .surat-no { text-align: center; font-size: 11pt; margin-bottom: 30px; }
+        /* Judul Surat */
+        .surat-title-block { text-align: center; margin-bottom: 25px; }
+        .surat-title { font-weight: bold; font-size: 14pt; margin-bottom: 2px; }
+        .surat-subtitle { font-weight: bold; font-size: 14pt; margin-bottom: 5px; }
+        .surat-no { font-size: 12pt; }
         
-        .info-table { width: 100%; margin-bottom: 20px; font-size: 11pt; }
-        .info-table td { padding: 3px 0; vertical-align: top; }
+        /* Informasi Tujuan */
+        .info-table { width: 100%; margin-bottom: 20px; font-size: 11pt; border: none;}
+        .info-table td { padding: 3px 2px; vertical-align: top; }
         
-        .data-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 11pt; }
-        .data-table th, .data-table td { border: 1px solid #000; padding: 6px 10px; vertical-align: middle; }
-        .data-table th { text-align: center; font-weight: bold; background-color: #f8f9fa; }
-        
-        .signature-area { width: 100%; font-size: 11pt; text-align: center; margin-top: 40px; page-break-inside: avoid; }
-        .signature-area td { padding-top: 80px; }
+        /* Class untuk titik-titik (dots) otomatis terpotong di batas kanan */
+        .dots-line {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+        }
 
-        /* Reset untuk proses Printing Aktual */
+        /* Tabel Utama Bersih */
+        .data-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 30px; 
+            font-size: 11pt; 
+            border-bottom: 1px solid #000; 
+        }
+        .data-table th { 
+            border: 1px solid #000; 
+            padding: 6px 8px; 
+            text-align: center; 
+            font-weight: bold; 
+            vertical-align: middle; 
+        }
+        .data-table td { 
+            border-left: 1px solid #000; 
+            border-right: 1px solid #000; 
+            border-top: none; 
+            border-bottom: none; 
+            padding: 6px 8px; 
+            vertical-align: top;
+        }
+        
+        /* Area Tanda Tangan */
+        .signature-table { width: 100%; font-size: 12pt; margin-top: 30px; page-break-inside: avoid; border: none; }
+        .signature-table td { vertical-align: top; }
+        .sign-box { text-align: left; }
+        .sign-box-center { text-align: center; }
+        .sign-space { height: 70px; }
+
         @media print {
-            body { padding: 0; background-color: transparent; }
-            #paperWrapper { padding: 0; display: block; height: auto !important; }
-            .paper-container { box-shadow: none; padding: 0; width: 100% !important; min-height: auto !important; transform: none !important; }
-            @page { margin: 15mm; }
+            body { background-color: transparent; }
+            .paper-preview { box-shadow: none; margin: 0; padding: 0; width: 100%; min-height: auto; }
+            @page { margin: 15mm 20mm; }
         }
     </style>
 </head>
-<body id="printBody" class="paper-A4 portrait">
+<body>
 
-    <div id="paperWrapper">
-        <div class="paper-container" id="documentContent">
-            <!-- KOP SURAT -->
-            <div class="kop-surat">
-                <h4>KEPOLISIAN NEGARA REPUBLIK INDONESIA</h4>
-                <h4>DAERAH JAWA TENGAH</h4>
-                <p>Jalan Pahlawan No. 1, Semarang 50243</p>
-            </div>
+    @php 
+        function terbilang($n) {
+            $bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
+            $n = (int)$n;
+            if ($n <= 0) return ""; 
+            if ($n < 12) return $bil[$n];
+            if ($n < 20) return terbilang($n - 10) . " belas";
+            if ($n < 100) return terbilang(floor($n / 10)) . " puluh " . ($bil[$n % 10] === "" ? "" : " " . $bil[$n % 10]);
+            if ($n < 200) return "seratus " . ($n - 100 === 0 ? "" : terbilang($n - 100));
+            if ($n < 1000) return terbilang(floor($n / 100)) . " ratus " . ($n % 100 === 0 ? "" : " " . terbilang($n % 100));
+            if ($n < 2000) return "seribu " . ($n - 1000 === 0 ? "" : terbilang($n - 1000));
+            if ($n < 1000000) return terbilang(floor($n / 1000)) . " ribu " . ($n % 1000 === 0 ? "" : " " . terbilang($n % 1000));
+            if ($n < 1000000000) return terbilang(floor($n / 1000000)) . " juta " . ($n % 1000000 === 0 ? "" : " " . terbilang($n % 1000000));
+            return "";
+        }
 
-            <div class="surat-title">SURAT PERINTAH PENGIRIMAN MATERIIL</div>
-            <div class="surat-no">Nomor: {{ $sppm->sppm_no }}</div>
+        $formatSeri = function($prefix, $start, $end) {
+            if (is_null($start) && is_null($end)) return '-';
+            $padAndDot = function($num) {
+                $s = str_pad($num ?? 0, 9, '0', STR_PAD_LEFT);
+                return substr($s, 0, 3) . '.' . substr($s, 3, 3) . '.' . substr($s, 6, 3);
+            };
+            $p = $prefix ? $prefix . ' ' : '';
+            return "NO : " . $p . $padAndDot($start) . " - " . $padAndDot($end);
+        };
+    @endphp
 
-            <table class="info-table">
+    <div class="paper-preview">
+        <!-- HEADER KOP SURAT -->
+        <table class="header-table">
+            <tr>
+                <td style="vertical-align: top; width: 80%; text-align: left; padding: 0;">
+                    <div class="kop-kiri-container">
+                        <span class="kop-kiri-text">
+                            KEPOLISIAN NEGARA REPUBLIK INDONESIA<br>
+                            DAERAH JAWA TENGAH<br>
+                            DIREKTORAT LALU LINTAS
+                        </span>
+                    </div>
+                </td>
+                <td class="kop-kanan" style="width: 20%; padding: 0;">
+                    Bentuk : 007/LOG/POLRI<br>
+                    Lembar ke 
+                </td>
+            </tr>
+        </table>
+
+        <!-- TITLE -->
+        <div class="surat-title-block">
+            <div class="surat-title">SURAT PERINTAH PENGELUARAN MATERIEL</div>
+            <div class="surat-subtitle">( S.P.P.M. )</div>
+            <div class="surat-no">Nomor : {{ $sppm->sppm_no }}</div>
+        </div>
+
+        <!-- INFO PENGIRIMAN -->
+        <table class="info-table">
+            <tr>
+                <td width="40%">Kepada Pa/Ba Gudang Materiel Golongan</td>
+                <td width="2%">:</td>
+                <td>FASMAT SBST DITLANTAS POLDA JATENG</td>
+            </tr>
+            <tr>
+                <td>Diperintahkan untuk mendistribusikan kepada</td>
+                <td>:</td>
+                <td>{{ strtoupper($sppm->destination->name) }}</td>
+            </tr>
+            <tr>
+                <td>Berdasarkan</td>
+                <td>:</td>
+                <td>
+                    <div class="dots-line">
+                        {{ $sppm->keterangan ? $sppm->keterangan . ' ' . str_repeat('.', 110) : str_repeat('.', 110) }}
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <!-- Baris full titik-titik (Berdasarkan Lanjutan) -->
+                <td colspan="3">
+                    <div class="dots-line">
+                        {{ str_repeat('.', 192) }}
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <div style="font-size: 11pt; margin-bottom: 5px;">Materiel sebagai berikut :</div>
+
+        <!-- TABEL MATERIEL -->
+        <table class="data-table">
+            <thead>
                 <tr>
-                    <td width="20%">Berdasarkan</td>
-                    <td width="2%">:</td>
-                    <td>Arahan / Kebutuhan Distribusi Logistik</td>
+                    <th rowspan="2" width="5%">No.<br>Urut</th>
+                    <th rowspan="2" width="28%">Nama dan Kode Materiel</th>
+                    <th rowspan="2" width="8%">Satuan</th>
+                    <th colspan="2" width="24%">Banyaknya</th>
+                    <th colspan="2" width="20%">Harga (Rp.)</th>
+                    <th rowspan="2" width="15%">Keterangan</th>
                 </tr>
                 <tr>
-                    <td>Tujuan / Kepada</td>
-                    <td>:</td>
-                    <td><strong>{{ $sppm->destination->name }}</strong><br>
-                        @if($sppm->destination->nama)
-                            (UP: {{ $sppm->destination->nama }} - {{ $sppm->destination->pangkat_nrp ?? '' }})
+                    <th width="10%">Angka</th>
+                    <th>Huruf</th>
+                    <th>Satuan</th>
+                    <th>Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                @php $no = 1; @endphp
+                @foreach($sppm->details as $detail)
+                <tr>
+                    <td style="text-align: center;">{{ $no++ }}</td>
+                    <td>
+                        {{ strtoupper($detail->material->name) }}
+                        
+                        @if($detail->material->pakai_seri == 1)
+                            @php
+                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                    $q->where('out_sppm_id', $sppm->id);
+                                })->whereHas('stock', function($q) use ($detail) {
+                                    $q->where('material_id', $detail->material_id);
+                                })->get();
+                            @endphp
+                            @foreach($outStocks as $st)
+                                @if($st->seri_awal !== null)
+                                    <div style="font-size: 8.5pt; margin-top: 3px; margin-bottom: 30px;">
+                                        {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!}
+                                    </div>
+                                @endif
+                            @endforeach
                         @endif
                     </td>
+                    <td style="text-align: center;">{{ strtoupper($detail->material->satuan) }}</td>
+                    <td style="text-align: center;">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
+                    <!-- Kolom huruf di center sesuai request -->
+                    <td style="text-align: center;">{{ ucfirst(terbilang($detail->target_qty)) }}</td>
+                    <td style="text-align: right;">{{ $detail->harga_satuan > 0 ? number_format($detail->harga_satuan, 0, ',', '.') : '-' }}</td>
+                    <td style="text-align: right;">{{ $detail->harga_total > 0 ? number_format($detail->harga_total, 0, ',', '.') : '-' }}</td>
+                    <td></td>
                 </tr>
+                @endforeach
+                
+                <!-- Baris Spacer Pembentuk Blanko -->
                 <tr>
-                    <td>Tanggal Keluar</td>
-                    <td>:</td>
-                    <td>{{ \Carbon\Carbon::parse($sppm->sppm_date)->translatedFormat('d F Y') }}</td>
+                    <td style="height: 120px;"></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
                 </tr>
-                <tr>
-                    <td>Keterangan</td>
-                    <td>:</td>
-                    <td>{{ $sppm->keterangan ?? '-' }}</td>
-                </tr>
-            </table>
+            </tbody>
+        </table>
 
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th width="5%">No</th>
-                        <th width="35%">Nama Barang / Materiil</th>
-                        <th width="10%">Satuan</th>
-                        <th width="15%">Banyaknya</th>
-                        <th width="35%">Keterangan / Nomor Seri</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @php 
-                        $no = 1; 
-                        $formatSeri = function($prefix, $start, $end) {
-                            if (is_null($start) && is_null($end)) return '-';
-                            $padAndDot = function($num) {
-                                $s = str_pad($num ?? 0, 9, '0', STR_PAD_LEFT);
-                                return substr($s, 0, 3) . '.' . substr($s, 3, 3) . '.' . substr($s, 6, 3);
-                            };
-                            $p = $prefix ? $prefix . ' ' : '';
-                            return $p . $padAndDot($start) . " s/d " . $padAndDot($end);
-                        };
-                    @endphp
-
-                    @foreach($sppm->details as $detail)
-                    <tr>
-                        <td style="text-align: center;">{{ $no++ }}</td>
-                        <td>
-                            <strong>{{ $detail->material->name }}</strong>
-                            @if($detail->material->code) <br><small>Kode: {{ $detail->material->code }}</small> @endif
-                        </td>
-                        <td style="text-align: center;">{{ $detail->material->satuan }}</td>
-                        <td style="text-align: center; font-weight: bold;">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
-                        <td>
-                            @if($detail->material->pakai_seri == 1)
-                                @php
-                                    $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
-                                        $q->where('out_sppm_id', $sppm->id);
-                                    })->whereHas('stock', function($q) use ($detail) {
-                                        $q->where('material_id', $detail->material_id);
-                                    })->get();
-                                @endphp
-                                @foreach($outStocks as $st)
-                                    @if($st->seri_awal !== null)
-                                        <div style="font-size: 9pt;">&bull; {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!} ({{ $st->qty_keluar }} {{ $detail->material->satuan }})</div>
-                                    @endif
-                                @endforeach
-                            @else
-                                -
-                            @endif
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-
-            <table class="signature-area">
-                <tr>
-                    <td width="33%">
-                        Yang Menerima,<br>
-                        <strong>{{ $sppm->destination->name }}</strong>
-                    </td>
-                    <td width="34%">
-                        Mengetahui,<br>
-                        <strong>Kepala Gudang</strong>
-                    </td>
-                    <td width="33%">
-                        Semarang, {{ \Carbon\Carbon::parse($sppm->sppm_date)->translatedFormat('d F Y') }}<br>
-                        Yang Menyerahkan,
-                    </td>
-                </tr>
-                <tr>
-                    <td>( ......................................... )</td>
-                    <td>( ......................................... )</td>
-                    <td>( <strong>{{ $sppm->creator->name ?? '.......................' }}</strong> )</td>
-                </tr>
-            </table>
-        </div>
+        <!-- AREA TANDA TANGAN (Lebar 50% 0% 50%) -->
+        <table class="signature-table">
+            <tr>
+                <td width="50%" class="sign-box">
+                    <div style="margin-bottom: 5px;">Untuk Penerima :</div>
+                    <table width="100%" style="font-size: 12pt; border: none;">
+                        <tr>
+                            <td width="30%" style="padding: 2px 0;">Nama</td>
+                            <td width="5%" style="padding: 2px 0;">:</td>
+                            <td style="padding: 2px 0;">{{ strtoupper($sppm->destination->nama ?? str_repeat('.', 20)) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 0;">Pangkat/ NRP</td>
+                            <td style="padding: 2px 0;">:</td>
+                            <td style="padding: 2px 0;">{{ strtoupper($sppm->destination->pangkat_nrp ?? str_repeat('.', 20)) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 0;">Jabatan</td>
+                            <td style="padding: 2px 0;">:</td>
+                            <td style="padding: 2px 0;">{{ strtoupper($sppm->destination->jabatan ?? str_repeat('.', 20)) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 0;">Tanda Tangan</td>
+                            <td style="padding: 2px 0;">:</td>
+                            <td style="padding: 2px 0;">..............................</td>
+                        </tr>
+                    </table>
+                </td>
+                <td width="0%"></td>
+                <td width="50%" class="sign-box-center">
+                    Semarang, {{ \Carbon\Carbon::parse($sppm->sppm_date)->translatedFormat('d F Y') }}<br>
+                    <br>
+                    DIRLANTAS POLDA JAWA TENGAH<br>
+                    <br>
+                    <div class="sign-space"></div>
+                    <span style="text-decoration: underline; font-weight: bold;">( NAMA DIREKTUR )</span><br>
+                    BRIGADIR JENDERAL POLISI
+                </td>
+            </tr>
+        </table>
     </div>
 
     <script>
-        // Logika Auto-Scaling Dinamis untuk Preview di Perangkat Berbeda
-        function applyScaling() {
-            // Hindari scaling saat sedang dicetak fisik (Ctrl+P)
-            if (window.matchMedia('print').matches) {
-                document.getElementById('documentContent').style.transform = 'none';
-                return;
-            }
-
-            const paper = document.getElementById('documentContent');
-            const wrapper = document.getElementById('paperWrapper');
-            
-            // Reset dulu ke ukuran asli untuk kalkulasi yang benar
-            paper.style.transform = 'none';
-            wrapper.style.height = 'auto';
-
-            const paperWidth = paper.offsetWidth;
-            const windowWidth = window.innerWidth;
-            const padding = 40; // Margin aman kiri-kanan
-            
-            // Jika ukuran kertas melebihi lebar layar, kecilkan kertasnya
-            if (paperWidth > (windowWidth - padding)) {
-                const scale = (windowWidth - padding) / paperWidth;
-                paper.style.transform = `scale(${scale})`;
-                
-                // Sesuaikan tinggi container luar agar tidak ada white-space kosong di bawah
-                const scaledHeight = paper.offsetHeight * scale;
-                wrapper.style.height = `${scaledHeight}px`;
-            }
-        }
-
-        // Jalankan saat layar di-resize
-        window.addEventListener('resize', applyScaling);
-
-        window.addEventListener('message', function(event) {
-            const data = event.data;
-
-            if (data.action === 'changeLayout') {
-                const body = document.getElementById('printBody');
-                body.className = `paper-${data.size} ${data.orientation}`;
-                
-                // Beri sedikit jeda agar CSS kertas ter-render sebelum di-scaling ulang
-                setTimeout(applyScaling, 100);
-            }
-
-            if (data.action === 'print') {
-                // Reset scale sebelum print
-                document.getElementById('documentContent').style.transform = 'none';
-                document.getElementById('paperWrapper').style.height = 'auto';
+        window.onload = function() {
+            setTimeout(function() {
                 window.print();
-                setTimeout(applyScaling, 500); // Kembalikan scale setelah dialog print tertutup
-            }
-
-            if (data.action === 'savePdf') {
-                // Reset scale agar resolusi PDF HD (tidak blur)
-                document.getElementById('documentContent').style.transform = 'none';
-                
-                const element = document.getElementById('documentContent');
-                const opt = {
-                    margin:       10,
-                    filename:     'SPPM_{{ $sppm->sppm_no }}.pdf',
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2 },
-                    jsPDF:        { unit: 'mm', format: data.size.toLowerCase(), orientation: data.orientation }
-                };
-                
-                html2pdf().set(opt).from(element).save().then(() => {
-                    // Kembalikan scale setelah PDF selesai di-generate
-                    applyScaling();
-                });
-            }
-            
-            if (data.action === 'copyText') {
-                const element = document.getElementById('documentContent');
-                navigator.clipboard.writeText(element.innerText).then(() => {
-                    window.parent.postMessage({ status: 'copied' }, '*');
-                }).catch(err => {
-                    console.error('Gagal menyalin teks', err);
-                });
-            }
-        });
-
-        // Terapkan scaling pada load awal
-        window.onload = applyScaling;
+            }, 500); 
+        };
     </script>
 </body>
 </html>

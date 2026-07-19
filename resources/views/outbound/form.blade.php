@@ -43,7 +43,8 @@
     </div>
     <div class="d-flex gap-2">
         @if($isCompleted)
-            <a href="#" class="btn btn-sm btn-info text-white fw-bold shadow-sm px-3"><i class="fa-solid fa-print me-1"></i> Cetak SPPM</a>
+            <!-- TOMBOL CETAK NEW TAB -->
+            <a href="{{ route('outbounds.print', $outbound->id) }}" target="_blank" class="btn btn-sm btn-info text-white fw-bold shadow-sm px-3"><i class="fa-solid fa-print me-1"></i> Cetak SPPM</a>
         @endif
         <a href="{{ route('outbounds.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
     </div>
@@ -177,7 +178,7 @@
                                         <td class="text-center align-middle"><span class="badge bg-secondary">-</span></td>
                                         <td class="align-middle text-center fw-bold text-danger">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
                                         <td class="align-middle">
-                                            <span class="text-letter-span">{{ $detail->target_qty > 0 ? '-' : '-' }}</span> <!-- You can call terbilang here if PHP helper exists -->
+                                            <span class="text-letter-span">{{ $detail->target_qty > 0 ? '-' : '-' }}</span>
                                         </td>
                                         <td class="text-end align-middle fw-bold text-secondary">Rp {{ number_format($detail->harga_satuan, 0, ',', '.') }}</td>
                                         <td class="text-end align-middle"><span class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></td>

@@ -23,35 +23,6 @@
     .nested-table { width: 100%; font-size: 0.8rem; background: #fff; }
     .nested-table th { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; color: #64748b; border-bottom: 1px solid #e2e8f0; padding: 10px; }
     .nested-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-
-    /* Modal Print Styling Kustom & Responsif */
-    .custom-print-modal { max-width: 85%; }
-    .print-toolbar { background-color: #f1f5f9; color: #334155; padding: 15px 20px; border-radius: 8px 8px 0 0; border-bottom: 1px solid #cbd5e1; }
-    .iframe-container { background-color: #e2e8f0; padding: 20px; overflow-y: auto; height: 80vh; border-radius: 0 0 8px 8px; }
-    .print-iframe { width: 100%; height: 100%; border: none; background: transparent; }
-    
-    /* Pengaturan input dropdown pada toolbar */
-    .toolbar-select { background-color: #ffffff; color: #334155; border: 1px solid #cbd5e1; font-weight: 600; }
-    .toolbar-select:focus { background-color: #ffffff; color: #334155; border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2); }
-    
-    /* Tombol Kustom Toolbar Independen */
-    .btn-toolbar-custom { font-weight: 700; padding: 0.4rem 1rem; border-radius: 6px; transition: all 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; }
-    .btn-copy-custom { background-color: #475569; color: #ffffff; border: 1px solid #475569; }
-    .btn-copy-custom:hover { background-color: #334155; color: #ffffff; }
-    .btn-pdf-custom { background-color: #dc2626; color: #ffffff; border: 1px solid #dc2626; }
-    .btn-pdf-custom:hover { background-color: #b91c1c; color: #ffffff; }
-    .btn-print-custom { background-color: #2563eb; color: #ffffff; border: 1px solid #2563eb; }
-    .btn-print-custom:hover { background-color: #1d4ed8; color: #ffffff; }
-    .btn-close-custom { background-color: #ffffff; color: #475569; border: 1px solid #cbd5e1; }
-    .btn-close-custom:hover { background-color: #f8fafc; color: #0f172a; }
-
-    /* Responsivitas Layar Kecil (Mobile & Tablet) */
-    @media (max-width: 992px) {
-        .custom-print-modal { max-width: 98%; margin: 10px auto; }
-        .print-toolbar { flex-direction: column; gap: 15px; align-items: stretch !important; text-align: center; }
-        .print-toolbar .toolbar-controls, .print-toolbar .toolbar-actions { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; gap: 10px; }
-        .btn-toolbar-custom { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
-    }
 </style>
 @endpush
 
@@ -151,9 +122,10 @@
                 <td class="text-center">
                     <div class="d-flex justify-content-center align-items-center flex-nowrap gap-1">
                         @if($sppm->status == 'completed')
-                            <button type="button" class="btn btn-sm btn-info text-white border-0 shadow-sm rounded-1 px-2 py-0.5 btn-open-print" data-url="{{ route('outbounds.print', $sppm->id) }}" title="Cetak / Preview SPPM">
+                            <!-- TOMBOL CETAK NEW TAB -->
+                            <a href="{{ route('outbounds.print', $sppm->id) }}" target="_blank" class="btn btn-sm btn-info text-white border-0 shadow-sm rounded-1 px-2 py-0.5" title="Cetak SPPM">
                                 <i class="fa-solid fa-print"></i>
-                            </button>
+                            </a>
                             <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Data">
                                 <i class="fa-solid fa-eye text-primary"></i>
                             </a>
@@ -249,133 +221,4 @@
     {{ $outbounds->links('pagination::bootstrap-5') }}
 </div>
 
-<!-- MODAL PREVIEW & CETAK -->
-<div class="modal fade" id="printModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog custom-print-modal modal-dialog-centered">
-        <div class="modal-content border-0 bg-transparent shadow-none">
-            
-            <!-- Toolbar Control Flex/Responsive -->
-            <div class="print-toolbar d-flex align-items-center shadow">
-                <div class="toolbar-controls d-flex align-items-center gap-3">
-                    <h5 class="m-0 fw-bold d-none d-md-block"><i class="fa-solid fa-print me-2 text-primary"></i> Pratinjau</h5>
-                    
-                    <select id="ctrl-size" class="form-select form-select-sm shadow-none toolbar-select" style="width: 80px;">
-                        <option value="A4">A4</option>
-                        <option value="F4">F4</option>
-                    </select>
-
-                    <select id="ctrl-orientation" class="form-select form-select-sm shadow-none toolbar-select" style="width: 110px;">
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Landscape</option>
-                    </select>
-                </div>
-
-                <div class="toolbar-actions d-flex gap-2 ms-auto">
-                    <button id="btn-copy" class="btn btn-toolbar-custom btn-copy-custom"><i class="fa-regular fa-copy me-1"></i> Copy Text</button>
-                    <button id="btn-pdf" class="btn btn-toolbar-custom btn-pdf-custom"><i class="fa-solid fa-file-pdf me-1"></i> Save PDF</button>
-                    <button id="btn-print" class="btn btn-toolbar-custom btn-print-custom"><i class="fa-solid fa-print me-1"></i> Print</button>
-                    <button type="button" class="btn btn-toolbar-custom btn-close-custom" data-bs-dismiss="modal"><i class="fa-solid fa-times me-1"></i> Tutup</button>
-                </div>
-            </div>
-            
-            <!-- Iframe Container -->
-            <div class="iframe-container shadow">
-                <div class="text-center text-secondary mt-5 d-none" id="print-loader">
-                    <div class="spinner-border mb-2" role="status"></div>
-                    <p class="fw-semibold">Memuat Dokumen...</p>
-                </div>
-                <iframe id="print-iframe" class="print-iframe" src=""></iframe>
-            </div>
-        </div>
-    </div>
-</div>
-
 @endsection
-
-@push('scripts')
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const printModalEl = document.getElementById('printModal');
-        const printModal = new bootstrap.Modal(printModalEl);
-        const iframe = document.getElementById('print-iframe');
-        const loader = document.getElementById('print-loader');
-        
-        const ctrlSize = document.getElementById('ctrl-size');
-        const ctrlOrientation = document.getElementById('ctrl-orientation');
-
-        // Buka Modal & Set iframe src
-        document.querySelectorAll('.btn-open-print').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const url = this.getAttribute('data-url');
-                iframe.classList.add('d-none');
-                loader.classList.remove('d-none');
-                
-                iframe.src = url;
-                printModal.show();
-            });
-        });
-
-        // Hapus src ketika modal ditutup
-        printModalEl.addEventListener('hidden.bs.modal', function () {
-            iframe.src = '';
-        });
-
-        // Saat Iframe selesai dimuat
-        iframe.onload = function() {
-            if (iframe.src !== window.location.href && iframe.src !== '') {
-                loader.classList.add('d-none');
-                iframe.classList.remove('d-none');
-                updateIframeLayout(); // Aplikasikan setting kertas default
-            }
-        };
-
-        // Fungsi Kirim Pesan ke Iframe untuk Rubah Layout
-        function updateIframeLayout() {
-            const size = ctrlSize.value;
-            const orientation = ctrlOrientation.value;
-            
-            iframe.contentWindow.postMessage({
-                action: 'changeLayout',
-                size: size,
-                orientation: orientation
-            }, '*');
-        }
-
-        ctrlSize.addEventListener('change', updateIframeLayout);
-        ctrlOrientation.addEventListener('change', updateIframeLayout);
-
-        // Aksi Tombol Cetak
-        document.getElementById('btn-print').addEventListener('click', function() {
-            iframe.contentWindow.postMessage({ action: 'print' }, '*');
-        });
-
-        // Aksi Tombol Save PDF
-        document.getElementById('btn-pdf').addEventListener('click', function() {
-            const btn = this;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Proses...';
-            btn.disabled = true;
-
-            iframe.contentWindow.postMessage({ action: 'savePdf', size: ctrlSize.value, orientation: ctrlOrientation.value }, '*');
-
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 3000);
-        });
-
-        // Aksi Tombol Copy
-        document.getElementById('btn-copy').addEventListener('click', function() {
-            iframe.contentWindow.postMessage({ action: 'copyText' }, '*');
-        });
-
-        // Terima notifikasi balasan dari iframe jika copy berhasil
-        window.addEventListener('message', function(event) {
-            if (event.data && event.data.status === 'copied') {
-                alert('Teks dokumen berhasil disalin ke Clipboard!');
-            }
-        });
-    });
-</script>
-@endpush
