@@ -71,8 +71,11 @@ class InboundController extends Controller
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
         $warehouses = Warehouse::orderBy('id', 'asc')->get(); 
         $inboundMode = $this->inboundMode;
+        // Di dalam method create/edit InboundController
+        $inboundSetting = \App\Models\Setting::where('key', 'inbound_mode')->value('value') ?? 'mode-1';
+        $maxBatchSetting = \App\Models\Setting::where('key', 'max_batch')->value('value') ?? 5;
 
-        return view('inbound.form', compact('categories', 'warehouses', 'inboundMode'))->with('inbound', null);
+        return view('inbound.form', compact('categories', 'warehouses', 'inboundMode', 'inboundSetting', 'maxBatchSetting'))->with('inbound', null);
     }
 
     public function store(Request $request)

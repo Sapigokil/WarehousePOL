@@ -10,8 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     
     @php
-        // SIMULASI DATABASE: Nanti nilai ini diambil dari table Setting (contoh: 'dark' atau 'blue')
-        $activeTheme = 'light-blue'; 
+        // Mengambil tema dari database secara dinamis
+        $activeTheme = \App\Models\Setting::where('key', 'app_theme')->value('value') ?? 'light-blue';
     @endphp
 
     <style>
@@ -125,7 +125,7 @@
         body {
             font-family: 'Open Sans', sans-serif;
             overflow-x: hidden;
-            background-color: var(--layout-bg); /* Menggunakan variabel warna dinamis */
+            background-color: var(--layout-bg);
             transition: background-color 0.3s ease;
         }
         
@@ -162,7 +162,7 @@
         
         /* Kolom Input Form */
         .form-control, .input-group-text {
-            background-color: var(--layout-bg); /* Selaras dengan background luar agar kontras dengan kartu putih */
+            background-color: var(--layout-bg);
             border: none;
             padding: 12px 15px;
             transition: background-color 0.3s ease;

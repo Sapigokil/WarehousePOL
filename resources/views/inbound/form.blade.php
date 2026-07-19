@@ -67,9 +67,21 @@
             <div class="form-card p-4 shadow-sm">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h6 class="form-header-title m-0"><i class="fa-solid fa-folder me-1"></i> Informasi Dokumen</h6>
+                    <!-- REVISI HEADER MODE CONTROL -->
+                    @php
+                        $inboundMode = \App\Models\Setting::where('key', 'inbound_mode')->value('value') ?? 'mode-1';
+                        $maxBatch = \App\Models\Setting::where('key', 'max_batch')->value('value') ?? 5;
+                    @endphp
+
                     <div class="d-flex align-items-center gap-2 bg-light px-3 py-1 rounded border">
-                        <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.7rem;">Mode Kedatangan Parsial / Bertahap</span>
-                        <input type="checkbox" class="form-check-input-custom" id="toggle-mode-checkbox" {{ old('inbound_mode', $inboundMode) === 'mode-2' ? 'checked' : '' }} {{ isset($inbound) && $inbound->status == 'completed' ? 'disabled' : '' }}>
+                        <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.7rem;">Mode Parsial</span>
+                        
+                        <input type="checkbox" 
+                            class="form-check-input-custom" 
+                            id="toggle-mode-checkbox" 
+                            {{-- Jika Mode 1 atau 2, checkbox di-disable agar user tidak bisa mengubah paksa --}}
+                            {{ $inboundMode !== 'mode-3' ? 'disabled' : '' }}
+                            {{ old('inbound_mode', isset($inbound) && $inbound->mode == 'mode-2' ? 'mode-2' : $inboundMode) === 'mode-2' ? 'checked' : '' }}>
                     </div>
                 </div>
                 
@@ -458,30 +470,52 @@
         }
     }
 
+    // Tambahkan variabel ini di awal script
+    const appMaxBatch = {{ $maxBatch }}; 
+    const appInboundMode = "{{ $inboundMode }}";
+
     function syncModeColumns() {
-        const isChecked = toggleModeCheckbox.checked;
-        const mode = isChecked ? 'mode-2' : 'mode-1';
+        // 1. Tentukan apakah sistem harus berjalan dalam mode parsial
+        // Jika Mode 2 (selalu parsial) ATAU Mode 3 dan checkbox dicentang -> Parsial Aktif
+        const isPartialMode = (appInboundMode === 'mode-2') || (appInboundMode === 'mode-3' && toggleModeCheckbox.checked);
+        
+        // Sinkronisasi status checkbox agar visual sinkron dengan mode
+        if (appInboundMode === 'mode-2') {
+            toggleModeCheckbox.checked = true;
+        } else if (appInboundMode === 'mode-1') {
+            toggleModeCheckbox.checked = false;
+        }
+
+        const mode = isPartialMode ? 'mode-2' : 'mode-1';
         modeValueInput.value = mode;
 
         const dateSection = document.querySelector('.section-realita-date');
         const kekuranganCols = document.querySelectorAll('.col-kekurangan');
-        const empRow = document.getElementById('empty-state-row');
 
-        if (mode === 'mode-2') {
+        if (isPartialMode) {
+            // Tampilkan elemen parsial
             if(dateSection) dateSection.classList.remove('d-none');
             kekuranganCols.forEach(col => col.classList.remove('d-none'));
-            for(let b=1; b<=maxBatches; b++) {
-                if (b <= currentBatch) { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.remove('d-none')); } 
-                else { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none')); }
+            
+            // Tampilkan kolom batch sesuai settingan maxBatch
+            for(let b=1; b <= {{ $maxBatches }}; b++) {
+                if (b <= appMaxBatch) {
+                    // Tampilkan tahap jika belum melebihi batch saat ini
+                    document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.remove('d-none'));
+                } else {
+                    document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none'));
+                }
             }
-            if(empRow) empRow.setAttribute('colspan', '15');
         } else {
+            // Sembunyikan elemen parsial
             if(dateSection) dateSection.classList.add('d-none');
             kekuranganCols.forEach(col => col.classList.add('d-none'));
-            for(let b=1; b<=maxBatches; b++) { document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none')); }
-            if(empRow) empRow.setAttribute('colspan', '15');
+            for(let b=1; b <= {{ $maxBatches }}; b++) { 
+                document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none')); 
+            }
         }
 
+        // Refresh kalkulasi baris
         document.querySelectorAll('.data-qty-input').forEach(el => { calculateRowValues(el.dataset.index); });
     }
 

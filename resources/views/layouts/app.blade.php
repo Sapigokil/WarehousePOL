@@ -14,8 +14,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 
     @php
-        // $activeTheme = 'dark'; 
-        $activeTheme = 'light-blue';
+        // Mengambil tema dari database secara dinamis
+        $activeTheme = \App\Models\Setting::where('key', 'app_theme')->value('value') ?? 'light-blue';
     @endphp
 
     <style>
@@ -165,38 +165,37 @@
 
         .sidebar-brand:hover { color: var(--primary-color); }
 
-        /* PERUBAHAN TATA LETAK MENU SIDEBAR YANG LEBIH PADAT */
         .sidebar-menu {
-            padding: 10px 0; /* Diperkecil dari 15px */
+            padding: 10px 0; 
             list-style: none;
             margin: 0;
         }
 
         .sidebar-menu-header {
-            padding: 8px 25px; /* Diperkecil dari 10px */
-            font-size: 0.7rem; /* Diperkecil dari 0.75rem */
+            padding: 8px 25px; 
+            font-size: 0.7rem; 
             color: rgba(255,255,255,0.4);
             text-transform: uppercase;
             font-weight: 700;
             letter-spacing: 0.5px;
-            margin-top: 5px; /* Diperkecil dari 10px */
+            margin-top: 5px; 
             margin-bottom: 2px;
         }
 
         .sidebar-link {
             display: flex;
             align-items: center;
-            padding: 8px 25px; /* Diperkecil dari 12px */
+            padding: 8px 25px; 
             color: var(--sidebar-text);
             text-decoration: none;
-            font-size: 0.85rem; /* Diperkecil dari 0.95rem */
+            font-size: 0.85rem; 
             border-left: 4px solid transparent;
             transition: all 0.2s ease-in-out;
         }
 
         .sidebar-link i {
-            width: 26px; /* Diperkecil dari 30px */
-            font-size: 1rem; /* Diperkecil dari 1.1rem */
+            width: 26px; 
+            font-size: 1rem; 
             text-align: left;
         }
 

@@ -78,6 +78,9 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
 
     // Pengaturan Global & Warehouse Group
     Route::middleware(['can:Setting Menu'])->group(function () {
+        // Menu Pengaturan Global
+    Route::get('/settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
+    Route::put('/settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
         Route::post('categories/reorder', [ MaterialCategoryController::class, 'reorder' ])->name('categories.reorder');
         Route::resource('categories', MaterialCategoryController::class);
         Route::post('warehouses/reorder', [WarehouseController::class, 'reorder'])->name('warehouses.reorder');

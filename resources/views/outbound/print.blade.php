@@ -281,8 +281,8 @@
                     DIRLANTAS POLDA JAWA TENGAH<br>
                     <br>
                     <div class="sign-space"></div>
-                    <span style="text-decoration: underline; font-weight: bold;">( NAMA DIREKTUR )</span><br>
-                    BRIGADIR JENDERAL POLISI
+                    <span style="text-decoration: underline; font-weight: bold;">{{ strtoupper($signatory['name']) }}</span><br>
+                    {{ strtoupper($signatory['position']) }}
                 </td>
             </tr>
         </table>

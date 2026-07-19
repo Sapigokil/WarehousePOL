@@ -421,6 +421,14 @@ class OutboundController extends Controller
             abort(403, 'Hanya dokumen yang sudah berstatus FINAL yang dapat dicetak.');
         }
 
-        return view('outbound.print', compact('sppm'));
+        // Ambil data pengaturan
+        $settings = \App\Models\Setting::pluck('value', 'key')->toArray();
+        $signatory = [
+            'name'     => $settings['signatory_name'] ?? 'NAMA DIREKTUR',
+            'nrp'      => $settings['signatory_nrp'] ?? 'NRP. 00000000',
+            'position' => $settings['signatory_position'] ?? 'JABATAN',
+        ];
+
+        return view('outbound.print', compact('sppm', 'signatory'));
     }
 }

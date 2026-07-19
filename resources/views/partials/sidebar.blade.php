@@ -101,7 +101,7 @@
                 </a>
             </li>
             <li>
-                <a href="#" class="sidebar-link">
+                <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
                     <i class="fa-solid fa-sliders"></i> Pengaturan Global
                 </a>
             </li>
