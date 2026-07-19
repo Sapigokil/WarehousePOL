@@ -14,6 +14,9 @@ class DestinationController extends Controller
         
         $destinations = Destination::when($search, function ($query, $search) {
                 return $query->where('name', 'like', '%' . $search . '%')
+                             ->orWhere('nama', 'like', '%' . $search . '%')
+                             ->orWhere('pangkat_nrp', 'like', '%' . $search . '%')
+                             ->orWhere('jabatan', 'like', '%' . $search . '%')
                              ->orWhere('keterangan', 'like', '%' . $search . '%');
             })
             ->orderBy('nomor_urut', 'asc')
@@ -26,16 +29,23 @@ class DestinationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:destinations,name'
+            'name'        => 'required|string|max:255|unique:destinations,name',
+            'nama'        => 'nullable|string|max:255',
+            'pangkat_nrp' => 'nullable|string|max:255',
+            'jabatan'     => 'nullable|string|max:255',
+            'keterangan'  => 'nullable|string',
         ]);
 
         $lastUrut = Destination::max('nomor_urut');
         $nextUrut = $lastUrut ? $lastUrut + 1 : 1;
 
         Destination::create([
-            'nomor_urut' => $nextUrut,
-            'name'       => $request->name,
-            'keterangan' => $request->keterangan,
+            'nomor_urut'  => $nextUrut,
+            'name'        => $request->name,
+            'nama'        => $request->nama,
+            'pangkat_nrp' => $request->pangkat_nrp,
+            'jabatan'     => $request->jabatan,
+            'keterangan'  => $request->keterangan,
         ]);
 
         return redirect()->route('destinations.index')->with('success', 'Daftar penerima baru berhasil ditambahkan.');
@@ -46,12 +56,19 @@ class DestinationController extends Controller
         $destination = Destination::findOrFail($id);
         
         $request->validate([
-            'name' => 'required|string|max:255|unique:destinations,name,' . $destination->id
+            'name'        => 'required|string|max:255|unique:destinations,name,' . $destination->id,
+            'nama'        => 'nullable|string|max:255',
+            'pangkat_nrp' => 'nullable|string|max:255',
+            'jabatan'     => 'nullable|string|max:255',
+            'keterangan'  => 'nullable|string',
         ]);
 
         $destination->update([
-            'name'       => $request->name,
-            'keterangan' => $request->keterangan,
+            'name'        => $request->name,
+            'nama'        => $request->nama,
+            'pangkat_nrp' => $request->pangkat_nrp,
+            'jabatan'     => $request->jabatan,
+            'keterangan'  => $request->keterangan,
         ]);
 
         return redirect()->route('destinations.index')->with('success', 'Data penerima berhasil diperbarui.');

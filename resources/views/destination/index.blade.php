@@ -32,7 +32,7 @@
     
     <div class="header-content">
         <h4 class="fw-bold mb-1"><i class="fa-solid fa-map-location-dot me-2"></i> Daftar Penerima (Destinasi)</h4>
-        <p class="mb-0 text-white-50 small">Kelola target, institusi, atau pihak yang akan menjadi tujuan pengiriman stok (Outbound).</p>
+        <p class="mb-0 text-white-50 small">Kelola target, instansi, atau pihak yang akan menjadi tujuan pengiriman stok (Outbound).</p>
     </div>
     <div class="header-content">
         <button class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalAddDestination">
@@ -68,8 +68,8 @@
         
         <div class="flex-grow-1"></div>
 
-        <div class="input-group input-group-sm shadow-sm" style="width: 300px; border-radius: 6px; overflow: hidden;">
-            <input type="text" name="search" class="form-control border-0 px-3 py-2" placeholder="Cari nama penerima..." value="{{ $search }}">
+        <div class="input-group input-group-sm shadow-sm" style="width: 350px; border-radius: 6px; overflow: hidden;">
+            <input type="text" name="search" class="form-control border-0 px-3 py-2" placeholder="Cari instansi, pejabat, atau keterangan..." value="{{ $search }}">
             <button class="btn btn-white border-0 bg-white px-3" type="submit">
                 <i class="fa-solid fa-magnifying-glass text-muted"></i>
             </button>
@@ -81,10 +81,11 @@
     <table class="table-dense">
         <thead>
             <tr>
-                <th width="10%" class="text-center text-nowrap">No Urut</th>
-                <th width="35%">Nama Penerima / Target</th>
-                <th width="40%">Keterangan</th>
-                <th width="15%" class="text-center text-nowrap">Aksi</th>
+                <th width="8%" class="text-center text-nowrap">No Urut</th>
+                <th width="25%">Instansi / Kesatuan</th>
+                <th width="35%">Personel / Pejabat Penerima</th>
+                <th width="20%">Keterangan</th>
+                <th width="12%" class="text-center text-nowrap">Aksi</th>
             </tr>
         </thead>
         <tbody id="sortable-destinations">
@@ -94,13 +95,29 @@
                     <i class="fa-solid fa-grip-vertical me-2 drag-handle" title="Tarik untuk memindahkan baris"></i>
                     {{ $destination->nomor_urut }}
                 </td>
-                <td class="fw-bold text-dark">
-                    <i class="fa-regular fa-building text-theme me-2 opacity-75"></i> {{ $destination->name }}
+                <td class="fw-bold text-theme align-middle">
+                    <i class="fa-regular fa-building me-1 opacity-75"></i> {{ $destination->name }}
                 </td>
-                <td class="text-muted small">
+                <td class="align-middle">
+                    @if($destination->nama)
+                        <span class="d-block fw-bold text-dark">{{ $destination->nama }}</span>
+                        <div class="text-muted" style="font-size: 0.75rem;">
+                            @if($destination->pangkat_nrp) 
+                                <span class="fw-semibold">{{ $destination->pangkat_nrp }}</span> 
+                            @endif
+                            @if($destination->pangkat_nrp && $destination->jabatan) | @endif
+                            @if($destination->jabatan) 
+                                <span>{{ $destination->jabatan }}</span> 
+                            @endif
+                        </div>
+                    @else
+                        <span class="text-muted fst-italic small">Belum ada data personel</span>
+                    @endif
+                </td>
+                <td class="text-muted small align-middle">
                     {{ Str::limit($destination->keterangan, 50, '...') ?? '-' }}
                 </td>
-                <td class="text-center">
+                <td class="text-center align-middle">
                     <div class="d-flex justify-content-center align-items-center flex-nowrap gap-1">
                         <button class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-1" data-bs-toggle="modal" data-bs-target="#modalEditDestination{{ $destination->id }}" title="Ubah">
                             <i class="fa-solid fa-pen text-theme"></i>
@@ -127,12 +144,26 @@
                             </div>
                             <div class="modal-body p-4 bg-white text-start">
                                 <div class="mb-3">
-                                    <label class="form-label modal-label">Nama Penerima / Target <span class="text-danger">*</span></label>
+                                    <label class="form-label modal-label">Instansi / Kesatuan <span class="text-danger">*</span></label>
                                     <input type="text" name="name" class="form-control modal-custom-input" value="{{ old('name', $destination->name) }}" required>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label modal-label">Nama Lengkap Personel</label>
+                                        <input type="text" name="nama" class="form-control modal-custom-input" placeholder="Cth: Budi Santoso" value="{{ old('nama', $destination->nama) }}">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label modal-label">Pangkat / NRP</label>
+                                        <input type="text" name="pangkat_nrp" class="form-control modal-custom-input" placeholder="Cth: IPTU / 85010123" value="{{ old('pangkat_nrp', $destination->pangkat_nrp) }}">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label modal-label">Jabatan</label>
+                                        <input type="text" name="jabatan" class="form-control modal-custom-input" placeholder="Cth: Kasubbag Log" value="{{ old('jabatan', $destination->jabatan) }}">
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label modal-label">Keterangan Opsional</label>
-                                    <textarea name="keterangan" class="form-control modal-custom-input" rows="3">{{ old('keterangan', $destination->keterangan) }}</textarea>
+                                    <textarea name="keterangan" class="form-control modal-custom-input" rows="2">{{ old('keterangan', $destination->keterangan) }}</textarea>
                                 </div>
                             </div>
                             <div class="modal-footer border-0 bg-light py-2">
@@ -144,7 +175,7 @@
             </div>
             @empty
             <tr>
-                <td colspan="4" class="text-center py-5 text-muted bg-white">
+                <td colspan="5" class="text-center py-5 text-muted bg-white">
                     <i class="fa-solid fa-users-slash fs-2 mb-2 opacity-25"></i>
                     <p class="mb-0 small">Belum ada daftar penerima / destinasi terdaftar.</p>
                 </td>
@@ -175,12 +206,26 @@
                 </div>
                 <div class="modal-body p-4 bg-white text-start">
                     <div class="mb-3">
-                        <label class="form-label modal-label">Nama Penerima / Target <span class="text-danger">*</span></label>
-                        <input type="text" name="name" class="form-control modal-custom-input" placeholder="Contoh: Divisi Operasional Jabar" value="{{ old('name') }}" required>
+                        <label class="form-label modal-label">Instansi / Kesatuan <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control modal-custom-input" placeholder="Cth: Divisi Operasional Polda" value="{{ old('name') }}" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label modal-label">Nama Lengkap Personel</label>
+                            <input type="text" name="nama" class="form-control modal-custom-input" placeholder="Cth: Budi Santoso" value="{{ old('nama') }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label modal-label">Pangkat / NRP</label>
+                            <input type="text" name="pangkat_nrp" class="form-control modal-custom-input" placeholder="Cth: IPTU / 85010123" value="{{ old('pangkat_nrp') }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label modal-label">Jabatan</label>
+                            <input type="text" name="jabatan" class="form-control modal-custom-input" placeholder="Cth: Kasubbag Log" value="{{ old('jabatan') }}">
+                        </div>
                     </div>
                     <div class="mb-2">
                         <label class="form-label modal-label">Keterangan Opsional</label>
-                        <textarea name="keterangan" class="form-control modal-custom-input" placeholder="Catatan tambahan kontak atau alamat..." rows="3">{{ old('keterangan') }}</textarea>
+                        <textarea name="keterangan" class="form-control modal-custom-input" placeholder="Alamat atau kontak tambahan..." rows="2">{{ old('keterangan') }}</textarea>
                     </div>
                 </div>
                 <div class="modal-footer border-0 bg-light py-2">

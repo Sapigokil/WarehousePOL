@@ -50,6 +50,7 @@ class OutboundController extends Controller
             'sppm_no'        => 'required|string|unique:out_sppms,sppm_no',
             'sppm_date'      => 'required|date',
             'destination_id' => 'required|exists:destinations,id',
+            'action_type'    => 'required|in:draft,final',
             'items'          => 'required|array',
             'items.*.material_id' => 'required|exists:materials,id',
             'items.*.target_qty'  => 'nullable|numeric|min:0',
@@ -57,86 +58,63 @@ class OutboundController extends Controller
 
         DB::beginTransaction();
         try {
+            $action = $request->input('action_type');
+            
             $sppm = OutSppm::create([
                 'sppm_no'        => $request->sppm_no,
                 'sppm_date'      => $request->sppm_date,
                 'destination_id' => $request->destination_id,
                 'keterangan'     => $request->keterangan,
-                'status'         => 'pending', 
+                'status'         => $action === 'final' ? 'completed' : 'pending', 
                 'created_by'     => Auth::id(),
                 'updated_by'     => Auth::id(),
             ]);
 
             $hasItems = false;
+            $itemsToProcess = [];
 
             foreach ($request->items as $item) {
-                if (isset($item['target_qty']) && $item['target_qty'] > 0) {
+                $qty = (int) ($item['target_qty'] ?? 0);
+                if ($qty > 0) {
                     $hasItems = true;
+                    
+                    // PENGAMAN: Cek apakah jumlah melebihi ketersediaan stok fisik gudang
+                    if ($action === 'final') {
+                        $availableStock = Stock::where('material_id', $item['material_id'])->sum('qty');
+                        if ($qty > $availableStock) {
+                            $matName = Material::find($item['material_id'])->name ?? 'Barang';
+                            throw new \Exception("GAGAL DISIMPAN: Jumlah barang keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia di gudang hanya {$availableStock}.");
+                        }
+                    }
+
                     OutDetail::create([
                         'out_sppm_id'  => $sppm->id,
                         'material_id'  => $item['material_id'],
-                        'target_qty'   => $item['target_qty'],
+                        'target_qty'   => $qty,
                         'harga_satuan' => $item['harga_satuan'] ?? 0,
                         'harga_total'  => $item['harga_total'] ?? 0,
                     ]);
+
+                    $itemsToProcess[] = $item;
                 }
             }
 
             if (!$hasItems) {
-                throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah lebih dari 0.");
+                throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
             }
 
-            DB::commit();
-            return redirect()->route('outbounds.index')->with('success', 'Dokumen SPPM Keluar berhasil diregistrasi.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withInput()->withErrors('Terjadi kesalahan: ' . $e->getMessage());
-        }
-    }
+            // PROSES REALISASI OTOMATIS: Potong Stok & Nomor Seri jika status Final
+            if ($action === 'final') {
+                $log = OutLog::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'batch_number' => 1,
+                    'tgl_keluar'   => $request->sppm_date,
+                    'keterangan'   => 'Realisasi keluar otomatis.',
+                ]);
 
-    public function edit($id)
-    {
-        $outbound = OutSppm::with(['destination', 'details.material', 'logs.outStocks'])->findOrFail($id);
-        
-        $stockTotals = Stock::selectRaw('material_id, SUM(qty) as total_qty')
-            ->whereIn('material_id', $outbound->details->pluck('material_id'))
-            ->groupBy('material_id')
-            ->pluck('total_qty', 'material_id')
-            ->toArray();
-
-        return view('outbound.form_realization', compact('outbound', 'stockTotals'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $request->validate([
-            'tgl_keluar' => 'required|date',
-            'items'      => 'required|array',
-            'items.*.qty_keluar' => 'nullable|integer|min:0',
-        ]);
-
-        $sppm = OutSppm::with('details.material')->findOrFail($id);
-
-        DB::beginTransaction();
-        try {
-            $batchNumber = $sppm->logs()->count() + 1;
-            $hasRealisasi = false;
-
-            $log = OutLog::create([
-                'out_sppm_id'  => $sppm->id,
-                'batch_number' => $batchNumber,
-                'tgl_keluar'   => $request->tgl_keluar,
-                'keterangan'   => $request->keterangan_log,
-            ]);
-
-            foreach ($sppm->details as $detail) {
-                $qtyKeluar = (int) ($request->items[$detail->id]['qty_keluar'] ?? 0);
-                
-                if ($qtyKeluar > 0) {
-                    $hasRealisasi = true;
-                    $sisaKebutuhan = $qtyKeluar;
-
-                    $availableStocks = Stock::where('material_id', $detail->material_id)
+                foreach ($itemsToProcess as $item) {
+                    $sisaKebutuhan = (int) $item['target_qty'];
+                    $availableStocks = Stock::where('material_id', $item['material_id'])
                         ->where('qty', '>', 0)
                         ->orderBy('tgl_masuk', 'asc')
                         ->orderBy('id', 'asc')
@@ -147,11 +125,11 @@ class OutboundController extends Controller
                         if ($sisaKebutuhan <= 0) break;
 
                         $qtyAmbil = min($stock->qty, $sisaKebutuhan);
-                        
                         $outSeriAwal = null;
                         $outSeriAkhir = null;
 
-                        if ($detail->material->pakai_seri == 1 && $stock->seri_awal !== null) {
+                        // Perhitungan pecahan nomor seri
+                        if ($stock->seri_awal !== null) {
                             $outSeriAwal = $stock->seri_awal;
                             $outSeriAkhir = $stock->seri_awal + $qtyAmbil - 1;
 
@@ -174,40 +152,158 @@ class OutboundController extends Controller
 
                         $stock->qty -= $qtyAmbil;
                         $stock->save();
-
                         $sisaKebutuhan -= $qtyAmbil;
-                    }
-
-                    if ($sisaKebutuhan > 0) {
-                        throw new \Exception("Stok fisik untuk " . $detail->material->name . " tidak mencukupi. Kurang: " . $sisaKebutuhan);
                     }
                 }
             }
 
-            if (!$hasRealisasi) {
-                throw new \Exception("Tidak ada jumlah barang keluar yang diinputkan.");
+            DB::commit();
+            $msg = $action === 'final' ? 'Dokumen berhasil disimpan dan stok gudang telah dipotong.' : 'Dokumen berhasil disimpan sebagai DRAFT.';
+            return redirect()->route('outbounds.index')->with('success', $msg);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withInput()->withErrors($e->getMessage());
+        }
+    }
+
+    public function edit($id)
+    {
+        $outbound = OutSppm::with('details')->findOrFail($id);
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
+        
+        // Ambil kategori dari item pertama untuk men-*trigger* JS otomatis me-load daftar barang
+        $firstDetail = $outbound->details->first();
+        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
+
+        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $request->validate([
+            'sppm_no'        => 'required|string|unique:out_sppms,sppm_no,'.$id,
+            'sppm_date'      => 'required|date',
+            'destination_id' => 'required|exists:destinations,id',
+            'action_type'    => 'required|in:draft,final',
+            'items'          => 'required|array',
+            'items.*.material_id' => 'required|exists:materials,id',
+            'items.*.target_qty'  => 'nullable|numeric|min:0',
+        ]);
+
+        $sppm = OutSppm::findOrFail($id);
+
+        if ($sppm->status === 'completed') {
+            return back()->withErrors('Dokumen yang sudah Final / Selesai tidak dapat diubah kembali.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $action = $request->input('action_type');
+
+            $sppm->update([
+                'sppm_no'        => $request->sppm_no,
+                'sppm_date'      => $request->sppm_date,
+                'destination_id' => $request->destination_id,
+                'keterangan'     => $request->keterangan,
+                'status'         => $action === 'final' ? 'completed' : 'pending',
+                'updated_by'     => Auth::id(),
+            ]);
+
+            // Hapus detail lama, ganti dengan yang baru
+            $sppm->details()->delete();
+
+            $hasItems = false;
+            $itemsToProcess = [];
+
+            foreach ($request->items as $item) {
+                $qty = (int) ($item['target_qty'] ?? 0);
+                if ($qty > 0) {
+                    $hasItems = true;
+
+                    // PENGAMAN STOK
+                    if ($action === 'final') {
+                        $availableStock = Stock::where('material_id', $item['material_id'])->sum('qty');
+                        if ($qty > $availableStock) {
+                            $matName = Material::find($item['material_id'])->name ?? 'Barang';
+                            throw new \Exception("GAGAL: Jumlah keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}.");
+                        }
+                    }
+
+                    OutDetail::create([
+                        'out_sppm_id'  => $sppm->id,
+                        'material_id'  => $item['material_id'],
+                        'target_qty'   => $qty,
+                        'harga_satuan' => $item['harga_satuan'] ?? 0,
+                        'harga_total'  => $item['harga_total'] ?? 0,
+                    ]);
+
+                    $itemsToProcess[] = $item;
+                }
             }
 
-            $allCompleted = true;
-            $hasPartial = false;
-
-            foreach ($sppm->details as $detail) {
-                $totalKeluar = OutStock::whereHas('outLog', function($q) use ($sppm) {
-                    $q->where('out_sppm_id', $sppm->id);
-                })->whereHas('stock', function($q) use ($detail) {
-                    $q->where('material_id', $detail->material_id);
-                })->sum('qty_keluar');
-
-                if ($totalKeluar > 0) $hasPartial = true;
-                if ($totalKeluar < $detail->target_qty) $allCompleted = false;
+            if (!$hasItems) {
+                throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
             }
 
-            $sppm->status = $allCompleted ? 'completed' : ($hasPartial ? 'partial' : 'pending');
-            $sppm->updated_by = Auth::id();
-            $sppm->save();
+            // PROSES REALISASI OTOMATIS JIKA FINAL
+            if ($action === 'final') {
+                $log = OutLog::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'batch_number' => 1,
+                    'tgl_keluar'   => $request->sppm_date,
+                    'keterangan'   => 'Realisasi keluar otomatis (Update dari Draft).',
+                ]);
+
+                foreach ($itemsToProcess as $item) {
+                    $sisaKebutuhan = (int) $item['target_qty'];
+                    $availableStocks = Stock::where('material_id', $item['material_id'])
+                        ->where('qty', '>', 0)
+                        ->orderBy('tgl_masuk', 'asc')
+                        ->orderBy('id', 'asc')
+                        ->lockForUpdate()
+                        ->get();
+
+                    foreach ($availableStocks as $stock) {
+                        if ($sisaKebutuhan <= 0) break;
+
+                        $qtyAmbil = min($stock->qty, $sisaKebutuhan);
+                        $outSeriAwal = null;
+                        $outSeriAkhir = null;
+
+                        if ($stock->seri_awal !== null) {
+                            $outSeriAwal = $stock->seri_awal;
+                            $outSeriAkhir = $stock->seri_awal + $qtyAmbil - 1;
+
+                            if ($qtyAmbil < $stock->qty) {
+                                $stock->seri_awal = $outSeriAkhir + 1;
+                            } else {
+                                $stock->seri_awal = null;
+                                $stock->seri_akhir = null;
+                            }
+                        }
+
+                        OutStock::create([
+                            'out_log_id' => $log->id,
+                            'stock_id'   => $stock->id,
+                            'qty_keluar' => $qtyAmbil,
+                            'prefix'     => $stock->prefix,
+                            'seri_awal'  => $outSeriAwal,
+                            'seri_akhir' => $outSeriAkhir,
+                        ]);
+
+                        $stock->qty -= $qtyAmbil;
+                        $stock->save();
+                        $sisaKebutuhan -= $qtyAmbil;
+                    }
+                }
+            }
 
             DB::commit();
-            return redirect()->route('outbounds.index')->with('success', 'Realisasi barang keluar berhasil disimpan.');
+            $msg = $action === 'final' ? 'Draft berhasil disimpan dan stok gudang telah dipotong.' : 'DRAFT berhasil diperbarui.';
+            return redirect()->route('outbounds.index')->with('success', $msg);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -310,5 +406,21 @@ class OutboundController extends Controller
         });
 
         return response()->json($materials);
+    }
+
+    public function print($id)
+    {
+        $sppm = OutSppm::with([
+            'destination', 
+            'details.material', 
+            'logs.outStocks.stock', 
+            'creator'
+        ])->findOrFail($id);
+
+        if ($sppm->status !== 'completed') {
+            abort(403, 'Hanya dokumen yang sudah berstatus FINAL yang dapat dicetak.');
+        }
+
+        return view('outbound.print', compact('sppm'));
     }
 }

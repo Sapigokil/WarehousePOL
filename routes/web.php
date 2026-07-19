@@ -53,6 +53,8 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('outbounds/materials-by-category/{category_id}', [\App\Http\Controllers\OutboundController::class, 'getMaterialsByCategory']);
 
         Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
+        Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');
+        
     });
 
     /* ==============================================

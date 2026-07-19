@@ -12,6 +12,9 @@ class Destination extends Model
     protected $fillable = [
         'nomor_urut',
         'name',
+        'nama',
+        'pangkat_nrp',
+        'jabatan',
         'keterangan',
     ];
 }

@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Input SPPM Keluar Baru')
+@section('title', isset($outbound) ? 'Kelola SPPM Keluar' : 'Input SPPM Keluar Baru')
 
 @push('styles')
 <style>
@@ -23,14 +23,30 @@
 @endpush
 
 @section('content')
+@php
+    $isCompleted = isset($outbound) && $outbound->status === 'completed';
+@endphp
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="fw-bold mb-0">
             <i class="fa-solid fa-file-export text-danger me-2"></i>
-            Registrasi Surat Perintah Keluar
+            {{ isset($outbound) ? 'Kelola Dokumen Keluar' : 'Registrasi SPPM Keluar' }}
+            @if(isset($outbound))
+                @if($isCompleted)
+                    <span class="badge bg-success ms-2 fs-6 align-middle"><i class="fa-solid fa-check me-1"></i> FINAL</span>
+                @else
+                    <span class="badge bg-secondary ms-2 fs-6 align-middle"><i class="fa-solid fa-pen-ruler me-1"></i> DRAFT</span>
+                @endif
+            @endif
         </h5>
     </div>
-    <a href="{{ route('outbounds.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
+    <div class="d-flex gap-2">
+        @if($isCompleted)
+            <a href="#" class="btn btn-sm btn-info text-white fw-bold shadow-sm px-3"><i class="fa-solid fa-print me-1"></i> Cetak SPPM</a>
+        @endif
+        <a href="{{ route('outbounds.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
+    </div>
 </div>
 
 @if($errors->any())
@@ -44,11 +60,12 @@
     </div>
 @endif
 
-<form action="{{ route('outbounds.store') }}" method="POST" id="formMainOutbound">
+<form action="{{ isset($outbound) ? route('outbounds.update', $outbound->id) : route('outbounds.store') }}" method="POST" id="formMainOutbound">
     @csrf
+    @if(isset($outbound)) @method('PUT') @endif
 
     <div class="row">
-        <!-- HEADER (INFORMASI DOKUMEN & TUJUAN) -->
+        <!-- HEADER -->
         <div class="col-12 mb-3">
             <div class="form-card p-4 shadow-sm">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -58,39 +75,48 @@
                 <div class="row">
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Nomor SPPM Keluar</label>
-                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no') }}" required placeholder="Contoh: OUT/001/2026">
+                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', $outbound->sppm_no ?? '') }}" required placeholder="Contoh: OUT/001/2026" {{ $isCompleted ? 'readonly' : '' }}>
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Tgl Surat Keluar</label>
-                        <input type="date" name="sppm_date" class="form-control custom-input w-100" value="{{ old('sppm_date', date('Y-m-d')) }}" required>
+                        <input type="date" name="sppm_date" class="form-control custom-input w-100" value="{{ old('sppm_date', $outbound->sppm_date ?? date('Y-m-d')) }}" required {{ $isCompleted ? 'readonly' : '' }}>
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Tujuan Distribusi (Penerima)</label>
-                        <select name="destination_id" class="form-select custom-input w-100" required>
-                            <option value="">-- Pilih Tujuan --</option>
-                            @foreach($destinations as $dest)
-                                <option value="{{ $dest->id }}" {{ old('destination_id') == $dest->id ? 'selected' : '' }}>{{ $dest->name }}</option>
-                            @endforeach
-                        </select>
+                        @if($isCompleted)
+                            <input type="text" class="form-control custom-input w-100" value="{{ $outbound->destination->name }}" readonly>
+                            <input type="hidden" name="destination_id" value="{{ $outbound->destination_id }}">
+                        @else
+                            <select name="destination_id" class="form-select custom-input w-100" required>
+                                <option value="">-- Pilih Tujuan --</option>
+                                @foreach($destinations as $dest)
+                                    <option value="{{ $dest->id }}" {{ old('destination_id', $outbound->destination_id ?? '') == $dest->id ? 'selected' : '' }}>{{ $dest->name }}</option>
+                                @endforeach
+                            </select>
+                        @endif
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Kategori Komoditas</label>
-                        <select id="category-selector" class="form-select custom-input w-100" required>
-                            <option value="">-- Pilih --</option>
-                            @foreach($categories as $category)
-                                <option value="{{ $category->id }}">{{ $category->name }}</option>
-                            @endforeach
-                        </select>
+                        @if($isCompleted)
+                            <input type="text" class="form-control custom-input w-100" value="{{ $outbound->details->first()->material->category->name ?? '-' }}" readonly>
+                        @else
+                            <select id="category-selector" class="form-select custom-input w-100" required>
+                                <option value="">-- Pilih --</option>
+                                @foreach($categories as $category)
+                                    <option value="{{ $category->id }}" {{ (isset($selectedCategoryId) && $selectedCategoryId == $category->id) ? 'selected' : '' }}>{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                        @endif
                     </div>
                     <div class="col-12 col-sm-12 col-md-8 col-xl-4 mb-3">
                         <label class="field-label">Keterangan SPPM (Umum)</label>
-                        <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan') }}" placeholder="Catatan dokumen surat...">
+                        <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan', $outbound->keterangan ?? '') }}" placeholder="Catatan pengiriman..." {{ $isCompleted ? 'readonly' : '' }}>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- SEKSI TABEL MANIFES MATRIX -->
+        <!-- MATRIX -->
         <div class="col-12 mb-4">
             <div class="form-card shadow-sm overflow-hidden">
                 <div class="bg-light px-4 py-3 border-bottom d-flex justify-content-between align-items-center">
@@ -113,19 +139,68 @@
                             </tr>
                         </thead>
                         <tbody id="outbound-items-container">
-                            <tr>
-                                <td colspan="8" id="empty-state-row" class="text-center py-5 text-muted bg-white">
-                                    <i class="fa-solid fa-arrow-pointer fs-3 mb-2 opacity-50"></i>
-                                    <p class="mb-0 small">Silakan tentukan Kategori Komoditas terlebih dahulu untuk menggelar manifes barang.</p>
-                                </td>
-                            </tr>
+                            <!-- Jika dokumen final, langsung render data statis yang sudah tersimpan -->
+                            @if($isCompleted)
+                                @php $parentNo = 1; @endphp
+                                @foreach($outbound->details as $idx => $detail)
+                                    <tr>
+                                        <td class="text-center fw-bold text-muted" style="font-size: 0.85rem;">{{ is_null($detail->material->parent_id) ? $parentNo++ : '' }}</td>
+                                        <td>
+                                            @if(!is_null($detail->material->parent_id)) <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-1 opacity-50"></i> @endif
+                                            <span class="text-dark d-inline-block fw-semibold" style="font-size: 0.8rem;">{{ $detail->material->name }}</span>
+                                            
+                                            <!-- Render Serial dari Log OutStock -->
+                                            @if($detail->material->pakai_seri == 1)
+                                                @php
+                                                    $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound){
+                                                        $q->where('out_sppm_id', $outbound->id);
+                                                    })->whereHas('stock', function($q) use ($detail){
+                                                        $q->where('material_id', $detail->material_id);
+                                                    })->get();
+                                                @endphp
+                                                @if($outStocks->count() > 0)
+                                                    <div class="mt-1">
+                                                        <small class="text-muted"><i class="fa-solid fa-tags"></i> Seri Keluar:</small><br>
+                                                        @foreach($outStocks as $st)
+                                                            @if($st->seri_awal !== null)
+                                                                <span class="badge bg-secondary bg-opacity-10 text-dark border fw-bold mb-1" style="font-size: 0.65rem;">
+                                                                    {{ $st->prefix }} {{ str_pad($st->seri_awal, 9, '0', STR_PAD_LEFT) }} s/d {{ str_pad($st->seri_akhir, 9, '0', STR_PAD_LEFT) }}
+                                                                </span>
+                                                            @endif
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            @endif
+
+                                        </td>
+                                        <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">{{ $detail->material->satuan }}</td>
+                                        <td class="text-center align-middle"><span class="badge bg-secondary">-</span></td>
+                                        <td class="align-middle text-center fw-bold text-danger">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
+                                        <td class="align-middle">
+                                            <span class="text-letter-span">{{ $detail->target_qty > 0 ? '-' : '-' }}</span> <!-- You can call terbilang here if PHP helper exists -->
+                                        </td>
+                                        <td class="text-end align-middle fw-bold text-secondary">Rp {{ number_format($detail->harga_satuan, 0, ',', '.') }}</td>
+                                        <td class="text-end align-middle"><span class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></td>
+                                    </tr>
+                                @endforeach
+                            @else
+                                <tr>
+                                    <td colspan="8" id="empty-state-row" class="text-center py-5 text-muted bg-white">
+                                        <i class="fa-solid fa-arrow-pointer fs-3 mb-2 opacity-50"></i>
+                                        <p class="mb-0 small">Silakan tentukan Kategori Komoditas terlebih dahulu untuk menggelar manifes barang.</p>
+                                    </td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
 
+                @if(!$isCompleted)
                 <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
-                    <button type="submit" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;"><i class="fa-solid fa-save me-1"></i> SIMPAN DOKUMEN KELUAR</button>
+                    <button type="submit" name="action_type" value="draft" class="btn btn-outline-secondary fw-bold px-4" style="border-radius: 6px;"><i class="fa-solid fa-pen-ruler me-1"></i> SIMPAN DRAFT</button>
+                    <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan langsung memotong stok di Gudang dan dokumen tidak dapat diubah lagi. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
                 </div>
+                @endif
             </div>
         </div>
     </div>
@@ -133,10 +208,14 @@
 @endsection
 
 @push('scripts')
+@if(!$isCompleted)
 <script>
     const categorySelector = document.getElementById('category-selector');
     const itemsContainer = document.getElementById('outbound-items-container');
     const loadingIndicator = document.getElementById('loading-indicator');
+    
+    // Injeksi data draft lama
+    const savedTargetData = {!! isset($outbound) ? json_encode($outbound->details->pluck('target_qty', 'material_id')) : '{}' !!};
 
     function terbilang(n) {
         const bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
@@ -163,20 +242,17 @@
         return s.substring(0,3) + '.' + s.substring(3,6) + '.' + s.substring(6,9);
     }
 
-    // Kalkulasi Harga, Total, Huruf, dan Preview Seri saat User Mengetik
     itemsContainer.addEventListener('input', function(e) {
         if (e.target.classList.contains('data-qty-input')) {
             const qty = parseInt(e.target.value) || 0;
             const idx = e.target.dataset.index;
             const tr = e.target.closest('tr');
             
-            // Text Huruf
             const letterSpan = document.getElementById(`letter-span-${idx}`);
             if (letterSpan) {
                 letterSpan.textContent = (qty > 0) ? terbilang(qty) : '-';
             }
 
-            // Preview Nomor Seri
             const previewContainer = tr.querySelector('.serial-preview-container');
             if (previewContainer) {
                 const prefix = previewContainer.dataset.prefix;
@@ -194,7 +270,6 @@
                 }
             }
 
-            // Logika FIFO Harga Tertinggi Lintas Rentang
             const fifoDataStr = e.target.dataset.fifo;
             if (fifoDataStr) {
                 const fifoQueue = JSON.parse(fifoDataStr);
@@ -254,7 +329,7 @@
                             let startData = mat.next_seri || '';
                             serialPreviewHtml = `
                                 <div class="mt-1 text-muted serial-preview-container" data-prefix="${prefixData}" data-start="${startData}" style="font-size: 0.7rem;">
-                                    <i class="fa-solid fa-tags opacity-50 me-1"></i> Seri: <span class="serial-preview-text fw-bold text-dark">-</span>
+                                    <i class="fa-solid fa-tags opacity-50 me-1"></i> Estimasi Seri: <span class="serial-preview-text fw-bold text-dark">-</span>
                                 </div>
                             `;
                         }
@@ -318,12 +393,23 @@
                             });
                         }
                     });
-                })
-                .catch(error => {
-                    if(loadingIndicator) loadingIndicator.classList.add('d-none');
-                    alert('Gagal mengambil data template barang. Pastikan koneksi jaringan Anda stabil.');
+
+                    // Trigger input agar nilai draft lama terisi (Pembaruan Nomor Seri Otomatis)
+                    document.querySelectorAll('.data-qty-input').forEach(input => {
+                        const matId = input.closest('tr').querySelector('input[name*="[material_id]"]').value;
+                        if (savedTargetData[matId]) {
+                            input.value = savedTargetData[matId];
+                            input.dispatchEvent(new Event('input'));
+                        }
+                    });
                 });
         });
+
+        // Trigger AJAX on page load if editing Draft
+        if (categorySelector.value !== '') {
+            categorySelector.dispatchEvent(new Event('change'));
+        }
     }
 </script>
+@endif
 @endpush
