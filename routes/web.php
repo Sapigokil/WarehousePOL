@@ -61,7 +61,9 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
        ANALITIK
        ============================================== */
     Route::middleware(['can:Report Menu'])->group(function () {
-        
+        // Menu Tracking Seri
+        Route::get('/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('tracking.index');
+        Route::get('/tracking/search', [\App\Http\Controllers\TrackingController::class, 'search'])->name('tracking.search');
     });
 
     /* ==============================================

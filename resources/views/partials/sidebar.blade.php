@@ -55,8 +55,8 @@
         @can('Report Menu')
         <li class="sidebar-menu-header">Analitik</li>
         <li>
-            <a href="#" class="sidebar-link">
-                <i class="fa-solid fa-magnifying-glass-location"></i> Tracking Seri
+            <a href="{{ route('tracking.index') }}" class="sidebar-link {{ request()->routeIs('tracking.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-magnifying-glass-location"></i> Lacak Nomor Seri
             </a>
         </li>
         <li>
