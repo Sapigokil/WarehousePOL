@@ -10,6 +10,7 @@ use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\InboundController;
 USe App\Http\Controllers\DestinationController;
+use App\Http\Controllers\ReportController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -61,6 +62,16 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
        ANALITIK
        ============================================== */
     Route::middleware(['can:Report Menu'])->group(function () {
+        Route::get('reports.mutation', [ReportController::class, 'mutation'])->name('reports.mutation');
+        Route::get('reports.mutation/export', [ReportController::class, 'exportMutation'])->name('reports.mutation.export');
+
+        // Diubah dari 'inbound' menjadi 'inbound-history' agar tidak bentrok
+        Route::get('reports.inbound-history', [ReportController::class, 'inbound'])->name('reports.inbound-history');
+        Route::get('reports.inbound-history/export', [ReportController::class, 'exportInbound'])->name('reports.inbound-history.export');
+        
+        // Diubah dari 'outbound' menjadi 'outbound-history' agar lebih konsisten dan aman
+        Route::get('reports.outbound-history', [ReportController::class, 'outbound'])->name('reports.outbound-history');
+        Route::get('reports.outbound-history/export', [ReportController::class, 'exportOutbound'])->name('reports.outbound-history.export');
         // Menu Tracking Seri
         Route::get('/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('tracking.index');
         Route::get('/tracking/search', [\App\Http\Controllers\TrackingController::class, 'search'])->name('tracking.search');

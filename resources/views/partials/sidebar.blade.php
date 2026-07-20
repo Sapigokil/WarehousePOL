@@ -53,17 +53,37 @@
         @endcanany
 
         @can('Report Menu')
-        <li class="sidebar-menu-header">Analitik</li>
-        <li>
-            <a href="{{ route('tracking.index') }}" class="sidebar-link {{ request()->routeIs('tracking.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-magnifying-glass-location"></i> Lacak Nomor Seri
-            </a>
-        </li>
-        <li>
-            <a href="#" class="sidebar-link">
-                <i class="fa-solid fa-chart-pie"></i> Laporan & Alert
-            </a>
-        </li>
+                <li class="sidebar-menu-header">Analitik</li>
+                <li>
+                    <a href="{{ route('tracking.index') }}" class="sidebar-link {{ request()->routeIs('tracking.*') ? 'active' : '' }}">
+                        <i class="fa-solid fa-magnifying-glass-location"></i> Lacak Nomor Seri
+                    </a>
+                </li>
+                
+                <li class="sidebar-dropdown {{ request()->routeIs('reports.*') ? 'active open' : '' }}">
+                    <a href="#reportSubmenu" data-bs-toggle="collapse" class="sidebar-link d-flex justify-content-between align-items-center {{ request()->routeIs('reports.*') ? 'active' : '' }}" aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}">
+                        <span><i class="fa-solid fa-chart-pie me-2"></i> Laporan & Alert</span>
+                        <i class="fa-solid fa-chevron-down small transition-icon"></i>
+                    </a>
+                    
+                    <ul class="collapse list-unstyled ps-4 ms-2 border-start {{ request()->routeIs('reports.*') ? 'show' : '' }}" id="reportSubmenu">
+                        <li class="mt-1">
+                            <a href="{{ route('reports.mutation') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.mutation') ? 'text-primary fw-bold' : 'text-muted' }}">
+                                <i class="fa-solid fa-chart-bar me-2"></i> Mutasi Stock
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('reports.inbound-history') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.inbound-history') ? 'text-primary fw-bold' : 'text-muted' }}">
+                                <i class="fa-solid fa-arrow-right-to-bracket me-2"></i> Riwayat Penerimaan
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('reports.outbound-history') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.outbound-history') ? 'text-primary fw-bold' : 'text-muted' }}">
+                                <i class="fa-solid fa-arrow-right-from-bracket me-2"></i> Riwayat Distribusi
+                            </a>
+                        </li>
+                    </ul>
+                </li>
         @endcan
 
         @canany(['Setting Menu', 'User Menu', 'Warehouse Menu'])
