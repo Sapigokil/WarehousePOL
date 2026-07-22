@@ -9,6 +9,7 @@
     .custom-input { background-color: #f8fafc; border: 1px solid #cbd5e1 !important; border-radius: 6px; padding: 8px 12px; font-size: 0.9rem; color: #334155; }
     .custom-input:focus { background-color: #ffffff; border-color: var(--primary-color) !important; box-shadow: none; }
     .custom-input:disabled { background-color: #e2e8f0; opacity: 0.7; }
+    .custom-input[readonly] { background-color: #f1f5f9; opacity: 0.8; cursor: not-allowed; border-style: dashed !important; }
     
     .table-form { width: 100%; border-collapse: collapse; }
     .table-form th { background-color: #f8fafc; color: #475569; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 10px 10px; border-bottom: 2px solid #e2e8f0; vertical-align: middle;}
@@ -79,7 +80,6 @@
                         <input type="checkbox" 
                             class="form-check-input-custom" 
                             id="toggle-mode-checkbox" 
-                            {{-- Jika Mode 1 atau 2, checkbox di-disable agar user tidak bisa mengubah paksa --}}
                             {{ $inboundMode !== 'mode-3' ? 'disabled' : '' }}
                             {{ old('inbound_mode', isset($inbound) && $inbound->mode == 'mode-2' ? 'mode-2' : $inboundMode) === 'mode-2' ? 'checked' : '' }}>
                     </div>
@@ -237,18 +237,31 @@
                                         <td class="col-kekurangan d-none"></td>
                                     @else
                                         <td>
-                                            <input type="number" name="items[{{ $index }}][target_qty]" id="target_{{ $index }}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="{{ $index }}" value="{{ $detail->target_qty }}" min="0">
+                                            {{-- TAMBAHAN ATTRIBUTE AUTOMATISASI (data-ismain, data-jmlxinduk, readonly) --}}
+                                            <input type="number" name="items[{{ $index }}][target_qty]" id="target_{{ $index }}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="{{ $index }}" data-ismain="{{ $detail->material->ismain ?? 0 }}" data-jmlxinduk="{{ $detail->material->jmlxinduk ?? 0 }}" value="{{ $detail->target_qty }}" min="0" {{ ($detail->material->jmlxinduk ?? 0) == 1 ? 'readonly tabindex="-1"' : '' }}>
                                         </td>
                                         <td>
                                             <span id="letter-span-{{ $index }}" class="text-letter-span">{{ $detail->qty_huruf ?? '-' }}</span>
                                             <input type="hidden" name="items[{{ $index }}][qty_huruf]" id="qty_huruf_hidden_{{ $index }}" value="{{ $detail->qty_huruf }}">
                                         </td>
                                         <td>
-                                            <input type="number" name="items[{{ $index }}][harga_satuan]" id="price_{{ $index }}" step="0.01" class="form-control form-control-sm text-end text-secondary data-price-input" data-index="{{ $index }}" value="{{ number_format($detail->harga_satuan, 2, '.', '') }}" placeholder="0.00" min="0">
+                                            {{-- LOGIKA ISMAIN UNTUK HARGA --}}
+                                            @if(($detail->material->ismain ?? 0) == 1)
+                                                <input type="number" name="items[{{ $index }}][harga_satuan]" id="price_{{ $index }}" step="0.01" class="form-control form-control-sm text-end text-secondary data-price-input" data-index="{{ $index }}" value="{{ number_format($detail->harga_satuan, 2, '.', '') }}" placeholder="0.00" min="0">
+                                            @else
+                                                <div class="text-center text-muted fw-bold">-</div>
+                                                <input type="hidden" name="items[{{ $index }}][harga_satuan]" id="price_{{ $index }}" value="0">
+                                            @endif
                                         </td>
                                         <td>
-                                            <div class="text-end"><span id="total-span-{{ $index }}" class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></div>
-                                            <input type="hidden" name="items[{{ $index }}][harga_total]" id="harga_total_hidden_{{ $index }}" value="{{ $detail->harga_total }}">
+                                            {{-- LOGIKA ISMAIN UNTUK TOTAL --}}
+                                            @if(($detail->material->ismain ?? 0) == 1)
+                                                <div class="text-end"><span id="total-span-{{ $index }}" class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></div>
+                                                <input type="hidden" name="items[{{ $index }}][harga_total]" id="harga_total_hidden_{{ $index }}" value="{{ $detail->harga_total }}">
+                                            @else
+                                                <div class="text-center text-muted fw-bold">-</div>
+                                                <input type="hidden" name="items[{{ $index }}][harga_total]" id="harga_total_hidden_{{ $index }}" value="0">
+                                            @endif
                                         </td>
 
                                         @php $totalReal = 0; @endphp
@@ -270,7 +283,7 @@
                                                         $sisaKurang = $detail->target_qty - $totalReal;
                                                         $defaultInput = $sisaKurang > 0 ? $sisaKurang : 0;
                                                     @endphp
-                                                    <input type="number" name="items[{{ $index }}][qty_received]" id="received_{{ $index }}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" data-index="{{ $index }}" value="{{ $defaultInput }}" min="0" max="{{ $sisaKurang > 0 ? $sisaKurang : 999999 }}">
+                                                    <input type="number" name="items[{{ $index }}][qty_received]" id="received_{{ $index }}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" data-index="{{ $index }}" data-ismain="{{ $detail->material->ismain ?? 0 }}" data-jmlxinduk="{{ $detail->material->jmlxinduk ?? 0 }}" value="{{ $defaultInput }}" min="0" max="{{ $sisaKurang > 0 ? $sisaKurang : 999999 }}" {{ ($detail->material->jmlxinduk ?? 0) == 1 ? 'readonly tabindex="-1"' : '' }}>
                                                     
                                                     @if($detail->material->pakai_seri == 1)
                                                         <div class="d-flex gap-1 mt-1">
@@ -318,7 +331,7 @@
     </div>
 </form>
 
-<!-- REVISI: MODAL TAMBAH GUDANG BARU -->
+<!-- MODAL TAMBAH GUDANG BARU -->
 <div class="modal fade" id="modalAddWarehouse" tabindex="-1" aria-labelledby="modalAddWarehouseLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -447,7 +460,8 @@
         if (targetInput) {
             const qty = parseInt(targetInput.value) || 0;
             
-            if(priceInput) {
+            // Hitung harga hanya jika input harga ada (bukan hidden dengan value 0)
+            if(priceInput && priceInput.type !== 'hidden') {
                 const price = parseFloat(priceInput.value) || 0;
                 const total = qty * price;
                 if(totalSpan) totalSpan.textContent = formatRupiah(total);
@@ -470,16 +484,12 @@
         }
     }
 
-    // Tambahkan variabel ini di awal script
     const appMaxBatch = {{ $maxBatch }}; 
     const appInboundMode = "{{ $inboundMode }}";
 
     function syncModeColumns() {
-        // 1. Tentukan apakah sistem harus berjalan dalam mode parsial
-        // Jika Mode 2 (selalu parsial) ATAU Mode 3 dan checkbox dicentang -> Parsial Aktif
         const isPartialMode = (appInboundMode === 'mode-2') || (appInboundMode === 'mode-3' && toggleModeCheckbox.checked);
         
-        // Sinkronisasi status checkbox agar visual sinkron dengan mode
         if (appInboundMode === 'mode-2') {
             toggleModeCheckbox.checked = true;
         } else if (appInboundMode === 'mode-1') {
@@ -493,21 +503,17 @@
         const kekuranganCols = document.querySelectorAll('.col-kekurangan');
 
         if (isPartialMode) {
-            // Tampilkan elemen parsial
             if(dateSection) dateSection.classList.remove('d-none');
             kekuranganCols.forEach(col => col.classList.remove('d-none'));
             
-            // Tampilkan kolom batch sesuai settingan maxBatch
             for(let b=1; b <= {{ $maxBatches }}; b++) {
                 if (b <= appMaxBatch) {
-                    // Tampilkan tahap jika belum melebihi batch saat ini
                     document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.remove('d-none'));
                 } else {
                     document.querySelectorAll(`.col-tahap-${b}`).forEach(col => col.classList.add('d-none'));
                 }
             }
         } else {
-            // Sembunyikan elemen parsial
             if(dateSection) dateSection.classList.add('d-none');
             kekuranganCols.forEach(col => col.classList.add('d-none'));
             for(let b=1; b <= {{ $maxBatches }}; b++) { 
@@ -515,16 +521,32 @@
             }
         }
 
-        // Refresh kalkulasi baris
         document.querySelectorAll('.data-qty-input').forEach(el => { calculateRowValues(el.dataset.index); });
     }
 
     if(toggleModeCheckbox) { toggleModeCheckbox.addEventListener('change', syncModeColumns); }
 
+    // EVENT LISTENER UTAMA UNTUK INPUT DAN OTOMASI JUMLAH
     itemsContainer.addEventListener('input', function(e) {
         if (e.target.classList.contains('data-qty-input') || e.target.classList.contains('data-price-input') || e.target.classList.contains('data-real-input')) {
             const idx = e.target.dataset.index;
-            if (e.target.classList.contains('data-real-input')) { e.target.dataset.edited = "true"; }
+            const isTargetQty = e.target.classList.contains('data-qty-input');
+            const isRealQty = e.target.classList.contains('data-real-input');
+
+            // OTOMATISASI JMLXINDUK (Menyinkronkan jumlah anak dengan jumlah induk)
+            if ((isTargetQty || isRealQty) && e.target.dataset.ismain == "1") {
+                const newValue = e.target.value;
+                const selector = isTargetQty ? '.data-qty-input[data-jmlxinduk="1"]' : '.data-real-input[data-jmlxinduk="1"]';
+                
+                document.querySelectorAll(selector).forEach(childInput => {
+                    childInput.value = newValue;
+                    const childIdx = childInput.dataset.index;
+                    calculateRowValues(childIdx);
+                    calculateAutoEndSerial(childIdx, isRealQty);
+                });
+            }
+
+            if (isRealQty) { e.target.dataset.edited = "true"; }
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 calculateRowValues(idx);
@@ -644,26 +666,46 @@
                             for(let b=1; b<=maxBatches; b++) { html += `<td class="col-tahap-${b} d-none"></td>`; }
                             html += `<td class="col-kekurangan d-none"></td>`;
                         } else {
+                            // TAMBAHAN ATTRIBUTE AUTOMATISASI (data-ismain, data-jmlxinduk, readonly)
+                            const isMainVal = mat.ismain || 0;
+                            const isJmlxVal = mat.jmlxinduk || 0;
+                            const readonlyAttr = (isJmlxVal == 1) ? 'readonly tabindex="-1"' : '';
+
                             html += `
                             <td>
-                                <input type="number" name="items[${gIndex}][target_qty]" id="target_${gIndex}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="${gIndex}" value="" min="0">
+                                <input type="number" name="items[${gIndex}][target_qty]" id="target_${gIndex}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
                             </td>
                             <td>
                                 <span id="letter-span-${gIndex}" class="text-letter-span">-</span>
                                 <input type="hidden" name="items[${gIndex}][qty_huruf]" id="qty_huruf_hidden_${gIndex}" value="">
                             </td>
-                            <td>
-                                <input type="number" name="items[${gIndex}][harga_satuan]" id="price_${gIndex}" step="0.01" class="form-control form-control-sm text-end text-secondary data-price-input" data-index="${gIndex}" placeholder="0.00" min="0">
-                            </td>
-                            <td>
-                                <div class="text-end"><span id="total-span-${gIndex}" class="text-price-total">Rp 0</span></div>
-                                <input type="hidden" name="items[${gIndex}][harga_total]" id="harga_total_hidden_${gIndex}" value="0">
-                            </td>`;
+                            <td>`;
+                            
+                            // LOGIKA ISMAIN UNTUK HARGA
+                            if (isMainVal == 1) {
+                                html += `<input type="number" name="items[${gIndex}][harga_satuan]" id="price_${gIndex}" step="0.01" class="form-control form-control-sm text-end text-secondary data-price-input" data-index="${gIndex}" placeholder="0.00" min="0">`;
+                            } else {
+                                html += `<div class="text-center text-muted fw-bold">-</div>
+                                         <input type="hidden" name="items[${gIndex}][harga_satuan]" id="price_${gIndex}" value="0">`;
+                            }
+
+                            html += `</td><td>`;
+                            
+                            // LOGIKA ISMAIN UNTUK TOTAL
+                            if (isMainVal == 1) {
+                                html += `<div class="text-end"><span id="total-span-${gIndex}" class="text-price-total">Rp 0</span></div>
+                                         <input type="hidden" name="items[${gIndex}][harga_total]" id="harga_total_hidden_${gIndex}" value="0">`;
+                            } else {
+                                html += `<div class="text-center text-muted fw-bold">-</div>
+                                         <input type="hidden" name="items[${gIndex}][harga_total]" id="harga_total_hidden_${gIndex}" value="0">`;
+                            }
+                            
+                            html += `</td>`;
 
                             for(let b=1; b<=maxBatches; b++) {
                                 if(b == currentBatch) {
                                     html += `<td class="td-real-batch col-tahap-${b} d-none">
-                                        <input type="number" name="items[${gIndex}][qty_received]" id="received_${gIndex}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" data-index="${gIndex}" value="" min="0">
+                                        <input type="number" name="items[${gIndex}][qty_received]" id="received_${gIndex}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
                                         ${realSerialHtml}
                                     </td>`;
                                 } else {
@@ -778,7 +820,6 @@
                 btnSaveWarehouse.disabled = true;
                 spinner.classList.remove('d-none');
 
-                // Payload lengkap
                 fetch("{{ route('warehouses.ajax.store') }}", {
                     method: 'POST',
                     headers: {

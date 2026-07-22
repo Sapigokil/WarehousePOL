@@ -19,6 +19,8 @@ class Material extends Model
         'satuan',
         'minimal_stok',
         'pakai_seri',
+        'ismain',
+        'jmlxinduk',
         'keterangan',
     ];
 

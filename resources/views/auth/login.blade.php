@@ -219,7 +219,7 @@
                         </div>
                     @endif
 
-                    <h4 class="fw-bold mb-2" style="letter-spacing: 1px;">SISTEM INFORMASI<br>KELOLA ADMINISTRASI FASILITAS & MATERIAL SBST</h4>
+                    <h4 class="fw-bold mb-2" style="letter-spacing: 1px;">SISTEM INFORMASI<br>TATA KELOLA ADMINISTRASI FASILITAS & MATERIAL SBST</h4>
                     <p class="mb-0 text-white-50">&copy; {{ date('Y') }}</p>
                 </div>
             </div>

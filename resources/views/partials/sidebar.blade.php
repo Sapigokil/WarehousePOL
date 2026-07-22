@@ -60,29 +60,32 @@
                     </a>
                 </li>
                 
-                <li class="sidebar-dropdown {{ request()->routeIs('reports.*') ? 'active open' : '' }}">
-                    <a href="#reportSubmenu" data-bs-toggle="collapse" class="sidebar-link d-flex justify-content-between align-items-center {{ request()->routeIs('reports.*') ? 'active' : '' }}" aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}">
-                        <span><i class="fa-solid fa-chart-pie me-2"></i> Laporan & Alert</span>
-                        <i class="fa-solid fa-chevron-down small transition-icon"></i>
+                <li class="nav-item mb-1">
+                    <a class="sidebar-link {{ request()->routeIs('reports.*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#reportMenu" role="button" aria-expanded="{{ request()->routeIs('reports.*') ? 'true' : 'false' }}" aria-controls="reportMenu">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div><i class="fa-solid fa-chart-pie"></i> Laporan & Alert</div>
+                            <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem;"></i>
+                        </div>
                     </a>
-                    
-                    <ul class="collapse list-unstyled ps-4 ms-2 border-start {{ request()->routeIs('reports.*') ? 'show' : '' }}" id="reportSubmenu">
-                        <li class="mt-1">
-                            <a href="{{ route('reports.mutation') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.mutation') ? 'text-primary fw-bold' : 'text-muted' }}">
-                                <i class="fa-solid fa-chart-bar me-2"></i> Mutasi Stock
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('reports.inbound-history') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.inbound-history') ? 'text-primary fw-bold' : 'text-muted' }}">
-                                <i class="fa-solid fa-arrow-right-to-bracket me-2"></i> Riwayat Penerimaan
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('reports.outbound-history') }}" class="sidebar-link py-2 {{ request()->routeIs('reports.outbound-history') ? 'text-primary fw-bold' : 'text-muted' }}">
-                                <i class="fa-solid fa-arrow-right-from-bracket me-2"></i> Riwayat Distribusi
-                            </a>
-                        </li>
-                    </ul>
+                    <div class="collapse {{ request()->routeIs('reports.*') ? 'show' : '' }}" id="reportMenu">
+                        <ul style="list-style: none; padding-left: 20px; margin-top: 2px; margin-bottom: 2px;">
+                            <li class="mb-1">
+                                <a href="{{ route('reports.mutation') }}" class="sidebar-link {{ request()->routeIs('reports.mutation') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-chart-bar me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Mutasi Stock
+                                </a>
+                            </li>
+                            <li class="mb-1">
+                                <a href="{{ route('reports.inbound-history') }}" class="sidebar-link {{ request()->routeIs('reports.inbound-history') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-arrow-right-to-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Penerimaan
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ route('reports.outbound-history') }}" class="sidebar-link {{ request()->routeIs('reports.outbound-history') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-arrow-right-from-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Distribusi
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </li>
         @endcan
 

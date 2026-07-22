@@ -466,7 +466,40 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="mb-0">
+
+                            {{-- HANYA TAMPILKAN JIKA BUKAN CHILD (TIDAK MEMILIKI PARENT) --}}
+                            @if(is_null($material->parent_id))
+                            <div class="row custom-attribute-row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label modal-label">Material Utama?</label>
+                                    <div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-ismain" type="radio" name="ismain" id="edit_ismain_0_{{ $material->id }}" value="0" {{ $material->ismain == 0 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_ismain_0_{{ $material->id }}">Tidak</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-ismain" type="radio" name="ismain" id="edit_ismain_1_{{ $material->id }}" value="1" {{ $material->ismain == 1 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_ismain_1_{{ $material->id }}">Ya</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3 wrapper-jmlxinduk" style="{{ $material->ismain == 1 ? 'display: none;' : '' }}">
+                                    <label class="form-label modal-label">Jumlah Mengikuti Induk?</label>
+                                    <div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="edit_jmlxinduk_0_{{ $material->id }}" value="0" {{ $material->jmlxinduk == 0 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_jmlxinduk_0_{{ $material->id }}">Tidak</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="edit_jmlxinduk_1_{{ $material->id }}" value="1" {{ $material->jmlxinduk == 1 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_jmlxinduk_1_{{ $material->id }}">Ya</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            <div class="mb-2">
                                 <label class="form-label modal-label">Keterangan Spesifikasi</label>
                                 <textarea name="keterangan" class="form-control modal-custom-input" rows="3">{{ old('keterangan', $material->keterangan) }}</textarea>
                             </div>
@@ -575,6 +608,37 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- TAMBAHAN MATERIAL UTAMA DAN JUMLAH MENGIKUTI INDUK DI SINI -->
+                        <div class="row custom-attribute-row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label modal-label">Material Utama?</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-ismain" type="radio" name="ismain" id="add_ismain_0" value="0" checked>
+                                        <label class="form-check-label" for="add_ismain_0">Tidak</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-ismain" type="radio" name="ismain" id="add_ismain_1" value="1">
+                                        <label class="form-check-label" for="add_ismain_1">Ya</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3 wrapper-jmlxinduk">
+                                <label class="form-label modal-label">Jumlah Mengikuti Induk?</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="add_jmlxinduk_0" value="0" checked>
+                                        <label class="form-check-label" for="add_jmlxinduk_0">Tidak</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="add_jmlxinduk_1" value="1">
+                                        <label class="form-check-label" for="add_jmlxinduk_1">Ya</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mb-2">
                             <label class="form-label modal-label">Keterangan Opsional</label>
                             <textarea name="keterangan" class="form-control modal-custom-input" rows="2"></textarea>
@@ -891,5 +955,27 @@
         `;
         container.appendChild(tr);
     }
+
+    // Script Penanganan Tampil / Sembunyikan 'Jumlah Mengikuti Induk'
+    document.addEventListener('change', function(e) {
+        if (e.target.matches('.radio-ismain')) {
+            // Mencari container baris (.custom-attribute-row) tempat radio ini berada
+            let container = e.target.closest('.custom-attribute-row');
+            if(container) {
+                let wrapperJmlx = container.querySelector('.wrapper-jmlxinduk');
+                let radioJmlxTidak = container.querySelector('.radio-jmlxinduk[value="0"]');
+                
+                if (e.target.value === '1') {
+                    // Jika Material Utama = Ya, sembunyikan kolom "Jumlah Mengikuti Induk"
+                    wrapperJmlx.style.display = 'none';
+                    // Paksa value-nya menjadi Tidak (0)
+                    if (radioJmlxTidak) radioJmlxTidak.checked = true;
+                } else {
+                    // Jika Material Utama = Tidak, tampilkan kembali
+                    wrapperJmlx.style.display = 'block';
+                }
+            }
+        }
+    });
 </script>
 @endpush

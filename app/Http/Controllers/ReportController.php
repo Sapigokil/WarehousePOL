@@ -11,38 +11,79 @@ use App\Models\Material;
 
 class ReportController extends Controller
 {
+    /**
+     * Fungsi Helper untuk menghitung mutasi per materiil (Dipakai di view dan export)
+     */
+    private function getMaterialMutationData($material, $isChild = false)
+    {
+        $totalIn = InStock::where('material_id', $material->id)->sum('qty_received');
+        
+        $totalOut = OutStock::whereHas('stock', function($q) use ($material) {
+            $q->where('material_id', $material->id);
+        })->sum('qty_keluar');
+
+        $currentStock = Stock::where('material_id', $material->id)->sum('qty');
+
+        return [
+            'material_name' => $material->name,
+            'is_child'      => $isChild,
+            'total_in'      => $totalIn,
+            'total_out'     => $totalOut,
+            'saldo_akhir'   => $currentStock,
+        ];
+    }
+
     // Sub Menu 1: Mutasi Stock
     public function mutation(Request $request)
     {
         $categoryId = $request->input('category_id');
-        $categories = MaterialCategory::all();
+        
+        // Ambil kategori untuk dropdown filter
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
 
-        $materialsQuery = Material::with('category');
+        $groupedMutations = [];
+
+        // Query Kategori (Sesuai Filter jika ada)
+        $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
         if ($categoryId) {
-            $materialsQuery->where('material_category_id', $categoryId);
+            $catQuery->where('id', $categoryId);
         }
-        $materials = $materialsQuery->get();
+        $filteredCategories = $catQuery->get();
 
-        $mutations = [];
-        foreach ($materials as $mat) {
-            $totalIn = InStock::where('material_id', $mat->id)->sum('qty_received');
-            
-            $totalOut = OutStock::whereHas('stock', function($q) use ($mat) {
-                $q->where('material_id', $mat->id);
-            })->sum('qty_keluar');
-
-            $currentStock = Stock::where('material_id', $mat->id)->sum('qty');
-
-            $mutations[] = [
-                'material_name' => $mat->name,
-                'category_name' => $mat->category->name ?? '-',
-                'total_in'      => $totalIn,
-                'total_out'     => $totalOut,
-                'saldo_akhir'   => $currentStock,
+        foreach ($filteredCategories as $cat) {
+            $categoryData = [
+                'category_name' => $cat->name,
+                'items' => []
             ];
+
+            // 1. Ambil parent materials (yang tidak punya parent_id)
+            $parents = Material::where('material_category_id', $cat->id)
+                               ->whereNull('parent_id')
+                               ->orderBy('nomor_urut', 'asc')
+                               ->get();
+
+            foreach ($parents as $parent) {
+                // Masukkan data parent
+                $categoryData['items'][] = $this->getMaterialMutationData($parent, false);
+
+                // 2. Ambil children dari parent ini
+                $children = Material::where('parent_id', $parent->id)
+                                    ->orderBy('nomor_urut', 'asc')
+                                    ->get();
+
+                foreach ($children as $child) {
+                    // Masukkan data child
+                    $categoryData['items'][] = $this->getMaterialMutationData($child, true);
+                }
+            }
+
+            // Hanya tampilkan kategori di tabel jika ada materiil di dalamnya
+            if (count($categoryData['items']) > 0) {
+                $groupedMutations[] = $categoryData;
+            }
         }
 
-        return view('reports.mutation', compact('mutations', 'categories', 'categoryId'));
+        return view('reports.mutation', compact('groupedMutations', 'categories', 'categoryId'));
     }
 
     // Sub Menu 2: Riwayat Penerimaan (Inbound)
@@ -90,11 +131,11 @@ class ReportController extends Controller
         $fileName = 'Laporan_Mutasi_Stock_' . date('Y-m-d') . '.xls';
         $categoryId = $request->input('category_id');
 
-        $materialsQuery = Material::with('category');
+        $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
         if ($categoryId) {
-            $materialsQuery->where('material_category_id', $categoryId);
+            $catQuery->where('id', $categoryId);
         }
-        $materials = $materialsQuery->get();
+        $filteredCategories = $catQuery->get();
 
         $headers = [
             "Content-type"        => "application/vnd.ms-excel",
@@ -104,24 +145,45 @@ class ReportController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use ($materials) {
+        $callback = function() use ($filteredCategories) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Nama Materiil', 'Kategori', 'Total Masuk (Inbound)', 'Total Keluar (Outbound)', 'Saldo Akhir (Gudang)'], "\t");
+            
+            // Header Tabel Excel
+            fputcsv($file, ['Kategori', 'Nama Materiil', 'Tipe', 'Total Masuk', 'Total Keluar', 'Saldo Akhir'], "\t");
 
-            foreach ($materials as $mat) {
-                $totalIn = InStock::where('material_id', $mat->id)->sum('qty_received');
-                $totalOut = OutStock::whereHas('stock', function($q) use ($mat) {
-                    $q->where('material_id', $mat->id);
-                })->sum('qty_keluar');
-                $currentStock = Stock::where('material_id', $mat->id)->sum('qty');
+            foreach ($filteredCategories as $cat) {
+                $parents = Material::where('material_category_id', $cat->id)
+                                   ->whereNull('parent_id')
+                                   ->orderBy('nomor_urut', 'asc')
+                                   ->get();
 
-                fputcsv($file, [
-                    $mat->name,
-                    $mat->category->name ?? '-',
-                    $totalIn,
-                    $totalOut,
-                    $currentStock
-                ], "\t");
+                foreach ($parents as $parent) {
+                    $pData = $this->getMaterialMutationData($parent, false);
+                    fputcsv($file, [
+                        $cat->name,
+                        strtoupper($pData['material_name']),
+                        'Induk',
+                        $pData['total_in'],
+                        $pData['total_out'],
+                        $pData['saldo_akhir']
+                    ], "\t");
+
+                    $children = Material::where('parent_id', $parent->id)
+                                        ->orderBy('nomor_urut', 'asc')
+                                        ->get();
+
+                    foreach ($children as $child) {
+                        $cData = $this->getMaterialMutationData($child, true);
+                        fputcsv($file, [
+                            $cat->name,
+                            '   -> ' . strtoupper($cData['material_name']),
+                            'Turunan',
+                            $cData['total_in'],
+                            $cData['total_out'],
+                            $cData['saldo_akhir']
+                        ], "\t");
+                    }
+                }
             }
             fclose($file);
         };
