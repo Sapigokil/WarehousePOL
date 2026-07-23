@@ -40,6 +40,9 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
        ============================================== */
     Route::middleware(['can:Inbound Menu'])->group(function () {
         Route::get('inbound/materials-by-category/{category_id}', [App\Http\Controllers\InboundController::class, 'getMaterialsByCategory'])->name('inbound.materials-by-category');
+        Route::get('inbound/template-import', [\App\Http\Controllers\InboundController::class, 'downloadTemplate'])->name('inbound.template');
+        Route::post('inbound/import-excel', [\App\Http\Controllers\InboundController::class, 'importExcel'])->name('inbound.import');
+    
         Route::resource('inbound', App\Http\Controllers\InboundController::class);
         // Tambahkan di dalam route group yang sesuai
         Route::post('/warehouses/ajax-store', [\App\Http\Controllers\InboundController::class, 'storeWarehouseAjax'])->name('warehouses.ajax.store');

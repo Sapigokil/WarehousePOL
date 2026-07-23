@@ -53,7 +53,7 @@ class MaterialController extends Controller
     {
         $validated = $request->validate([
             'parent_id'            => 'nullable|exists:materials,id',
-            'code'                 => 'nullable|string|max:50',
+            'code'                 => 'nullable|string|max:50|unique:materials,code',
             'name'                 => 'required|string|max:255',
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
@@ -78,7 +78,8 @@ class MaterialController extends Controller
             }
         }
 
-        $validated['pakai_seri'] = $request->has('pakai_seri') ? 1 : 0;
+        // PERBAIKAN: Ambil value yang dikirimkan oleh select dropdown, bukan mendeteksi keberadaan key
+        $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
 
         Material::create($validated);
 
@@ -89,7 +90,7 @@ class MaterialController extends Controller
     {
         $validated = $request->validate([
             'parent_id'            => 'nullable|exists:materials,id',
-            'code'                 => 'nullable|string|max:50',
+            'code'                 => 'nullable|string|max:50|unique:materials,code,' . $material->id,
             'name'                 => 'required|string|max:255',
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
@@ -116,7 +117,8 @@ class MaterialController extends Controller
             }
         }
 
-        $validated['pakai_seri'] = $request->has('pakai_seri') ? 1 : 0;
+        // PERBAIKAN: Ambil value yang dikirimkan oleh select dropdown, bukan mendeteksi keberadaan key
+        $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
 
         $material->update($validated);
 

@@ -9,6 +9,7 @@ use App\Models\InStock;
 use App\Models\Material;
 use App\Models\MaterialCategory;
 use App\Models\Stock;
+use App\Models\OutStock; // Ditambahkan untuk pengecekan relasi Outbound
 use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -409,8 +410,20 @@ class InboundController extends Controller
 
     public function destroy($id)
     {
-        DB::transaction(function () use ($id) {
-            $sppm = InSppm::with('logs')->findOrFail($id);
+        $sppm = InSppm::with('logs')->findOrFail($id);
+
+        // PENGECEKAN: Cari ID stock yang berkaitan dengan SPPM ini di tabel stocks
+        $stockIds = Stock::where('no_surat_masuk', $sppm->sppm_no)->pluck('id');
+        
+        // Cek apakah ada satupun ID stock tersebut yang sudah masuk ke tabel out_stocks
+        $isUsedInOutbound = OutStock::whereIn('stock_id', $stockIds)->exists();
+
+        // Jika sudah dipakai di outbound, kembalikan ke halaman sebelumnya dengan pesan error merah
+        if ($isUsedInOutbound) {
+            return redirect()->back()->with('error', 'GAGAL MENGHAPUS! Data Inbound ini tidak dapat dihapus karena barang di dalamnya sudah didistribusikan di menu Outbound. Silakan hapus/batalkan data Outbound terkait terlebih dahulu.');
+        }
+
+        DB::transaction(function () use ($sppm) {
             Stock::where('no_surat_masuk', $sppm->sppm_no)->delete();
             foreach ($sppm->logs as $log) {
                 InStock::where('in_log_id', $log->id)->delete();
@@ -457,5 +470,313 @@ class InboundController extends Controller
             'message'   => 'Gudang berhasil ditambahkan',
             'warehouse' => $warehouse
         ]);
+    }
+
+    // --- FUNGSI DOWNLOAD TEMPLATE EXCEL (Sesuai Nomor Urut Parent & Child) ---
+    public function downloadTemplate(Request $request)
+    {
+        $request->validate(['category_id' => 'required|exists:material_categories,id']);
+        
+        $categoryId = $request->input('category_id');
+        $category = MaterialCategory::findOrFail($categoryId);
+
+        // 1. Ambil Material Induk (Parent) berurutan, berserta anak-anaknya yang juga berurutan
+        $topLevelMaterials = Material::with(['children' => function($q) {
+                $q->orderBy('nomor_urut', 'asc');
+            }])
+            ->where('material_category_id', $categoryId)
+            ->whereNull('parent_id')
+            ->orderBy('nomor_urut', 'asc')
+            ->get();
+
+        if ($topLevelMaterials->isEmpty()) {
+            return redirect()->back()->with('error', 'Tidak bisa mengunduh template: Kategori ini belum memiliki data Master Barang.');
+        }
+
+        // 2. Susun kolom data agar lurus/rata secara hierarki untuk pemetaan data
+        $flatMaterials = collect();
+        $hasChildren = false; // Penanda apakah kita butuh 3 baris header atau 2
+        
+        foreach ($topLevelMaterials as $parent) {
+            if ($parent->children->count() > 0) {
+                $hasChildren = true;
+                foreach ($parent->children as $child) {
+                    $flatMaterials->push($child);
+                }
+            } else {
+                $flatMaterials->push($parent);
+            }
+        }
+
+        $fileName = 'Template_Import_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xls';
+
+        $headers = [
+            "Content-type"        => "application/vnd.ms-excel",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $callback = function() use ($topLevelMaterials, $flatMaterials, $category, $hasChildren) {
+            echo '<table border="1" style="font-family: Arial; font-size: 10px; text-align: center;">';
+            
+            $headerRows = $hasChildren ? 3 : 2;
+
+            // --- BARIS 1: HEADER UTAMA (STATIK) ---
+            echo '<tr style="font-weight: bold; background-color: #f8f9fa;">';
+            echo '<th rowspan="'.$headerRows.'" style="width: 40px;">NO</th>';
+            echo '<th rowspan="'.$headerRows.'" style="width: 120px;">TGL PENERIMAAN<br>(YYYY-MM-DD)</th>';
+            echo '<th rowspan="'.$headerRows.'" style="width: 120px;">TGL SPPM<br>(YYYY-MM-DD)</th>';
+            echo '<th rowspan="'.$headerRows.'" style="width: 180px;">NO. SPPM KORLANTAS</th>';
+            echo '<th rowspan="'.$headerRows.'" style="width: 180px;">NOMOR SERI</th>';
+            echo '<th rowspan="'.$headerRows.'" style="width: 150px;">NO. BAPPM</th>';
+            
+            // Header Dinamis Barang (Menyatu di atas)
+            echo '<th colspan="'.$flatMaterials->count().'" style="background-color: #d1e7dd;">RINCIAN BARANG KATEGORI: '.strtoupper($category->name).'</th>';
+            echo '</tr>';
+
+            // --- BARIS 2: NAMA INDUK / MANDIRI ---
+            echo '<tr style="font-weight: bold; background-color: #d1e7dd;">';
+            foreach ($topLevelMaterials as $mat) {
+                if ($mat->children->count() > 0) {
+                    // Jika Parent, jangkau sejumlah anaknya ke samping
+                    echo '<th colspan="'.$mat->children->count().'" style="background-color: #badce3;">'.strtoupper($mat->name).'</th>';
+                } else {
+                    // Jika Mandiri, tembus kebawah (rowspan) jika tabel punya baris ketiga
+                    $rs = $hasChildren ? 2 : 1;
+                    if ($rs > 1) {
+                        echo '<th rowspan="'.$rs.'">'.strtoupper($mat->name).'</th>';
+                    } else {
+                        echo '<th>'.strtoupper($mat->name).'</th>';
+                    }
+                }
+            }
+            echo '</tr>';
+
+            // --- BARIS 3: NAMA ANAK (Jika Ada) ---
+            if ($hasChildren) {
+                echo '<tr style="font-weight: bold; background-color: #e2e3e5;">';
+                foreach ($topLevelMaterials as $mat) {
+                    if ($mat->children->count() > 0) {
+                        foreach ($mat->children as $child) {
+                            echo '<th>'.$child->name.'</th>';
+                        }
+                    }
+                }
+                echo '</tr>';
+            }
+
+            // --- BARIS 4: CONTOH DATA ---
+            echo '<tr>';
+            echo '<td>1</td>';
+            echo '<td>'.date('Y-m-d').'</td>';
+            echo '<td>'.date('Y-m-d').'</td>';
+            echo '<td>SPPM/001/VII/'.date('Y').'</td>';
+            echo '<td>H. 01.300.001 - 01.400.000</td>';
+            echo '<td>BAPPM-001</td>';
+            foreach ($flatMaterials as $mat) {
+                echo '<td>500</td>'; // Contoh qty
+            }
+            echo '</tr>';
+            
+            echo '</table>';
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    // --- FUNGSI HANDLE UPLOAD EXCEL (Sinkron Kolom Baru, Auto-Delimiter & Bersihkan Prefix) ---
+    public function importExcel(Request $request)
+    {
+        $request->validate([
+            'category_id' => 'required|exists:material_categories,id',
+            'excel_file'  => 'required|file|mimes:csv,txt'
+        ]);
+
+        $categoryId = $request->input('category_id');
+        $file = $request->file('excel_file');
+
+        // 1. Ambil Material Induk (Parent) berurutan, berserta anak-anaknya yang juga berurutan
+        $topLevelMaterials = Material::with(['children' => function($q) {
+                $q->orderBy('nomor_urut', 'asc');
+            }])
+            ->where('material_category_id', $categoryId)
+            ->whereNull('parent_id')
+            ->orderBy('nomor_urut', 'asc')
+            ->get();
+
+        if ($topLevelMaterials->isEmpty()) {
+            return redirect()->back()->with('error', 'Kategori ini tidak memiliki daftar material.');
+        }
+
+        // 2. Ratakan daftar material untuk mencocokkan Index Kolom Excel
+        $flatMaterials = collect();
+        $hasChildren = false;
+        
+        foreach ($topLevelMaterials as $parent) {
+            if ($parent->children->count() > 0) {
+                $hasChildren = true;
+                foreach ($parent->children as $child) {
+                    $flatMaterials->push($child);
+                }
+            } else {
+                $flatMaterials->push($parent);
+            }
+        }
+
+        // Jika Excel memiliki baris anak (3 baris header), sistem wajib melompati 3 baris
+        $headerRowsToSkip = $hasChildren ? 3 : 2;
+
+        // Fungsi Pemisah Nomor Seri dengan Pembersih Prefix
+        $parseSerial = function($string) {
+            $result = ['prefix' => null, 'start' => null, 'end' => null];
+            if (empty(trim($string)) || trim($string) === '-') return $result;
+
+            $parts = explode('-', $string);
+            if (count($parts) == 2) {
+                $left = trim($parts[0]);
+                if (preg_match('/^([a-zA-Z\.\s]+)?([\d\.]+)$/', $left, $matches)) {
+                    // Membersihkan prefix dari titik, spasi, atau karakter selain alfabet
+                    if (isset($matches[1])) {
+                        $cleanPrefix = preg_replace('/[^a-zA-Z]/', '', $matches[1]);
+                        $result['prefix'] = $cleanPrefix !== '' ? strtoupper($cleanPrefix) : null;
+                    } else {
+                        $result['prefix'] = null;
+                    }
+                    
+                    $result['start'] = (int) str_replace('.', '', $matches[2]);
+                }
+                $result['end'] = (int) str_replace('.', '', trim($parts[1]));
+            }
+            return $result;
+        };
+
+        // Otomatis mendeteksi End of Line (berguna jika file dari Mac/Linux)
+        ini_set('auto_detect_line_endings', true);
+        
+        $handle = fopen($file->getPathname(), "r");
+        
+        // Deteksi Otomatis Delimiter (Koma atau Titik Koma)
+        $firstLine = fgets($handle);
+        $delimiter = strpos($firstLine, ';') !== false ? ';' : ',';
+        rewind($handle); // Kembalikan pointer baca ke baris pertama
+
+        $rowCounter = 0;
+        $insertedDataCount = 0;
+
+        DB::beginTransaction();
+        try {
+            while (($data = fgetcsv($handle, 2000, $delimiter)) !== FALSE) {
+                $rowCounter++;
+                if ($rowCounter <= $headerRowsToSkip) continue; 
+
+                // Lewati jika baris kosong
+                if (count($data) < 6) continue;
+
+                // --- POSISI KOLOM STATIK (0 s/d 5) ---
+                $tglPenerimaanStr = $data[1] ?? null;
+                $tglSppmStr       = $data[2] ?? null;
+                $noSppm           = trim($data[3] ?? '');
+                $nomorSeriStr     = trim($data[4] ?? '');
+                $noBappm          = trim($data[5] ?? '');
+
+                if (empty($noSppm) || empty(trim($tglPenerimaanStr))) continue; 
+
+                $tglPenerimaan = date('Y-m-d', strtotime($tglPenerimaanStr));
+                $tglSppm = !empty(trim($tglSppmStr)) ? date('Y-m-d', strtotime($tglSppmStr)) : $tglPenerimaan;
+
+                $defaultWarehouse = Warehouse::first();
+                $warehouseId = $defaultWarehouse ? $defaultWarehouse->id : 1;
+
+                $existingSppm = InSppm::where('sppm_no', $noSppm)->first();
+                if ($existingSppm) {
+                    throw new \Exception("Ditemukan duplikat SPPM di dalam database untuk nomor: {$noSppm}");
+                }
+
+                $sppm = InSppm::create([
+                    'sppm_no'              => $noSppm,
+                    'sppm_date'            => $tglSppm,
+                    'no_bappm'             => $noBappm, 
+                    'material_category_id' => $categoryId,
+                    'warehouse_id'         => $warehouseId,
+                    'notes'                => 'Import otomatis via CSV',
+                    'status'               => 'completed',
+                    'created_by'           => auth()->id(),
+                    'updated_by'           => auth()->id()
+                ]);
+
+                $log = InLog::create([
+                    'in_sppm_id'   => $sppm->id,
+                    'batch_number' => 1,
+                    'receive_date' => $tglPenerimaan,
+                    'receiver_name'=> auth()->user()->name ?? 'Admin Gudang',
+                    'notes'        => 'Import otomatis via CSV'
+                ]);
+
+                $serialParsed = $parseSerial($nomorSeriStr);
+
+                // --- POSISI KOLOM DINAMIS BARANG (Mulai Indeks 6 ke Kanan) ---
+                foreach ($flatMaterials as $idx => $material) {
+                    $colIndex = 6 + $idx; // 6 adalah jumlah fix kolom statik di sebelah kiri
+                    $qty = isset($data[$colIndex]) ? (int) str_replace(['.', ','], '', $data[$colIndex]) : 0;
+
+                    if ($qty > 0) {
+                        InDetail::create([
+                            'in_sppm_id'        => $sppm->id,
+                            'material_id'       => $material->id,
+                            'target_qty'        => $qty,
+                            'qty_huruf'         => null,
+                            'harga_satuan'      => 0,
+                            'harga_total'       => 0,
+                            'sppm_serial_prefix'=> $serialParsed['prefix'],
+                            'sppm_serial_start' => $serialParsed['start'],
+                            'sppm_serial_end'   => $serialParsed['end'],
+                        ]);
+
+                        InStock::create([
+                            'in_log_id'    => $log->id,
+                            'material_id'  => $material->id,
+                            'qty_received' => $qty,
+                            'serial_prefix'=> $serialParsed['prefix'],
+                            'serial_start' => $serialParsed['start'],
+                            'serial_end'   => $serialParsed['end'],
+                        ]);
+
+                        Stock::create([
+                            'no_surat_masuk' => $sppm->sppm_no,
+                            'tgl_masuk'      => $tglPenerimaan,
+                            'material_id'    => $material->id,
+                            'warehouse_id'   => $warehouseId,
+                            'prefix'         => $serialParsed['prefix'],
+                            'seri_awal'      => $serialParsed['start'],
+                            'seri_akhir'     => $serialParsed['end'],
+                            'qty'            => $qty,
+                            'harga_satuan'   => 0,
+                            'total_harga'    => 0,
+                            'status'         => '-',
+                            'keterangan'     => 'Import otomatis via CSV',
+                        ]);
+                    }
+                }
+                
+                $insertedDataCount++;
+            }
+            fclose($handle);
+            
+            if ($insertedDataCount === 0) {
+                throw new \Exception("Sistem membaca file, tetapi tidak ada baris data yang valid. Pastikan TGL PENERIMAAN dan NO. SPPM terisi, serta Anda tidak mengubah/menghapus susunan kolom dari template asli.");
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            return redirect()->back()->with('error', 'Gagal memproses file import: ' . $e->getMessage());
+        }
+
+        return redirect()->route('inbound.index')->with('success', "Data Inbound berhasil diimport ($insertedDataCount baris dokumen SPPM).");
     }
 }

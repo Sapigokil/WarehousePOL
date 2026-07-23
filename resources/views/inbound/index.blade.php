@@ -88,7 +88,12 @@
         <h4 class="fw-bold mb-1"><i class="fa-solid fa-file-signature me-2"></i> Materiel Masuk</h4>
         <p class="mb-0 text-white-50 small">Pencatatan Materiel Masuk berdasarkan SPPM</p>
     </div>
-    <div class="header-content">
+    <div class="header-content d-flex gap-2">
+        @canany(['Setting Menu', 'Warehouse Menu'])
+        <button class="btn btn-sm btn-success fw-bold shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel">
+            <i class="fa-solid fa-file-excel me-1"></i> Import SPPM
+        </button>
+        @endcanany
         <a href="{{ route('inbound.create') }}" class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2">
             <i class="fa-solid fa-plus me-1"></i> Input SPPM Baru
         </a>
@@ -98,6 +103,12 @@
 @if(session('success'))
     <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm py-2" role="alert">
         <i class="fa-solid fa-check-circle me-2"></i>{{ session('success') }}
+        <button type="button" class="btn-close pb-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+@endif
+@if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm py-2" role="alert">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i> {{ session('error') }}
         <button type="button" class="btn-close pb-2" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 @endif
@@ -345,4 +356,71 @@
     </div>
 </div>
 
+{{-- Modal Import Excel --}}
+@canany(['Setting Menu', 'Warehouse Menu'])
+<div class="modal fade" id="modalImportExcel" tabindex="-1" aria-labelledby="modalImportExcelLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom-0 pb-3">
+                <h6 class="modal-title fw-bold text-success" id="modalImportExcelLabel">
+                    <i class="fa-solid fa-file-import me-2"></i> Import Database SPPM
+                </h6>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body p-4 bg-white text-start">
+                
+                <!-- 1. Form Unduh Template (Berubah Berdasarkan Kategori) -->
+                <form action="{{ route('inbound.template') }}" method="GET" class="mb-4 p-3 bg-light rounded border border-success border-opacity-25">
+                    <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">1. Unduh Format Template</h6>
+                    <p class="text-muted small mb-2">Pilih kategori untuk menyesuaikan jumlah kolom barang secara otomatis.</p>
+                    
+                    <div class="mb-3">
+                        <select name="category_id" class="form-select form-select-sm" required>
+                            <option value="">-- Pilih Kategori Komoditas --</option>
+                            @foreach($categories as $category)
+                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-sm btn-outline-success fw-bold w-100">
+                        <i class="fa-solid fa-download me-1"></i> Download Template Excel
+                    </button>
+                </form>
+
+                <!-- 2. Form Unggah File (Save As CSV) -->
+                <form action="{{ route('inbound.import') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    <div class="mb-2">
+                        <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">2. Unggah File Template (Wajib .CSV)</h6>
+                        <div class="alert alert-warning py-2 small mb-3">
+                            <i class="fa-solid fa-circle-info me-1"></i> Setelah selesai mengisi di Excel, pastikan Anda menyimpannya dengan format <b>Save As -> CSV (Comma delimited)</b>.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label text-muted" style="font-size: 0.75rem; font-weight:bold;">KATEGORI FILE YANG DIUNGGAH</label>
+                            <select name="category_id" class="form-select form-select-sm" required>
+                                <option value="">-- Pastikan Sama Dengan Template --</option>
+                                @foreach($categories as $category)
+                                    <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <input type="file" name="excel_file" class="form-control" accept=".csv" required>
+                    </div>
+            </div>
+            
+            <div class="modal-footer border-0 bg-light py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-light border fw-bold px-3" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-sm btn-success px-4 fw-bold shadow-sm" style="border-radius: 6px;">
+                    <i class="fa-solid fa-cloud-arrow-up me-1"></i> Mulai Import
+                </button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endcanany
 @endsection
