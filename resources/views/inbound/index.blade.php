@@ -90,7 +90,7 @@
     </div>
     <div class="header-content d-flex gap-2">
         @canany(['Setting Menu', 'Warehouse Menu'])
-        <button class="btn btn-sm btn-success fw-bold shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel">
+        <button class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel">
             <i class="fa-solid fa-file-excel me-1"></i> Import SPPM
         </button>
         @endcanany

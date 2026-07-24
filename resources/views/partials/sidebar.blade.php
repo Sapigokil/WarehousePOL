@@ -75,12 +75,12 @@
                                 </a>
                             </li>
                             <li class="mb-1">
-                                <a href="{{ route('reports.inbound-history') }}" class="sidebar-link {{ request()->routeIs('reports.inbound-history') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <a href="{{ route('reports.inbound') }}" class="sidebar-link {{ request()->routeIs('reports.inbound') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                     <i class="fa-solid fa-arrow-right-to-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Penerimaan
                                 </a>
                             </li>
                             <li>
-                                <a href="{{ route('reports.outbound-history') }}" class="sidebar-link {{ request()->routeIs('reports.outbound-history') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <a href="{{ route('reports.outbound') }}" class="sidebar-link {{ request()->routeIs('reports.outbound') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                     <i class="fa-solid fa-arrow-right-from-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Distribusi
                                 </a>
                             </li>
@@ -119,7 +119,7 @@
             
             @can('Setting Menu')
             <li>
-                <a href="#" class="sidebar-link">
+                <a href="{{ route('sislogs.index') }}" class="sidebar-link">
                     <i class="fa-solid fa-clipboard-list"></i> System Logs
                 </a>
             </li>

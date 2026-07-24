@@ -15,10 +15,14 @@ class OutSppm extends Model
         'sppm_no',
         'sppm_date',
         'destination_id',
-        'status',
         'keterangan',
+        'nama_bamat', // Kolom baru
+        'pangkat',    // Kolom baru
+        'nrp',        // Kolom baru
+        'jabatan',    // Kolom baru
+        'status',
         'created_by',
-        'updated_by',
+        'updated_by'
     ];
 
     public function destination(): BelongsTo

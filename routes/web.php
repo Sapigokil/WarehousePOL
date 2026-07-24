@@ -56,6 +56,9 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // AJAX Route untuk memanggil material berdasarkan kategori beserta sisa stoknya
         Route::get('outbounds/materials-by-category/{category_id}', [\App\Http\Controllers\OutboundController::class, 'getMaterialsByCategory']);
 
+        Route::get('outbounds/template-import', [\App\Http\Controllers\OutboundController::class, 'downloadTemplate'])->name('outbounds.template');
+        Route::post('outbounds/import-excel', [\App\Http\Controllers\OutboundController::class, 'importExcel'])->name('outbounds.import');
+
         Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
         Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');
         
@@ -69,12 +72,12 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('reports.mutation/export', [ReportController::class, 'exportMutation'])->name('reports.mutation.export');
 
         // Diubah dari 'inbound' menjadi 'inbound-history' agar tidak bentrok
-        Route::get('reports.inbound-history', [ReportController::class, 'inbound'])->name('reports.inbound-history');
-        Route::get('reports.inbound-history/export', [ReportController::class, 'exportInbound'])->name('reports.inbound-history.export');
+        Route::get('reports.inbound', [ReportController::class, 'inbound'])->name('reports.inbound');
+        Route::get('reports.inbound/export', [ReportController::class, 'exportInbound'])->name('reports.inbound.export');
         
         // Diubah dari 'outbound' menjadi 'outbound-history' agar lebih konsisten dan aman
-        Route::get('reports.outbound-history', [ReportController::class, 'outbound'])->name('reports.outbound-history');
-        Route::get('reports.outbound-history/export', [ReportController::class, 'exportOutbound'])->name('reports.outbound-history.export');
+        Route::get('reports.outbound', [ReportController::class, 'outbound'])->name('reports.outbound');
+        Route::get('reports.outbound/export', [ReportController::class, 'exportOutbound'])->name('reports.outbound.export');
         // Menu Tracking Seri
         Route::get('/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('tracking.index');
         Route::get('/tracking/search', [\App\Http\Controllers\TrackingController::class, 'search'])->name('tracking.search');
@@ -95,8 +98,8 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
     // Pengaturan Global & Warehouse Group
     Route::middleware(['can:Setting Menu'])->group(function () {
         // Menu Pengaturan Global
-    Route::get('/settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
-    Route::put('/settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
+        Route::get('/settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
+        Route::put('/settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
         Route::post('categories/reorder', [ MaterialCategoryController::class, 'reorder' ])->name('categories.reorder');
         Route::resource('categories', MaterialCategoryController::class);
         Route::post('warehouses/reorder', [WarehouseController::class, 'reorder'])->name('warehouses.reorder');
@@ -105,5 +108,8 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::resource('materials', MaterialController::class)->except(['show']);
         Route::post('destinations/reorder', [\App\Http\Controllers\DestinationController::class, 'reorder'])->name('destinations.reorder');
         Route::resource('destinations', \App\Http\Controllers\DestinationController::class)->except(['show']);
+
+        Route::get('system-logs', [\App\Http\Controllers\SystemLogController::class, 'index'])->name('sislogs.index');
+
     });
 });

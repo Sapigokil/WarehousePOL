@@ -8,42 +8,146 @@ use App\Models\InStock;
 use App\Models\OutStock;
 use App\Models\MaterialCategory;
 use App\Models\Material;
+use App\Models\SystemLog;
 
 class ReportController extends Controller
 {
     /**
-     * Fungsi Helper untuk menghitung mutasi per materiil (Dipakai di view dan export)
+     * Fungsi Helper Privat untuk Mencatat Log Sistem
      */
-    private function getMaterialMutationData($material, $isChild = false)
+    private function recordLog($action, $tableName, $recordId, $oldValues, $newValues)
     {
-        $totalIn = InStock::where('material_id', $material->id)->sum('qty_received');
-        
-        $totalOut = OutStock::whereHas('stock', function($q) use ($material) {
-            $q->where('material_id', $material->id);
-        })->sum('qty_keluar');
+        SystemLog::create([
+            'user_id'    => auth()->id(),
+            'username'   => auth()->user()->name ?? 'Sistem',
+            'action'     => strtoupper($action),
+            'table_name' => strtoupper($tableName),
+            'record_id'  => (string) $recordId,
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+    }
 
-        $currentStock = Stock::where('material_id', $material->id)->sum('qty');
+    /**
+     * Fungsi Helper untuk menghitung mutasi per materiil
+     */
+    private function getMaterialMutationData($material, $isChild = false, $startDate = null, $endDate = null)
+    {
+        $inQuery = InStock::where('material_id', $material->id);
+        $outQuery = OutStock::whereHas('stock', function($q) use ($material) {
+            $q->where('material_id', $material->id);
+        });
+
+        if ($startDate && $endDate) {
+            $inQuery->whereHas('log', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('receive_date', [$startDate, $endDate]);
+            });
+            $outQuery->whereHas('outLog', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('tgl_keluar', [$startDate, $endDate]);
+            });
+
+            $totalInUpToDate = InStock::where('material_id', $material->id)
+                ->whereHas('log', function($q) use ($endDate) {
+                    $q->where('receive_date', '<=', $endDate);
+                })->sum('qty_received');
+                
+            $totalOutUpToDate = OutStock::whereHas('stock', function($q) use ($material) {
+                $q->where('material_id', $material->id);
+            })->whereHas('outLog', function($q) use ($endDate) {
+                $q->where('tgl_keluar', '<=', $endDate);
+            })->sum('qty_keluar');
+
+            $currentStock = $totalInUpToDate - $totalOutUpToDate;
+        } else {
+            $currentStock = Stock::where('material_id', $material->id)->sum('qty');
+        }
 
         return [
             'material_name' => $material->name,
             'is_child'      => $isChild,
-            'total_in'      => $totalIn,
-            'total_out'     => $totalOut,
+            'total_in'      => $inQuery->sum('qty_received'),
+            'total_out'     => $outQuery->sum('qty_keluar'),
             'saldo_akhir'   => $currentStock,
+        ];
+    }
+
+    /**
+     * Fungsi Helper untuk menghitung histori transaksi INBOUND per materiil
+     */
+    private function getMaterialInboundData($material, $isChild = false, $hasChildren = false, $startDate = null, $endDate = null)
+    {
+        $query = InStock::with(['log.sppm.warehouse'])->where('material_id', $material->id);
+
+        if ($startDate && $endDate) {
+            $query->whereHas('log', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('receive_date', [$startDate, $endDate]);
+            });
+        }
+
+        $transactions = $query->get()->sortByDesc(function($stock) {
+            return $stock->log->receive_date ?? '';
+        })->values();
+
+        return [
+            'material_id'   => $material->id,
+            'material_name' => $material->name,
+            'satuan'        => $material->satuan,
+            'is_child'      => $isChild,
+            'has_children'  => $hasChildren,
+            'total_in'      => $transactions->sum('qty_received'),
+            'transactions'  => $transactions,
+        ];
+    }
+
+    /**
+     * Fungsi Helper untuk menghitung histori transaksi OUTBOUND per materiil
+     */
+    private function getMaterialOutboundData($material, $isChild = false, $hasChildren = false, $startDate = null, $endDate = null)
+    {
+        $query = OutStock::with(['outLog.outSppm.destination', 'stock'])
+            ->whereHas('stock', function($q) use ($material) {
+                $q->where('material_id', $material->id);
+            });
+
+        if ($startDate && $endDate) {
+            $query->whereHas('outLog', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('tgl_keluar', [$startDate, $endDate]);
+            });
+        }
+
+        $transactions = $query->get()->sortByDesc(function($outStock) {
+            return $outStock->outLog->tgl_keluar ?? '';
+        })->values();
+
+        return [
+            'material_id'   => $material->id,
+            'material_name' => $material->name,
+            'satuan'        => $material->satuan,
+            'is_child'      => $isChild,
+            'has_children'  => $hasChildren,
+            'total_out'     => $transactions->sum('qty_keluar'),
+            'transactions'  => $transactions,
         ];
     }
 
     // Sub Menu 1: Mutasi Stock
     public function mutation(Request $request)
     {
-        $categoryId = $request->input('category_id');
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01'); 
+            $endDate = date('Y-m-d');    
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
+        }
         
-        // Ambil kategori untuk dropdown filter
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-
         $groupedMutations = [];
 
-        // Query Kategori (Sesuai Filter jika ada)
         $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
         if ($categoryId) {
             $catQuery->where('id', $categoryId);
@@ -56,80 +160,164 @@ class ReportController extends Controller
                 'items' => []
             ];
 
-            // 1. Ambil parent materials (yang tidak punya parent_id)
             $parents = Material::where('material_category_id', $cat->id)
                                ->whereNull('parent_id')
                                ->orderBy('nomor_urut', 'asc')
                                ->get();
 
             foreach ($parents as $parent) {
-                // Masukkan data parent
-                $categoryData['items'][] = $this->getMaterialMutationData($parent, false);
+                $children = Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                $hasChildren = $children->count() > 0;
 
-                // 2. Ambil children dari parent ini
-                $children = Material::where('parent_id', $parent->id)
-                                    ->orderBy('nomor_urut', 'asc')
-                                    ->get();
+                $pData = $this->getMaterialMutationData($parent, false, $startDate, $endDate);
+                $pData['has_children'] = $hasChildren;
+                $categoryData['items'][] = $pData;
 
                 foreach ($children as $child) {
-                    // Masukkan data child
-                    $categoryData['items'][] = $this->getMaterialMutationData($child, true);
+                    $cData = $this->getMaterialMutationData($child, true, $startDate, $endDate);
+                    $cData['has_children'] = false; 
+                    $categoryData['items'][] = $cData;
                 }
             }
 
-            // Hanya tampilkan kategori di tabel jika ada materiil di dalamnya
             if (count($categoryData['items']) > 0) {
                 $groupedMutations[] = $categoryData;
             }
         }
 
-        return view('reports.mutation', compact('groupedMutations', 'categories', 'categoryId'));
+        return view('reports.mutation', compact('groupedMutations', 'categories', 'categoryId', 'startDate', 'endDate'));
     }
 
     // Sub Menu 2: Riwayat Penerimaan (Inbound)
     public function inbound(Request $request)
     {
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-d');
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
+        }
         
-        $query = InStock::with(['log.sppm.destination', 'material.category', 'log.sppm.warehouse'])
-            ->orderBy('created_at', 'desc');
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $groupedInbounds = [];
 
-        if ($startDate && $endDate) {
-            $query->whereHas('log', function($q) use ($startDate, $endDate) {
-                $q->whereBetween('receive_date', [$startDate, $endDate]);
-            });
+        $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
+        if ($categoryId) {
+            $catQuery->where('id', $categoryId);
+        }
+        $filteredCategories = $catQuery->get();
+
+        foreach ($filteredCategories as $cat) {
+            $categoryData = [
+                'category_name' => $cat->name,
+                'items' => []
+            ];
+
+            $parents = Material::where('material_category_id', $cat->id)
+                               ->whereNull('parent_id')
+                               ->orderBy('nomor_urut', 'asc')
+                               ->get();
+
+            foreach ($parents as $parent) {
+                $children = Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                $hasChildren = $children->count() > 0;
+
+                $pData = $this->getMaterialInboundData($parent, false, $hasChildren, $startDate, $endDate);
+                $categoryData['items'][] = $pData;
+
+                foreach ($children as $child) {
+                    $cData = $this->getMaterialInboundData($child, true, false, $startDate, $endDate);
+                    $categoryData['items'][] = $cData;
+                }
+            }
+
+            if (count($categoryData['items']) > 0) {
+                $groupedInbounds[] = $categoryData;
+            }
         }
 
-        $inbounds = $query->paginate(20)->withQueryString();
-
-        return view('reports.inbound', compact('inbounds', 'startDate', 'endDate'));
+        return view('reports.inbound', compact('groupedInbounds', 'categories', 'categoryId', 'startDate', 'endDate'));
     }
 
     // Sub Menu 3: Riwayat Distribusi (Outbound)
     public function outbound(Request $request)
     {
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-d');
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
+        }
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $groupedOutbounds = [];
 
-        $query = OutStock::with(['outLog.outSppm.destination', 'stock.material.category', 'stock.warehouse'])
-            ->orderBy('created_at', 'desc');
+        $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
+        if ($categoryId) {
+            $catQuery->where('id', $categoryId);
+        }
+        $filteredCategories = $catQuery->get();
 
-        if ($startDate && $endDate) {
-            $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        foreach ($filteredCategories as $cat) {
+            $categoryData = [
+                'category_name' => $cat->name,
+                'items' => []
+            ];
+
+            $parents = Material::where('material_category_id', $cat->id)
+                               ->whereNull('parent_id')
+                               ->orderBy('nomor_urut', 'asc')
+                               ->get();
+
+            foreach ($parents as $parent) {
+                $children = Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                $hasChildren = $children->count() > 0;
+
+                $pData = $this->getMaterialOutboundData($parent, false, $hasChildren, $startDate, $endDate);
+                $categoryData['items'][] = $pData;
+
+                foreach ($children as $child) {
+                    $cData = $this->getMaterialOutboundData($child, true, false, $startDate, $endDate);
+                    $categoryData['items'][] = $cData;
+                }
+            }
+
+            if (count($categoryData['items']) > 0) {
+                $groupedOutbounds[] = $categoryData;
+            }
         }
 
-        $outbounds = $query->paginate(20)->withQueryString();
-
-        return view('reports.outbound', compact('outbounds', 'startDate', 'endDate'));
+        return view('reports.outbound', compact('groupedOutbounds', 'categories', 'categoryId', 'startDate', 'endDate'));
     }
 
-    // --- FITUR NATIVE EXPORT EXCEL ---
+    // --- FUNGSI EXPORT (DILENGKAPI SYSTEM LOG) ---
 
     public function exportMutation(Request $request)
     {
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-d');
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
+        }
+
+        // --- CATAT LOG SISTEM ---
+        $this->recordLog('EXPORT', 'LAPORAN MUTASI', null, null, [
+            'Aksi' => 'Mengunduh Laporan Mutasi',
+            'Periode' => ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data",
+            'Filter Kategori ID' => $categoryId ?? 'Semua'
+        ]);
+
         $fileName = 'Laporan_Mutasi_Stock_' . date('Y-m-d') . '.xls';
-        $categoryId = $request->input('category_id');
 
         $catQuery = MaterialCategory::orderBy('nomor_urut', 'asc');
         if ($categoryId) {
@@ -145,10 +333,13 @@ class ReportController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use ($filteredCategories) {
+        $callback = function() use ($filteredCategories, $startDate, $endDate) {
             $file = fopen('php://output', 'w');
             
-            // Header Tabel Excel
+            $periode = ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data Berjalan";
+            fputcsv($file, ["PERIODE LAPORAN:", $periode], "\t");
+            fputcsv($file, [], "\t"); 
+
             fputcsv($file, ['Kategori', 'Nama Materiil', 'Tipe', 'Total Masuk', 'Total Keluar', 'Saldo Akhir'], "\t");
 
             foreach ($filteredCategories as $cat) {
@@ -158,22 +349,22 @@ class ReportController extends Controller
                                    ->get();
 
                 foreach ($parents as $parent) {
-                    $pData = $this->getMaterialMutationData($parent, false);
+                    $children = Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                    $hasChildren = $children->count() > 0;
+
+                    $pData = $this->getMaterialMutationData($parent, false, $startDate, $endDate);
+                    
                     fputcsv($file, [
                         $cat->name,
                         strtoupper($pData['material_name']),
                         'Induk',
-                        $pData['total_in'],
-                        $pData['total_out'],
-                        $pData['saldo_akhir']
+                        $hasChildren ? '-' : $pData['total_in'],
+                        $hasChildren ? '-' : $pData['total_out'],
+                        $hasChildren ? '-' : $pData['saldo_akhir']
                     ], "\t");
 
-                    $children = Material::where('parent_id', $parent->id)
-                                        ->orderBy('nomor_urut', 'asc')
-                                        ->get();
-
                     foreach ($children as $child) {
-                        $cData = $this->getMaterialMutationData($child, true);
+                        $cData = $this->getMaterialMutationData($child, true, $startDate, $endDate);
                         fputcsv($file, [
                             $cat->name,
                             '   -> ' . strtoupper($cData['material_name']),
@@ -193,19 +384,30 @@ class ReportController extends Controller
 
     public function exportInbound(Request $request)
     {
-        $fileName = 'Laporan_Riwayat_Penerimaan_' . date('Y-m-d') . '.xls';
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
-
-        $query = InStock::with(['log.sppm.destination', 'material.category', 'log.sppm.warehouse'])
-            ->orderBy('created_at', 'desc');
-
-        if ($startDate && $endDate) {
-            $query->whereHas('log', function($q) use ($startDate, $endDate) {
-                $q->whereBetween('receive_date', [$startDate, $endDate]);
-            });
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-d');
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
         }
-        $inbounds = $query->get();
+
+        // --- CATAT LOG SISTEM ---
+        $this->recordLog('EXPORT', 'LAPORAN INBOUND', null, null, [
+            'Aksi' => 'Mengunduh Laporan Riwayat Penerimaan',
+            'Periode' => ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data",
+            'Filter Kategori ID' => $categoryId ?? 'Semua'
+        ]);
+
+        $fileName = 'Laporan_Riwayat_Penerimaan_' . date('Y-m-d') . '.xls';
+
+        $catQuery = \App\Models\MaterialCategory::orderBy('nomor_urut', 'asc');
+        if ($categoryId) {
+            $catQuery->where('id', $categoryId);
+        }
+        $filteredCategories = $catQuery->get();
 
         $headers = [
             "Content-type"        => "application/vnd.ms-excel",
@@ -215,22 +417,92 @@ class ReportController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use ($inbounds) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, ['Tanggal Terima', 'No. SPPM Masuk', 'Materiil', 'Batch/Tahap', 'Rentang Seri Awal', 'Rentang Seri Akhir', 'Qty Diterima'], "\t");
+        $callback = function() use ($filteredCategories, $startDate, $endDate) {
+            echo '<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body>';
+            echo '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px; border-collapse: collapse;">';
+            
+            $periode = ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data Berjalan";
+            
+            echo '<tr><th colspan="7" style="text-align: left; font-size: 14px; background-color: #0284c7; color: #ffffff; padding: 10px;">LAPORAN RIWAYAT PENERIMAAN / INBOUND</th></tr>';
+            echo '<tr><th colspan="7" style="text-align: left; background-color: #e0f2fe; padding: 5px;">PERIODE LAPORAN: ' . $periode . '</th></tr>';
+            echo '<tr><th colspan="7"></th></tr>'; 
 
-            foreach ($inbounds as $row) {
-                fputcsv($file, [
-                    optional($row->log)->receive_date ? \Carbon\Carbon::parse($row->log->receive_date)->format('Y-m-d') : '-',
-                    optional(optional($row->log)->sppm)->sppm_no ?? '-',
-                    optional($row->material)->name ?? '-',
-                    'Tahap ' . (optional($row->log)->batch_number ?? '-'),
-                    ($row->serial_prefix ?? '') . str_pad($row->serial_start, 9, '0', STR_PAD_LEFT),
-                    ($row->serial_prefix ?? '') . str_pad($row->serial_end, 9, '0', STR_PAD_LEFT),
-                    $row->qty_received
-                ], "\t");
+            echo '<tr style="background-color: #f8fafc; font-weight: bold; text-align: center;">';
+            echo '<th style="width: 250px; padding: 5px;">Nama Materiil / Komoditas</th>';
+            echo '<th style="width: 120px; padding: 5px;">Tanggal Terima Fisik</th>';
+            echo '<th style="width: 180px; padding: 5px;">Nomor SPPM / BAPPM</th>';
+            echo '<th style="width: 150px; padding: 5px;">Gudang Penempatan</th>';
+            echo '<th style="width: 150px; padding: 5px;">Rentang Seri Awal</th>';
+            echo '<th style="width: 150px; padding: 5px;">Rentang Seri Akhir</th>';
+            echo '<th style="width: 100px; padding: 5px;">Qty Masuk</th>';
+            echo '</tr>';
+
+            foreach ($filteredCategories as $cat) {
+                $categoryItems = [];
+                $parents = \App\Models\Material::where('material_category_id', $cat->id)
+                               ->whereNull('parent_id')
+                               ->orderBy('nomor_urut', 'asc')
+                               ->get();
+
+                foreach ($parents as $parent) {
+                    $children = \App\Models\Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                    $hasChildren = $children->count() > 0;
+
+                    $pData = $this->getMaterialInboundData($parent, false, $hasChildren, $startDate, $endDate);
+                    $categoryItems[] = $pData;
+
+                    foreach ($children as $child) {
+                        $cData = $this->getMaterialInboundData($child, true, false, $startDate, $endDate);
+                        $categoryItems[] = $cData;
+                    }
+                }
+
+                if (count($categoryItems) > 0) {
+                    echo '<tr style="background-color: #bfdbfe; font-weight: bold;">';
+                    echo '<td colspan="7" style="padding: 5px;">[KATEGORI: ' . strtoupper($cat->name) . ']</td>';
+                    echo '</tr>';
+
+                    foreach ($categoryItems as $row) {
+                        $matName = $row['is_child'] ? '&nbsp;&nbsp;&nbsp;&nbsp;&#8627; ' . strtoupper($row['material_name']) : strtoupper($row['material_name']);
+                        
+                        if ($row['has_children']) {
+                            echo '<tr style="background-color: #f1f5f9; font-weight: bold;">';
+                            echo '<td style="padding: 5px;">' . $matName . '</td>';
+                            echo '<td></td><td></td><td></td><td></td><td></td>';
+                            echo '<td style="text-align: center; color: #94a3b8;">-</td>';
+                            echo '</tr>';
+                        } else {
+                            echo '<tr style="background-color: #f1f5f9; font-weight: bold;">';
+                            echo '<td style="padding: 5px;">' . $matName . '</td>';
+                            echo '<td></td><td></td><td></td><td></td>';
+                            echo '<td style="text-align: right; padding: 5px;">TOTAL MASUK:</td>';
+                            echo '<td style="text-align: center; color: #16a34a; padding: 5px;">' . $row['total_in'] . '</td>';
+                            echo '</tr>';
+                            
+                            if ($row['total_in'] > 0 && count($row['transactions']) > 0) {
+                                foreach ($row['transactions'] as $trx) {
+                                    $seriAwal = $trx->serial_start ? ($trx->serial_prefix ?? '') . str_pad($trx->serial_start, 9, '0', STR_PAD_LEFT) : '-';
+                                    $seriAkhir = $trx->serial_end ? ($trx->serial_prefix ?? '') . str_pad($trx->serial_end, 9, '0', STR_PAD_LEFT) : '-';
+                                    $tgl = \Carbon\Carbon::parse($trx->log->receive_date ?? $trx->created_at)->format('Y-m-d');
+                                    $sppmNo = $trx->log->sppm->sppm_no ?? '-';
+                                    $gudang = $trx->log->sppm->warehouse->name ?? 'Gudang Utama';
+
+                                    echo '<tr>';
+                                    echo '<td></td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $tgl . '</td>';
+                                    echo '<td style="padding: 3px;">' . $sppmNo . '</td>';
+                                    echo '<td style="padding: 3px;">' . $gudang . '</td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $seriAwal . '</td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $seriAkhir . '</td>';
+                                    echo '<td style="text-align: center; color: #16a34a; padding: 3px;">+' . $trx->qty_received . '</td>';
+                                    echo '</tr>';
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            fclose($file);
+            echo '</table></body></html>';
         };
 
         return response()->stream($callback, 200, $headers);
@@ -238,17 +510,30 @@ class ReportController extends Controller
 
     public function exportOutbound(Request $request)
     {
-        $fileName = 'Laporan_Riwayat_Distribusi_' . date('Y-m-d') . '.xls';
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
-
-        $query = OutStock::with(['outLog.outSppm.destination', 'stock.material.category', 'stock.warehouse'])
-            ->orderBy('created_at', 'desc');
-
-        if ($startDate && $endDate) {
-            $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-d');
+            $categoryId = null;
+        } else {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $categoryId = $request->input('category_id');
         }
-        $outbounds = $query->get();
+
+        // --- CATAT LOG SISTEM ---
+        $this->recordLog('EXPORT', 'LAPORAN OUTBOUND', null, null, [
+            'Aksi' => 'Mengunduh Laporan Riwayat Distribusi',
+            'Periode' => ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data",
+            'Filter Kategori ID' => $categoryId ?? 'Semua'
+        ]);
+
+        $fileName = 'Laporan_Riwayat_Distribusi_' . date('Y-m-d') . '.xls';
+
+        $catQuery = \App\Models\MaterialCategory::orderBy('nomor_urut', 'asc');
+        if ($categoryId) {
+            $catQuery->where('id', $categoryId);
+        }
+        $filteredCategories = $catQuery->get();
 
         $headers = [
             "Content-type"        => "application/vnd.ms-excel",
@@ -258,22 +543,92 @@ class ReportController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use ($outbounds) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, ['Tanggal Keluar', 'No. SPPM Keluar', 'Tujuan Distribusi', 'Materiil', 'Rentang Seri Awal', 'Rentang Seri Akhir', 'Qty Keluar'], "\t");
+        $callback = function() use ($filteredCategories, $startDate, $endDate) {
+            echo '<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body>';
+            echo '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px; border-collapse: collapse;">';
+            
+            $periode = ($startDate && $endDate) ? "$startDate s/d $endDate" : "Semua Data Berjalan";
+            
+            echo '<tr><th colspan="7" style="text-align: left; font-size: 14px; background-color: #be123c; color: #ffffff; padding: 10px;">LAPORAN RIWAYAT DISTRIBUSI / OUTBOUND</th></tr>';
+            echo '<tr><th colspan="7" style="text-align: left; background-color: #ffe4e6; padding: 5px;">PERIODE LAPORAN: ' . $periode . '</th></tr>';
+            echo '<tr><th colspan="7"></th></tr>'; 
 
-            foreach ($outbounds as $row) {
-                fputcsv($file, [
-                    \Carbon\Carbon::parse($row->created_at)->format('Y-m-d H:i:s'),
-                    optional(optional(optional($row->outLog)->outSppm))->sppm_no ?? '-',
-                    optional(optional(optional(optional($row->outLog)->outSppm)->destination))->name ?? '-',
-                    optional(optional($row->stock)->material)->name ?? '-',
-                    (optional($row->stock)->prefix ?? '') . str_pad($row->seri_awal, 9, '0', STR_PAD_LEFT),
-                    (optional($row->stock)->prefix ?? '') . str_pad($row->seri_akhir, 9, '0', STR_PAD_LEFT),
-                    $row->qty_keluar
-                ], "\t");
+            echo '<tr style="background-color: #f8fafc; font-weight: bold; text-align: center;">';
+            echo '<th style="width: 250px; padding: 5px;">Nama Materiil / Komoditas</th>';
+            echo '<th style="width: 120px; padding: 5px;">Tanggal Keluar Fisik</th>';
+            echo '<th style="width: 180px; padding: 5px;">Nomor SPPM</th>';
+            echo '<th style="width: 200px; padding: 5px;">Tujuan Pengiriman</th>';
+            echo '<th style="width: 150px; padding: 5px;">Rentang Seri Awal</th>';
+            echo '<th style="width: 150px; padding: 5px;">Rentang Seri Akhir</th>';
+            echo '<th style="width: 100px; padding: 5px;">Qty Keluar</th>';
+            echo '</tr>';
+
+            foreach ($filteredCategories as $cat) {
+                $categoryItems = [];
+                $parents = \App\Models\Material::where('material_category_id', $cat->id)
+                               ->whereNull('parent_id')
+                               ->orderBy('nomor_urut', 'asc')
+                               ->get();
+
+                foreach ($parents as $parent) {
+                    $children = \App\Models\Material::where('parent_id', $parent->id)->orderBy('nomor_urut', 'asc')->get();
+                    $hasChildren = $children->count() > 0;
+
+                    $pData = $this->getMaterialOutboundData($parent, false, $hasChildren, $startDate, $endDate);
+                    $categoryItems[] = $pData;
+
+                    foreach ($children as $child) {
+                        $cData = $this->getMaterialOutboundData($child, true, false, $startDate, $endDate);
+                        $categoryItems[] = $cData;
+                    }
+                }
+
+                if (count($categoryItems) > 0) {
+                    echo '<tr style="background-color: #fecdd3; font-weight: bold;">';
+                    echo '<td colspan="7" style="padding: 5px;">[KATEGORI: ' . strtoupper($cat->name) . ']</td>';
+                    echo '</tr>';
+
+                    foreach ($categoryItems as $row) {
+                        $matName = $row['is_child'] ? '&nbsp;&nbsp;&nbsp;&nbsp;&#8627; ' . strtoupper($row['material_name']) : strtoupper($row['material_name']);
+                        
+                        if ($row['has_children']) {
+                            echo '<tr style="background-color: #f1f5f9; font-weight: bold;">';
+                            echo '<td style="padding: 5px;">' . $matName . '</td>';
+                            echo '<td></td><td></td><td></td><td></td><td></td>';
+                            echo '<td style="text-align: center; color: #94a3b8;">-</td>';
+                            echo '</tr>';
+                        } else {
+                            echo '<tr style="background-color: #f1f5f9; font-weight: bold;">';
+                            echo '<td style="padding: 5px;">' . $matName . '</td>';
+                            echo '<td></td><td></td><td></td><td></td>';
+                            echo '<td style="text-align: right; padding: 5px;">TOTAL KELUAR:</td>';
+                            echo '<td style="text-align: center; color: #e11d48; padding: 5px;">' . $row['total_out'] . '</td>';
+                            echo '</tr>';
+                            
+                            if ($row['total_out'] > 0 && count($row['transactions']) > 0) {
+                                foreach ($row['transactions'] as $trx) {
+                                    $seriAwal = $trx->seri_awal ? ($trx->prefix ?? '') . str_pad($trx->seri_awal, 9, '0', STR_PAD_LEFT) : '-';
+                                    $seriAkhir = $trx->seri_akhir ? ($trx->prefix ?? '') . str_pad($trx->seri_akhir, 9, '0', STR_PAD_LEFT) : '-';
+                                    $tgl = \Carbon\Carbon::parse($trx->outLog->tgl_keluar ?? $trx->created_at)->format('Y-m-d');
+                                    $sppmNo = $trx->outLog->outSppm->sppm_no ?? '-';
+                                    $tujuan = $trx->outLog->outSppm->destination->name ?? 'Tujuan Tidak Diketahui';
+
+                                    echo '<tr>';
+                                    echo '<td></td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $tgl . '</td>';
+                                    echo '<td style="padding: 3px;">' . $sppmNo . '</td>';
+                                    echo '<td style="padding: 3px;">' . $tujuan . '</td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $seriAwal . '</td>';
+                                    echo '<td style="text-align: center; padding: 3px;">' . $seriAkhir . '</td>';
+                                    echo '<td style="text-align: center; color: #e11d48; padding: 3px;">-' . $trx->qty_keluar . '</td>';
+                                    echo '</tr>';
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            fclose($file);
+            echo '</table></body></html>';
         };
 
         return response()->stream($callback, 200, $headers);

@@ -94,6 +94,7 @@
                                     <option value="{{ $dest->id }}" {{ old('destination_id', $outbound->destination_id ?? '') == $dest->id ? 'selected' : '' }}>{{ $dest->name }}</option>
                                 @endforeach
                             </select>
+                            
                         @endif
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
@@ -113,6 +114,24 @@
                         <label class="field-label">Keterangan SPPM (Umum)</label>
                         <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan', $outbound->keterangan ?? '') }}" placeholder="Catatan pengiriman..." {{ $isCompleted ? 'readonly' : '' }}>
                     </div>
+                    <!-- KOTAK INFO PEJABAT BAMAT -->
+                            <div id="bamatInfo" class="mt-2 p-3 bg-light border rounded d-none">
+                                <h6 class="fw-bold mb-2 text-muted" style="font-size: 0.8rem;"><i class="fa-solid fa-address-card me-1"></i> Info Pejabat Bamat</h6>
+                                <div class="row small">
+                                    <div class="col-md-4 mb-2 mb-md-0">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Nama:</span>
+                                        <strong id="infoNama" class="text-dark">-</strong>
+                                    </div>
+                                    <div class="col-md-4 mb-2 mb-md-0">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Pangkat / NRP:</span>
+                                        <strong id="infoPangkat" class="text-dark">-</strong>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Jabatan:</span>
+                                        <strong id="infoJabatan" class="text-dark">-</strong>
+                                    </div>
+                                </div>
+                            </div>
                 </div>
             </div>
         </div>
@@ -411,6 +430,44 @@
             categorySelector.dispatchEvent(new Event('change'));
         }
     }
+
+    // --- LOGIKA INFO PEJABAT BAMAT (DESTINATION) ---
+    document.addEventListener("DOMContentLoaded", function() {
+        const destinationsData = @json($destinations);
+        const destinationSelect = document.querySelector('select[name="destination_id"]');
+        const infoBox = document.getElementById('bamatInfo');
+
+        function updateBamatInfo(destinationId) {
+            if (!destinationId) {
+                if(infoBox) infoBox.classList.add('d-none');
+                return;
+            }
+
+            // Cari objek tujuan berdasarkan ID
+            const dest = destinationsData.find(d => d.id == destinationId);
+            
+            if (dest && infoBox) {
+                document.getElementById('infoNama').innerText = dest.nama || '-';
+                document.getElementById('infoPangkat').innerText = dest.pangkat_nrp || '-';
+                document.getElementById('infoJabatan').innerText = dest.jabatan || '-';
+                infoBox.classList.remove('d-none'); // Tampilkan kotak
+            } else if (infoBox) {
+                infoBox.classList.add('d-none'); // Sembunyikan jika tidak ada
+            }
+        }
+
+        // Jalankan saat dropdown diganti user
+        if(destinationSelect) {
+            destinationSelect.addEventListener('change', function() {
+                updateBamatInfo(this.value);
+            });
+            
+            // Trigger otomatis saat halaman Edit dibuka (jika select sudah ada nilainya)
+            if(destinationSelect.value) {
+                updateBamatInfo(destinationSelect.value);
+            }
+        }
+    });
 </script>
 @endif
 @endpush
