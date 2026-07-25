@@ -84,6 +84,28 @@
                                     <i class="fa-solid fa-arrow-right-from-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Distribusi
                                 </a>
                             </li>
+                            <li>
+                                <a href="{{ route('reports.simak') }}" class="sidebar-link {{ request()->routeIs('reports.simak') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-file-contract me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Pendistribusian MATERIEL (SIMAK)
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                <li class="nav-item mb-1">
+                    <a class="sidebar-link {{ request()->routeIs('settings.reports.*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#settingReportMenu" role="button" aria-expanded="{{ request()->routeIs('settings.reports.*') ? 'true' : 'false' }}" aria-controls="settingReportMenu">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div><i class="fa-solid fa-cogs"></i> Pengaturan Laporan</div>
+                            <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem;"></i>
+                        </div>
+                    </a>
+                    <div class="collapse {{ request()->routeIs('settings.reports.*') ? 'show' : '' }}" id="settingReportMenu">
+                        <ul style="list-style: none; padding-left: 20px; margin-top: 2px; margin-bottom: 2px;">
+                            <li>
+                                <a href="{{ route('settings.reports.simak') }}" class="sidebar-link {{ request()->routeIs('settings.reports.simak') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-table-columns me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Mapping SIMAK
+                                </a>
+                            </li>
                         </ul>
                     </div>
                 </li>

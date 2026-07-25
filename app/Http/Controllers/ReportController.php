@@ -633,4 +633,141 @@ class ReportController extends Controller
 
         return response()->stream($callback, 200, $headers);
     }
+
+    // Sub Menu 4: SIMAK (Pendistribusian Materiel)
+    public function simak(Request $request)
+    {
+        // 1. Filter Bulan dan Tahun (Default: Bulan dan Tahun saat ini)
+        $month = $request->input('month', date('m'));
+        $year = $request->input('year', date('Y'));
+
+        // 2. Ambil Kolom Header SIMAK yang unik dan sudah terurut berdasarkan simak_urut
+        // Menggunakan get() lalu difilter manual untuk memastikan urutan dipertahankan dan label tidak duplikat
+        $simakMaterials = \App\Models\Material::where('is_simak', 1)
+            ->whereNotNull('simak_label')
+            ->orderBy('simak_urut', 'asc')
+            ->get();
+            
+        $simakHeaders = [];
+        foreach ($simakMaterials as $mat) {
+            if (!in_array($mat->simak_label, $simakHeaders)) {
+                $simakHeaders[] = $mat->simak_label;
+            }
+        }
+
+        // 3. Ambil Baris Data: Semua Tujuan Pengiriman (Destination)
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+
+        // 4. Ambil Data Transaksi Barang Keluar (Final/Completed) sesuai Bulan dan Tahun
+        // Hanya memuat details yang materialnya is_simak = 1 untuk efisiensi memory
+        $outSppms = \App\Models\OutSppm::with(['details' => function($q) {
+                $q->whereHas('material', function($q2) {
+                    $q2->where('is_simak', 1);
+                });
+            }, 'details.material'])
+            ->where('status', 'completed')
+            ->whereMonth('sppm_date', $month)
+            ->whereYear('sppm_date', $year)
+            ->get();
+
+        // 5. Buat Matriks Array untuk menampung Kalkulasi (Berdasarkan Destination ID & Label SIMAK)
+        $simakData = [];
+        
+        // Inisialisasi semua nilai dengan 0
+        foreach ($destinations as $dest) {
+            foreach ($simakHeaders as $label) {
+                $simakData[$dest->id][$label] = 0;
+            }
+        }
+
+        // Akumulasi Qty Keluar ke dalam Matriks berdasarkan Label
+        foreach ($outSppms as $sppm) {
+            foreach ($sppm->details as $detail) {
+                if ($detail->material && $detail->material->is_simak == 1) {
+                    $label = $detail->material->simak_label;
+                    if (isset($simakData[$sppm->destination_id][$label])) {
+                        $simakData[$sppm->destination_id][$label] += $detail->target_qty;
+                    }
+                }
+            }
+        }
+
+        // 6. Mapping Nama Bulan untuk Header Tabel
+        $months = [
+            '01' => 'JANUARI', '02' => 'FEBRUARI', '03' => 'MARET', '04' => 'APRIL',
+            '05' => 'MEI', '06' => 'JUNI', '07' => 'JULI', '08' => 'AGUSTUS',
+            '09' => 'SEPTEMBER', '10' => 'OKTOBER', '11' => 'NOVEMBER', '12' => 'DESEMBER'
+        ];
+        $monthName = $months[str_pad($month, 2, '0', STR_PAD_LEFT)];
+
+        return view('reports.simak', compact('month', 'year', 'simakHeaders', 'destinations', 'simakData', 'monthName', 'months'));
+    }
+
+    public function exportSimak(Request $request)
+    {
+        // 1. Tangkap Parameter Bulan dan Tahun (Default: Bulan dan Tahun saat ini)
+        $month = $request->input('month', date('m'));
+        $year = $request->input('year', date('Y'));
+
+        // 2. Kumpulkan kembali data persis seperti fungsi simak()
+        $simakMaterials = \App\Models\Material::where('is_simak', 1)
+            ->whereNotNull('simak_label')
+            ->orderBy('simak_urut', 'asc')
+            ->get();
+            
+        $simakHeaders = [];
+        foreach ($simakMaterials as $mat) {
+            if (!in_array($mat->simak_label, $simakHeaders)) {
+                $simakHeaders[] = $mat->simak_label;
+            }
+        }
+
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+
+        $outSppms = \App\Models\OutSppm::with(['details' => function($q) {
+                $q->whereHas('material', function($q2) {
+                    $q2->where('is_simak', 1);
+                });
+            }, 'details.material'])
+            ->where('status', 'completed')
+            ->whereMonth('sppm_date', $month)
+            ->whereYear('sppm_date', $year)
+            ->get();
+
+        $simakData = [];
+        
+        foreach ($destinations as $dest) {
+            foreach ($simakHeaders as $label) {
+                $simakData[$dest->id][$label] = 0;
+            }
+        }
+
+        foreach ($outSppms as $sppm) {
+            foreach ($sppm->details as $detail) {
+                if ($detail->material && $detail->material->is_simak == 1) {
+                    $label = $detail->material->simak_label;
+                    if (isset($simakData[$sppm->destination_id][$label])) {
+                        $simakData[$sppm->destination_id][$label] += $detail->target_qty;
+                    }
+                }
+            }
+        }
+
+        // 3. Mapping Nama Bulan
+        $months = [
+            '01' => 'JANUARI', '02' => 'FEBRUARI', '03' => 'MARET', '04' => 'APRIL',
+            '05' => 'MEI', '06' => 'JUNI', '07' => 'JULI', '08' => 'AGUSTUS',
+            '09' => 'SEPTEMBER', '10' => 'OKTOBER', '11' => 'NOVEMBER', '12' => 'DESEMBER'
+        ];
+        $monthName = $months[str_pad($month, 2, '0', STR_PAD_LEFT)];
+
+        // 4. Proses Download Excel
+        $fileName = 'Laporan_SIMAK_' . $monthName . '_' . $year . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\SimakExport($month, $year, $simakHeaders, $destinations, $simakData, $monthName),
+            $fileName
+        );
+    }
+
 }

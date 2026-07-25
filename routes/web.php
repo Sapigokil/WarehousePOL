@@ -81,6 +81,14 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // Menu Tracking Seri
         Route::get('/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('tracking.index');
         Route::get('/tracking/search', [\App\Http\Controllers\TrackingController::class, 'search'])->name('tracking.search');
+
+        Route::get('/reports/simak', [\App\Http\Controllers\ReportController::class, 'simak'])->name('reports.simak');
+        Route::get('/reports/simak/export', [\App\Http\Controllers\ReportController::class, 'exportSimak'])->name('reports.simak.export');
+
+        // Settings
+        Route::get('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'simakMapping'])->name('settings.reports.simak');
+        Route::post('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'storeSimakMapping'])->name('settings.reports.simak.store');
+
     });
 
     /* ==============================================
