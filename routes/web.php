@@ -61,7 +61,10 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
 
         Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
         Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');
-        
+        // Rute untuk Import Khusus Migrasi Data Lama
+        Route::get('/outbound/template-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'downloadTemplate'])->name('outbound.template.khusus');
+        Route::post('/outbound/import-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'import'])->name('outbound.import.khusus');
+
     });
 
     /* ==============================================

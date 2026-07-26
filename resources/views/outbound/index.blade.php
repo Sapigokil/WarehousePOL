@@ -54,6 +54,9 @@
         <button class="btn btn-light fw-bold text-danger shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel" style="border-radius: 8px;">
             <i class="fa-solid fa-file-excel me-1"></i> Import SPPM
         </button>
+        <button type="button" class="btn btn-warning fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#importKhususModal">
+            <i class="fa-solid fa-clock-rotate-left me-1"></i> Import Khusus (Data Lama)
+        </button>
         @endcanany
         <a href="{{ route('outbounds.create') }}" class="btn btn-light fw-bold text-danger shadow-sm px-4 py-2" style="border-radius: 8px;">
             <i class="fa-solid fa-plus me-1"></i> SPPM Keluar Baru
@@ -294,6 +297,79 @@
                 </button>
             </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Import Khusus Migrasi -->
+<div class="modal fade" id="importKhususModal" tabindex="-1" aria-labelledby="importKhususModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold" id="importKhususModalLabel">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Import Khusus Migrasi (Data Lama)
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                
+                <!-- Bagian 1: Unduh Template -->
+                <div class="mb-4 pb-4 border-bottom">
+                    <h6 class="fw-bold mb-3"><span class="badge bg-secondary me-2">1</span> Unduh Template</h6>
+                    
+                    @if($errors->any())
+                        <div class="alert alert-danger small">
+                            <ul class="mb-0">
+                                @foreach($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    <form action="{{ route('outbound.template.khusus') }}" method="GET">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Pilih Kategori Materiil</label>
+                            <select name="category_id" class="form-select" required>
+                                <option value="">-- Pilih Kategori --</option>
+                                @foreach(\App\Models\MaterialCategory::orderBy('name', 'asc')->get() as $cat)
+                                    <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary fw-bold">
+                            <i class="fa-solid fa-download me-1"></i> Unduh Template Excel
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Bagian 2: Upload Data -->
+                <div>
+                    <h6 class="fw-bold mb-3"><span class="badge bg-secondary me-2">2</span> Upload Data Migrasi</h6>
+                    <form action="{{ route('outbound.import.khusus') }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Pilih Kategori Materiil</label>
+                            <select name="category_id" class="form-select" required>
+                                <option value="">-- Pilih Kategori --</option>
+                                @foreach(\App\Models\MaterialCategory::orderBy('name', 'asc')->get() as $cat)
+                                    <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Pilih File Excel (.xlsx)</label>
+                            <input class="form-control" type="file" name="file_excel" accept=".xlsx, .xls, .csv" required>
+                        </div>
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-warning fw-bold text-dark">
+                                <i class="fa-solid fa-upload me-1"></i> Proses Import Khusus
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
         </div>
     </div>
 </div>
