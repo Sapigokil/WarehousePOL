@@ -1,20 +1,23 @@
 <table style="border-collapse: collapse; width: 100%;">
     <thead>
-        <!-- Kop Surat & Judul Laporan -->
+        <!-- Judul Laporan (Baris 1, Center) -->
         <tr>
-            <td colspan="2" style="font-weight: bold; font-family: Arial; font-size: 11px;">KEPOLISIAN NEGARA REPUBLIK INDONESIA</td>
-            <td colspan="{{ count($simakHeaders) }}" style="text-align: center; font-weight: bold; font-family: Arial; font-size: 14px;">
+            <td colspan="{{ count($simakHeaders) + 2 }}" style="text-align: center; font-weight: bold; font-family: Arial; font-size: 14px;">
                 PENDISTRIBUSIAN MATERIEL {{ $monthName }} TAHUN {{ $year }}
             </td>
         </tr>
+        
+        <!-- Kop Surat (Baris 2, 3, 4, Kiri) -->
         <tr>
-            <td colspan="2" style="font-weight: bold; font-family: Arial; font-size: 11px;">DAERAH JAWA TENGAH</td>
-            <td colspan="{{ count($simakHeaders) }}"></td>
+            <td colspan="{{ count($simakHeaders) + 2 }}" style="text-align: left; font-weight: bold; font-family: Arial; font-size: 11px;">KEPOLISIAN NEGARA REPUBLIK INDONESIA</td>
         </tr>
         <tr>
-            <td colspan="2" style="font-weight: bold; font-family: Arial; font-size: 11px;">DIREKTORAT LALU LINTAS</td>
-            <td colspan="{{ count($simakHeaders) }}"></td>
+            <td colspan="{{ count($simakHeaders) + 2 }}" style="text-align: left; font-weight: bold; font-family: Arial; font-size: 11px;">DAERAH JAWA TENGAH</td>
         </tr>
+        <tr>
+            <td colspan="{{ count($simakHeaders) + 2 }}" style="text-align: left; font-weight: bold; font-family: Arial; font-size: 11px;">DIREKTORAT LALU LINTAS</td>
+        </tr>
+        
         <!-- Spacer Kosong 1 Baris -->
         <tr>
             <td colspan="{{ count($simakHeaders) + 2 }}"></td>

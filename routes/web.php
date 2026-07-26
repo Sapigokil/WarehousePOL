@@ -84,6 +84,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
 
         Route::get('/reports/simak', [\App\Http\Controllers\ReportController::class, 'simak'])->name('reports.simak');
         Route::get('/reports/simak/export', [\App\Http\Controllers\ReportController::class, 'exportSimak'])->name('reports.simak.export');
+        Route::get('/reports/simak2/export', [\App\Http\Controllers\ReportController::class, 'exportSimak2'])->name('reports.simak2.export');
 
         // Settings
         Route::get('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'simakMapping'])->name('settings.reports.simak');
@@ -116,7 +117,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::resource('materials', MaterialController::class)->except(['show']);
         Route::post('destinations/reorder', [\App\Http\Controllers\DestinationController::class, 'reorder'])->name('destinations.reorder');
         Route::resource('destinations', \App\Http\Controllers\DestinationController::class)->except(['show']);
-
+        Route::post('/destinations/import', [App\Http\Controllers\DestinationController::class, 'import'])->name('destinations.import');
         Route::get('system-logs', [\App\Http\Controllers\SystemLogController::class, 'index'])->name('sislogs.index');
 
     });

@@ -35,6 +35,9 @@
         <p class="mb-0 text-white-50 small">Kelola target, instansi, atau pihak yang akan menjadi tujuan pengiriman stok (Outbound).</p>
     </div>
     <div class="header-content">
+        <button type="button" class="btn btn-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="fa-solid fa-file-import me-1"></i> Import Excel
+        </button>
         <button class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalAddDestination">
             <i class="fa-solid fa-plus me-1"></i> Tambah Penerima
         </button>
@@ -230,6 +233,39 @@
                 </div>
                 <div class="modal-footer border-0 bg-light py-2">
                     <button type="submit" class="btn px-4 fw-bold shadow-sm btn-theme" style="border-radius: 6px;">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Import Excel -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('destinations.import') }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="importModalLabel"><i class="fa-solid fa-file-excel me-2"></i>Import Daftar Penerima</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info small mb-4">
+                        <i class="fa-solid fa-circle-info me-1"></i> Pastikan format Excel Anda memiliki urutan kolom sebagai berikut:<br>
+                        <strong>Kolom A:</strong> NO<br>
+                        <strong>Kolom B:</strong> NAMA (Tujuan/Polres)<br>
+                        <strong>Kolom C:</strong> NAMA (Penerima)<br>
+                        <strong>Kolom D:</strong> PANGKAT / NRP<br>
+                        <strong>Kolom E:</strong> JABATAN
+                    </div>
+                    <div class="mb-3">
+                        <label for="file_excel" class="form-label fw-bold text-muted">Pilih File Excel (.xlsx, .xls, .csv)</label>
+                        <input class="form-control" type="file" id="file_excel" name="file_excel" accept=".xlsx, .xls, .csv" required>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success fw-bold"><i class="fa-solid fa-upload me-1"></i> Proses Import</button>
                 </div>
             </form>
         </div>

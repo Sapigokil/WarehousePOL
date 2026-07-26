@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Destination;
 use Illuminate\Http\Request;
+use App\Imports\DestinationsImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class DestinationController extends Controller
 {
@@ -94,5 +96,20 @@ class DestinationController extends Controller
         }
 
         return response()->json(['success' => true]);
+    }
+
+    // Fungsi Baru: Import Excel
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file_excel' => 'required|mimes:xlsx,xls,csv|max:10240', // Maksimal 10MB
+        ]);
+
+        try {
+            Excel::import(new DestinationsImport, $request->file('file_excel'));
+            return redirect()->route('destinations.index')->with('success', 'Data Penerima berhasil diimpor dari Excel!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat mengimpor data: ' . $e->getMessage());
+        }
     }
 }

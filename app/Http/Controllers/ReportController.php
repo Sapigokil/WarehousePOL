@@ -637,12 +637,15 @@ class ReportController extends Controller
     // Sub Menu 4: SIMAK (Pendistribusian Materiel)
     public function simak(Request $request)
     {
-        // 1. Filter Bulan dan Tahun (Default: Bulan dan Tahun saat ini)
-        $month = $request->input('month', date('m'));
+        // 1. Tangkap Parameter Global & Tab Aktif
+        $tab = $request->input('tab', '1'); // Default ke Tab 1 jika kosong
         $year = $request->input('year', date('Y'));
+        $month = $request->input('month', date('m'));
+        $selectedLabel = $request->input('simak_label');
 
-        // 2. Ambil Kolom Header SIMAK yang unik dan sudah terurut berdasarkan simak_urut
-        // Menggunakan get() lalu difilter manual untuk memastikan urutan dipertahankan dan label tidak duplikat
+        // 2. Data Master (Dibutuhkan oleh kedua Tab)
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+        
         $simakMaterials = \App\Models\Material::where('is_simak', 1)
             ->whereNotNull('simak_label')
             ->orderBy('simak_urut', 'asc')
@@ -650,57 +653,98 @@ class ReportController extends Controller
             
         $simakHeaders = [];
         foreach ($simakMaterials as $mat) {
-            if (!in_array($mat->simak_label, $simakHeaders)) {
-                $simakHeaders[] = $mat->simak_label;
+            // Normalisasi huruf kapital dan hapus spasi berlebih
+            $label = strtoupper(trim($mat->simak_label)); 
+            if (!in_array($label, $simakHeaders)) {
+                $simakHeaders[] = $label;
             }
         }
 
-        // 3. Ambil Baris Data: Semua Tujuan Pengiriman (Destination)
-        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
-
-        // 4. Ambil Data Transaksi Barang Keluar (Final/Completed) sesuai Bulan dan Tahun
-        // Hanya memuat details yang materialnya is_simak = 1 untuk efisiensi memory
-        $outSppms = \App\Models\OutSppm::with(['details' => function($q) {
-                $q->whereHas('material', function($q2) {
-                    $q2->where('is_simak', 1);
-                });
-            }, 'details.material'])
-            ->where('status', 'completed')
-            ->whereMonth('sppm_date', $month)
-            ->whereYear('sppm_date', $year)
-            ->get();
-
-        // 5. Buat Matriks Array untuk menampung Kalkulasi (Berdasarkan Destination ID & Label SIMAK)
-        $simakData = [];
+        // Jika Tab 2 aktif tapi label belum dipilih, set default ke label urutan pertama
+        if ($tab == '2' && empty($selectedLabel) && count($simakHeaders) > 0) {
+            $selectedLabel = $simakHeaders[0];
+        }
         
-        // Inisialisasi semua nilai dengan 0
+        // Normalisasi label yang dipilih agar sama persis saat dibandingkan
+        $selectedLabel = strtoupper(trim($selectedLabel));
+
+        // 3. Inisialisasi Variabel Data (Kerangka Dasar)
+        $simakDataTab1 = [];
+        $simakDataTab2 = [];
+
+        // Buat kerangka untuk Mode 1
         foreach ($destinations as $dest) {
             foreach ($simakHeaders as $label) {
-                $simakData[$dest->id][$label] = 0;
+                $simakDataTab1[$dest->id][$label] = 0;
             }
         }
 
-        // Akumulasi Qty Keluar ke dalam Matriks berdasarkan Label
-        foreach ($outSppms as $sppm) {
-            foreach ($sppm->details as $detail) {
-                if ($detail->material && $detail->material->is_simak == 1) {
-                    $label = $detail->material->simak_label;
-                    if (isset($simakData[$sppm->destination_id][$label])) {
-                        $simakData[$sppm->destination_id][$label] += $detail->target_qty;
+        // Buat kerangka untuk Mode 2
+        foreach ($destinations as $dest) {
+            for ($m = 1; $m <= 12; $m++) {
+                $simakDataTab2[$dest->id][$m] = 0;
+            }
+            $simakDataTab2[$dest->id]['jumlah'] = 0;
+        }
+
+        // ====================================================================
+        // PROSES TAB 1: MODE BULANAN (KESELURUHAN MATERIIL)
+        // ====================================================================
+        if ($tab == '1') {
+            // Hapus constraint di dalam with() untuk menghindari bug Laravel Eager Loading
+            $outSppmsTab1 = \App\Models\OutSppm::with('details.material')
+                ->where('status', 'completed')
+                ->whereMonth('sppm_date', $month)
+                ->whereYear('sppm_date', $year)
+                ->get();
+
+            foreach ($outSppmsTab1 as $sppm) {
+                foreach ($sppm->details as $detail) {
+                    // Validasi ketat di level PHP
+                    if ($detail->material && $detail->material->is_simak == 1) {
+                        $label = strtoupper(trim($detail->material->simak_label));
+                        if (isset($simakDataTab1[$sppm->destination_id][$label])) {
+                            $simakDataTab1[$sppm->destination_id][$label] += $detail->target_qty;
+                        }
                     }
                 }
             }
         }
 
-        // 6. Mapping Nama Bulan untuk Header Tabel
-        $months = [
-            '01' => 'JANUARI', '02' => 'FEBRUARI', '03' => 'MARET', '04' => 'APRIL',
-            '05' => 'MEI', '06' => 'JUNI', '07' => 'JULI', '08' => 'AGUSTUS',
-            '09' => 'SEPTEMBER', '10' => 'OKTOBER', '11' => 'NOVEMBER', '12' => 'DESEMBER'
-        ];
-        $monthName = $months[str_pad($month, 2, '0', STR_PAD_LEFT)];
+        // ====================================================================
+        // PROSES TAB 2: MODE TAHUNAN (PER MATERIIL SIMAK)
+        // ====================================================================
+        if ($tab == '2') {
+            // Tarik seluruh SPPM di tahun tersebut beserta detail materialnya
+            $outSppmsTab2 = \App\Models\OutSppm::with('details.material')
+                ->where('status', 'completed')
+                ->whereYear('sppm_date', $year)
+                ->get();
 
-        return view('reports.simak', compact('month', 'year', 'simakHeaders', 'destinations', 'simakData', 'monthName', 'months'));
+            foreach ($outSppmsTab2 as $sppm) {
+                // Gunakan Carbon untuk memastikan format bulan ditarik presisi sebagai integer (1-12)
+                $sppmMonth = (int) \Carbon\Carbon::parse($sppm->sppm_date)->format('n');
+                
+                foreach ($sppm->details as $detail) {
+                    // Pastikan detail material valid dan ter-mapping ke SIMAK
+                    if ($detail->material && $detail->material->is_simak == 1) {
+                        $detailLabel = strtoupper(trim($detail->material->simak_label));
+                        
+                        // Cek apakah label material ini persis sama dengan yang difilter user
+                        if ($detailLabel === $selectedLabel) {
+                            $simakDataTab2[$sppm->destination_id][$sppmMonth] += $detail->target_qty;
+                            $simakDataTab2[$sppm->destination_id]['jumlah'] += $detail->target_qty;
+                        }
+                    }
+                }
+            }
+        }
+
+        return view('reports.simak', compact(
+            'tab', 'month', 'year', 'selectedLabel', 
+            'destinations', 'simakHeaders', 
+            'simakDataTab1', 'simakDataTab2'
+        ));
     }
 
     public function exportSimak(Request $request)
@@ -770,4 +814,57 @@ class ReportController extends Controller
         );
     }
 
+    // Sub Menu: Export Excel SIMAK (MODE 2 - TAHUNAN)
+    public function exportSimak2(Request $request)
+    {
+        // 1. Tangkap Parameter
+        $year = $request->input('year', date('Y'));
+        $selectedLabel = strtoupper(trim($request->input('simak_label')));
+
+        if (empty($selectedLabel)) {
+            return back()->with('error', 'Label SIMAK belum dipilih.');
+        }
+
+        // 2. Siapkan Master Data
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+
+        $simakDataTab2 = [];
+        foreach ($destinations as $dest) {
+            for ($m = 1; $m <= 12; $m++) {
+                $simakDataTab2[$dest->id][$m] = 0;
+            }
+            $simakDataTab2[$dest->id]['jumlah'] = 0;
+        }
+
+        // 3. Tarik dan Kalkulasi Data
+        $outSppmsTab2 = \App\Models\OutSppm::with('details.material')
+            ->where('status', 'completed')
+            ->whereYear('sppm_date', $year)
+            ->get();
+
+        foreach ($outSppmsTab2 as $sppm) {
+            $sppmMonth = (int) \Carbon\Carbon::parse($sppm->sppm_date)->format('n');
+            
+            foreach ($sppm->details as $detail) {
+                if ($detail->material && $detail->material->is_simak == 1) {
+                    $detailLabel = strtoupper(trim($detail->material->simak_label));
+                    
+                    if ($detailLabel === $selectedLabel) {
+                        $simakDataTab2[$sppm->destination_id][$sppmMonth] += $detail->target_qty;
+                        $simakDataTab2[$sppm->destination_id]['jumlah'] += $detail->target_qty;
+                    }
+                }
+            }
+        }
+
+        // 4. Proses Download Excel
+        // Membersihkan string nama materiil untuk nama file excel
+        $cleanLabel = preg_replace('/[^A-Za-z0-9\-]/', '_', $selectedLabel);
+        $fileName = 'Laporan_SIMAK_' . $cleanLabel . '_Tahun_' . $year . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\Simak2Export($year, $selectedLabel, $destinations, $simakDataTab2),
+            $fileName
+        );
+    }
 }
