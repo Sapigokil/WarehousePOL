@@ -40,6 +40,18 @@ class OutboundController extends Controller
         $search = $request->input('search');
         $limit = $request->input('limit', 10);
 
+        // Menangkap parameter sorting, default ke sppm_date menurun (terbaru)
+        $sortBy = $request->input('sort_by', 'sppm_date');
+        $sortDir = $request->input('sort_dir', 'desc');
+
+        // Mencegah manipulasi nama kolom
+        $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at']; 
+        if (!in_array($sortBy, $allowedSortColumns)) {
+            $sortBy = 'sppm_date';
+        }
+        
+        $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
+
         $outbounds = OutSppm::with(['destination', 'details.material', 'logs.outStocks', 'updater'])
             ->when($search, function ($query, $search) {
                 return $query->where('sppm_no', 'like', "%{$search}%")
@@ -47,14 +59,13 @@ class OutboundController extends Controller
                                  $q->where('name', 'like', "%{$search}%");
                              });
             })
-            ->orderBy('sppm_date', 'desc')
-            ->orderBy('created_at', 'desc')
+            ->orderBy($sortBy, $sortDir)
             ->paginate($limit)
             ->withQueryString();
 
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
 
-        return view('outbound.index', compact('outbounds', 'search', 'limit', 'categories'));
+        return view('outbound.index', compact('outbounds', 'search', 'limit', 'categories', 'sortBy', 'sortDir'));
     }
 
     public function create()

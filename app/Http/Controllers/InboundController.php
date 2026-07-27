@@ -46,6 +46,16 @@ class InboundController extends Controller
         $tahun = $request->input('tahun');
         $perPage = $limit === 'all' ? 999999 : $limit;
 
+        $sortBy = $request->input('sort_by', 'sppm_date');
+        $sortDir = $request->input('sort_dir', 'desc');
+
+        $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at']; 
+        if (!in_array($sortBy, $allowedSortColumns)) {
+            $sortBy = 'sppm_date';
+        }
+        
+        $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
+
         $sppms = InSppm::with([
                 'category', 'warehouse', 'details.material', 
                 'logs' => function($q) { $q->orderBy('batch_number', 'asc'); }, 
@@ -75,14 +85,18 @@ class InboundController extends Controller
             ->when($tahun, function ($query, $tahun) {
                 return $query->whereYear('sppm_date', $tahun);
             })
-            ->orderBy('created_at', 'DESC')
+            ->orderBy($sortBy, $sortDir)
             ->paginate($perPage)
             ->withQueryString();
 
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
         $availableYears = InSppm::selectRaw('YEAR(sppm_date) as year')->distinct()->orderBy('year', 'desc')->pluck('year');
 
-        return view('inbound.index', compact('sppms', 'categories', 'search', 'limit', 'category_id', 'bulan', 'tahun', 'availableYears'));
+        return view('inbound.index', compact(
+            'sppms', 'categories', 'search', 'limit', 
+            'category_id', 'bulan', 'tahun', 'availableYears', 
+            'sortBy', 'sortDir'
+        ));
     }
 
     public function create()

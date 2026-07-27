@@ -176,10 +176,40 @@
     <table class="table-dense">
         <thead>
             <tr>
-                <th width="32%">No. SPPM / Dokumen</th>
+                <th width="32%">
+                    <!-- Link Sorting untuk No. SPPM -->
+                    <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_no', 'sort_dir' => ($sortBy == 'sppm_no' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
+                        No. SPPM / Dokumen
+                        @if($sortBy == 'sppm_no')
+                            <i class="fa-solid fa-sort-{{ $sortDir == 'asc' ? 'up' : 'down' }} ms-1"></i>
+                        @else
+                            <i class="fa-solid fa-sort text-muted ms-1 opacity-50"></i>
+                        @endif
+                    </a>
+                </th>
                 <th width="15%">Kategori</th>
-                <th width="13%">Tgl Dokumen</th>
-                <th width="20%">Pembaruan Terakhir</th>
+                <th width="13%">
+                    <!-- Link Sorting untuk Tgl Dokumen -->
+                    <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_date', 'sort_dir' => ($sortBy == 'sppm_date' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
+                        Tgl Dokumen
+                        @if($sortBy == 'sppm_date')
+                            <i class="fa-solid fa-sort-{{ $sortDir == 'asc' ? 'up' : 'down' }} ms-1"></i>
+                        @else
+                            <i class="fa-solid fa-sort text-muted ms-1 opacity-50"></i>
+                        @endif
+                    </a>
+                </th>
+                <th width="20%">
+                    <!-- Link Sorting untuk Pembaruan Terakhir -->
+                    <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'created_at', 'sort_dir' => ($sortBy == 'created_at' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
+                        Pembaruan Terakhir
+                        @if($sortBy == 'created_at')
+                            <i class="fa-solid fa-sort-{{ $sortDir == 'asc' ? 'up' : 'down' }} ms-1"></i>
+                        @else
+                            <i class="fa-solid fa-sort text-muted ms-1 opacity-50"></i>
+                        @endif
+                    </a>
+                </th>
                 <th width="12%" class="text-center">Status</th>
                 <th width="8%" class="text-center">Aksi</th>
             </tr>
