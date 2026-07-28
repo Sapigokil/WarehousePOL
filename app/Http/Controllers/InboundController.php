@@ -678,7 +678,7 @@ class InboundController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    // --- FUNGSI HANDLE UPLOAD EXCEL ---
+    // --- FUNGSI HANDLE UPLOAD EXCEL INBOUND ---
     public function importExcel(Request $request)
     {
         $request->validate([
@@ -750,7 +750,7 @@ class InboundController extends Controller
 
         $rowCounter = 0;
         $insertedDataCount = 0;
-        $importedSppms = []; // Array untuk mencatat SPPM yang berhasil di-import ke LOG
+        $importedSppms = []; 
 
         DB::beginTransaction();
         try {
@@ -806,6 +806,13 @@ class InboundController extends Controller
                     $qty = isset($data[$colIndex]) ? (int) str_replace(['.', ','], '', $data[$colIndex]) : 0;
 
                     if ($qty > 0) {
+                        $isSerialized = ($material->pakai_seri == 1);
+                        
+                        $finalPrefix = $isSerialized ? $serialParsed['prefix'] : null;
+                        $finalStart  = $isSerialized ? $serialParsed['start'] : null;
+                        $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
+
+                        // 1. Rekam jejak fisik dokumen penerimaan (Mutlak sesuai fisik Excel)
                         InDetail::create([
                             'in_sppm_id'        => $sppm->id,
                             'material_id'       => $material->id,
@@ -813,39 +820,167 @@ class InboundController extends Controller
                             'qty_huruf'         => null,
                             'harga_satuan'      => 0,
                             'harga_total'       => 0,
-                            'sppm_serial_prefix'=> $serialParsed['prefix'],
-                            'sppm_serial_start' => $serialParsed['start'],
-                            'sppm_serial_end'   => $serialParsed['end'],
+                            'sppm_serial_prefix'=> $finalPrefix,
+                            'sppm_serial_start' => $finalStart,
+                            'sppm_serial_end'   => $finalEnd,
                         ]);
 
                         InStock::create([
                             'in_log_id'    => $log->id,
                             'material_id'  => $material->id,
                             'qty_received' => $qty,
-                            'serial_prefix'=> $serialParsed['prefix'],
-                            'serial_start' => $serialParsed['start'],
-                            'serial_end'   => $serialParsed['end'],
+                            'serial_prefix'=> $finalPrefix,
+                            'serial_start' => $finalStart,
+                            'serial_end'   => $finalEnd,
                         ]);
 
-                        Stock::create([
-                            'no_surat_masuk' => $sppm->sppm_no,
-                            'tgl_masuk'      => $tglPenerimaan,
-                            'material_id'    => $material->id,
-                            'warehouse_id'   => $warehouseId,
-                            'prefix'         => $serialParsed['prefix'],
-                            'seri_awal'      => $serialParsed['start'],
-                            'seri_akhir'     => $serialParsed['end'],
-                            'qty'            => $qty,
-                            'harga_satuan'   => 0,
-                            'total_harga'    => 0,
-                            'status'         => '-',
-                            'keterangan'     => 'Import otomatis via CSV',
-                        ]);
+                        // 2. Logika Auto-Reconciliation (Pelunasan Utang Gudang)
+                        if ($isSerialized) {
+                            $unfulfilled = [['awal' => $finalStart, 'akhir' => $finalEnd]];
+
+                            // Cari semua stok minus untuk material & prefix ini
+                            $negStocks = Stock::where('material_id', $material->id)
+                                              ->where('qty', '<', 0)
+                                              ->where('prefix', $finalPrefix)
+                                              ->orderBy('created_at', 'asc')
+                                              ->lockForUpdate()
+                                              ->get();
+
+                            foreach ($negStocks as $negStock) {
+                                if (empty($unfulfilled)) break;
+                                $new_unfulfilled = [];
+
+                                foreach ($unfulfilled as $inc) {
+                                    $overlapAwal = max($negStock->seri_awal, $inc['awal']);
+                                    $overlapAkhir = min($negStock->seri_akhir, $inc['akhir']);
+
+                                    if ($overlapAwal <= $overlapAkhir) {
+                                        // Ditemukan kecocokan antara barang masuk dan utang minus
+                                        if ($overlapAwal == $negStock->seri_awal && $overlapAkhir == $negStock->seri_akhir) {
+                                            // Utang Lunas Sepenuhnya
+                                            $negStock->qty = 0;
+                                            $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                            $negStock->status = '-';
+                                            $negStock->save();
+                                        } else {
+                                            // Utang Lunas Sebagian (Mecah baris utang)
+                                            $paidStock = $negStock->replicate();
+                                            $paidStock->qty = 0;
+                                            $paidStock->seri_awal = $overlapAwal;
+                                            $paidStock->seri_akhir = $overlapAkhir;
+                                            $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                            $paidStock->status = '-';
+                                            $paidStock->save();
+
+                                            // Buat sisa utang kiri jika ada
+                                            if ($negStock->seri_awal < $overlapAwal) {
+                                                $leftNeg = $negStock->replicate();
+                                                $leftNeg->qty = -( ($overlapAwal - 1) - $negStock->seri_awal + 1 );
+                                                $leftNeg->seri_akhir = $overlapAwal - 1;
+                                                $leftNeg->save();
+                                            }
+                                            // Buat sisa utang kanan jika ada
+                                            if ($negStock->seri_akhir > $overlapAkhir) {
+                                                $rightNeg = $negStock->replicate();
+                                                $rightNeg->qty = -( $negStock->seri_akhir - ($overlapAkhir + 1) + 1 );
+                                                $rightNeg->seri_awal = $overlapAkhir + 1;
+                                                $rightNeg->save();
+                                            }
+                                            // Hapus baris utang asli yang sudah dipecah
+                                            $negStock->delete();
+                                        }
+
+                                        // Kurangi sisa barang masuk yang sudah dipakai bayar utang
+                                        if ($inc['awal'] < $overlapAwal) {
+                                            $new_unfulfilled[] = ['awal' => $inc['awal'], 'akhir' => $overlapAwal - 1];
+                                        }
+                                        if ($inc['akhir'] > $overlapAkhir) {
+                                            $new_unfulfilled[] = ['awal' => $overlapAkhir + 1, 'akhir' => $inc['akhir']];
+                                        }
+                                    } else {
+                                        $new_unfulfilled[] = $inc; // Tidak ada yang cocok, biarkan utuh
+                                    }
+                                }
+                                $unfulfilled = $new_unfulfilled;
+                            }
+
+                            // Sisa barang masuk yang tidak terpakai bayar utang akan menjadi stok positif
+                            foreach ($unfulfilled as $u) {
+                                $qtySisa = $u['akhir'] - $u['awal'] + 1;
+                                Stock::create([
+                                    'no_surat_masuk' => $sppm->sppm_no,
+                                    'tgl_masuk'      => $tglPenerimaan,
+                                    'material_id'    => $material->id,
+                                    'warehouse_id'   => $warehouseId,
+                                    'prefix'         => $finalPrefix,
+                                    'seri_awal'      => $u['awal'],
+                                    'seri_akhir'     => $u['akhir'],
+                                    'qty'            => $qtySisa,
+                                    'harga_satuan'   => 0,
+                                    'total_harga'    => 0,
+                                    'status'         => '-',
+                                    'keterangan'     => 'Import otomatis via CSV',
+                                ]);
+                            }
+
+                        } else {
+                            // --- AUTO RECONCILIATION BULK (NON-SERI) ---
+                            $qty_incoming = $qty;
+                            $negStocks = Stock::where('material_id', $material->id)
+                                              ->where('qty', '<', 0)
+                                              ->orderBy('created_at', 'asc')
+                                              ->lockForUpdate()
+                                              ->get();
+
+                            foreach($negStocks as $negStock) {
+                                if ($qty_incoming <= 0) break;
+
+                                $utang = abs($negStock->qty);
+                                $bayar = min($utang, $qty_incoming);
+
+                                if ($bayar == $utang) {
+                                    // Utang Lunas Sepenuhnya
+                                    $negStock->qty = 0;
+                                    $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                    $negStock->status = '-';
+                                    $negStock->save();
+                                } else {
+                                    // Utang Lunas Sebagian
+                                    $paidStock = $negStock->replicate();
+                                    $paidStock->qty = 0;
+                                    $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                    $paidStock->status = '-';
+                                    $paidStock->save();
+
+                                    $negStock->qty += $bayar; 
+                                    $negStock->save();
+                                }
+                                $qty_incoming -= $bayar;
+                            }
+
+                            // Sisa barang bulk masuk yang tidak terpakai bayar utang
+                            if ($qty_incoming > 0) {
+                                Stock::create([
+                                    'no_surat_masuk' => $sppm->sppm_no,
+                                    'tgl_masuk'      => $tglPenerimaan,
+                                    'material_id'    => $material->id,
+                                    'warehouse_id'   => $warehouseId,
+                                    'prefix'         => null,
+                                    'seri_awal'      => null,
+                                    'seri_akhir'     => null,
+                                    'qty'            => $qty_incoming,
+                                    'harga_satuan'   => 0,
+                                    'total_harga'    => 0,
+                                    'status'         => '-',
+                                    'keterangan'     => 'Import otomatis via CSV',
+                                ]);
+                            }
+                        }
                     }
                 }
                 
                 $insertedDataCount++;
-                $importedSppms[] = $noSppm; // Catat nomor SPPM ke array log
+                $importedSppms[] = $noSppm; 
             }
             fclose($handle);
             
@@ -870,6 +1005,6 @@ class InboundController extends Controller
             return redirect()->back()->with('error', 'Gagal memproses file import: ' . $e->getMessage());
         }
 
-        return redirect()->route('inbound.index')->with('success', "Data Inbound berhasil diimport ($insertedDataCount baris dokumen SPPM).");
+        return redirect()->route('inbound.index')->with('success', "Data Inbound berhasil diimport ($insertedDataCount baris dokumen SPPM). Sistem juga telah melakukan Auto-Reconciliation pada utang stok jika ada.");
     }
 }
