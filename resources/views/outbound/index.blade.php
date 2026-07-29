@@ -77,19 +77,63 @@
     </div>
 @endif
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <form method="GET" action="{{ route('outbounds.index') }}" class="d-flex align-items-center w-100">
-        <div class="me-3 d-flex align-items-center">
-            <select name="limit" class="form-select form-select-sm shadow-sm border-0 bg-white" onchange="this.form.submit()" style="width: 70px;">
+<div class="mb-3 p-3 bg-white shadow-sm border rounded">
+    <form method="GET" action="{{ route('outbounds.index') }}" class="row g-2 align-items-center">
+        <!-- Input Tersembunyi untuk mempertahankan Sorting saat Filter aktif -->
+        <input type="hidden" name="sort_by" value="{{ $sortBy }}">
+        <input type="hidden" name="sort_dir" value="{{ $sortDir }}">
+
+        <!-- Filter Tampil (Limit) -->
+        <div class="col-auto">
+            <select name="limit" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 75px;" title="Jumlah Tampil">
                 <option value="10" {{ $limit == 10 ? 'selected' : '' }}>10</option>
                 <option value="25" {{ $limit == 25 ? 'selected' : '' }}>25</option>
                 <option value="50" {{ $limit == 50 ? 'selected' : '' }}>50</option>
             </select>
         </div>
-        <div class="flex-grow-1"></div>
-        <div class="input-group input-group-sm shadow-sm" style="width: 300px;">
-            <input type="text" name="search" class="form-control border-0 px-3 py-2" placeholder="Cari No SPPM / Tujuan..." value="{{ $search }}">
-            <button class="btn btn-white border-0 bg-white px-3" type="submit"><i class="fa-solid fa-magnifying-glass text-muted"></i></button>
+
+        <!-- Filter Tahun -->
+        <div class="col-auto">
+            <select name="year" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 100px;">
+                <option value="">-- Tahun --</option>
+                @foreach($years as $yr)
+                    <option value="{{ $yr }}" {{ (isset($yearFilter) && $yearFilter == $yr) ? 'selected' : '' }}>{{ $yr }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <!-- Filter Kategori -->
+        <div class="col-auto">
+            <select name="category_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 180px;">
+                <option value="">-- Semua Kategori --</option>
+                @foreach($categories as $cat)
+                    <option value="{{ $cat->id }}" {{ (isset($categoryId) && $categoryId == $cat->id) ? 'selected' : '' }}>{{ strtoupper($cat->name) }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <!-- Filter Tujuan -->
+        <div class="col-auto">
+            <select name="destination_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 200px;">
+                <option value="">-- Semua Tujuan / Kesatuan --</option>
+                @foreach($destinations as $dest)
+                    <option value="{{ $dest->id }}" {{ (isset($destinationId) && $destinationId == $dest->id) ? 'selected' : '' }}>{{ $dest->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <!-- Spacer -->
+        <div class="col"></div>
+
+        <!-- Pencarian Teks -->
+        <div class="col-auto">
+            <div class="input-group input-group-sm" style="width: 250px;">
+                <input type="text" name="search" class="form-control px-3" placeholder="Cari No SPPM / Tujuan..." value="{{ $search }}">
+                <button class="btn btn-primary px-3" type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
+                @if($search || $categoryId || $destinationId || $yearFilter)
+                    <a href="{{ route('outbounds.index') }}" class="btn btn-outline-danger" title="Reset Semua Filter"><i class="fa-solid fa-xmark"></i></a>
+                @endif
+            </div>
         </div>
     </form>
 </div>
@@ -99,7 +143,6 @@
         <thead>
             <tr>
                 <th width="25%">
-                    <!-- Link Sorting untuk No Dokumen SPPM -->
                     <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_no', 'sort_dir' => ($sortBy == 'sppm_no' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                         No Dokumen SPPM
                         @if($sortBy == 'sppm_no')
@@ -109,9 +152,17 @@
                         @endif
                     </a>
                 </th>
-                <th width="20%">Tujuan Pengiriman</th>
+                <th width="20%">
+                    <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'destination_name', 'sort_dir' => ($sortBy == 'destination_name' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
+                        Tujuan Pengiriman
+                        @if($sortBy == 'destination_name')
+                            <i class="fa-solid fa-sort-{{ $sortDir == 'asc' ? 'up' : 'down' }} ms-1"></i>
+                        @else
+                            <i class="fa-solid fa-sort text-muted ms-1 opacity-50"></i>
+                        @endif
+                    </a>
+                </th>
                 <th width="15%">
-                    <!-- Link Sorting untuk Tgl Dokumen -->
                     <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_date', 'sort_dir' => ($sortBy == 'sppm_date' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                         Tgl Dokumen
                         @if($sortBy == 'sppm_date')
@@ -122,7 +173,6 @@
                     </a>
                 </th>
                 <th width="15%">
-                    <!-- Link Sorting untuk Pembaruan Terakhir -->
                     <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'created_at', 'sort_dir' => ($sortBy == 'created_at' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                         Pembaruan Terakhir
                         @if($sortBy == 'created_at')
@@ -252,7 +302,7 @@
             <tr>
                 <td colspan="6" class="text-center py-5 text-muted bg-white">
                     <i class="fa-solid fa-file-circle-xmark fs-2 mb-2 opacity-25"></i>
-                    <p class="mb-0 small">Belum ada dokumen SPPM Keluar.</p>
+                    <p class="mb-0 small">Belum ada dokumen SPPM Keluar atau data tidak ditemukan.</p>
                 </td>
             </tr>
             @endforelse

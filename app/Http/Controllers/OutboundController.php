@@ -39,33 +39,76 @@ class OutboundController extends Controller
     {
         $search = $request->input('search');
         $limit = $request->input('limit', 10);
+        
+        // Menangkap parameter filter
+        $categoryId = $request->input('category_id');
+        $destinationId = $request->input('destination_id');
+        $yearFilter = $request->input('year'); // Parameter filter tahun
 
         // Menangkap parameter sorting, default ke sppm_date menurun (terbaru)
         $sortBy = $request->input('sort_by', 'sppm_date');
         $sortDir = $request->input('sort_dir', 'desc');
 
         // Mencegah manipulasi nama kolom
-        $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at']; 
+        $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at', 'destination_name']; 
         if (!in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'sppm_date';
         }
         
         $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
 
-        $outbounds = OutSppm::with(['destination', 'details.material', 'logs.outStocks', 'updater'])
-            ->when($search, function ($query, $search) {
-                return $query->where('sppm_no', 'like', "%{$search}%")
-                             ->orWhereHas('destination', function($q) use ($search) {
-                                 $q->where('name', 'like', "%{$search}%");
-                             });
-            })
-            ->orderBy($sortBy, $sortDir)
-            ->paginate($limit)
-            ->withQueryString();
+        // Inisialisasi Query Model
+        $modelTable = (new \App\Models\OutSppm)->getTable();
+        $query = \App\Models\OutSppm::with(['destination', 'details.material', 'logs.outStocks', 'updater'])
+                    ->select($modelTable . '.*'); // Select eksplisit agar ID tidak tertimpa saat Join
 
-        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        // Filter Pencarian Text
+        if ($search) {
+            $query->where(function ($q) use ($search, $modelTable) {
+                $q->where($modelTable . '.sppm_no', 'like', "%{$search}%")
+                  ->orWhereHas('destination', function($q2) use ($search) {
+                      $q2->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
 
-        return view('outbound.index', compact('outbounds', 'search', 'limit', 'categories', 'sortBy', 'sortDir'));
+        // Filter Kategori Materiil
+        if ($categoryId) {
+            $query->whereHas('details.material', function($q) use ($categoryId) {
+                $q->where('material_category_id', $categoryId);
+            });
+        }
+
+        // Filter Tujuan Pengiriman
+        if ($destinationId) {
+            $query->where($modelTable . '.destination_id', $destinationId);
+        }
+
+        // --- REVISI: Filter Tahun berdasarkan sppm_date ---
+        if ($yearFilter) {
+            $query->whereYear($modelTable . '.sppm_date', $yearFilter);
+        }
+
+        // Logika Sorting
+        if ($sortBy === 'destination_name') {
+            $query->leftJoin('destinations', $modelTable . '.destination_id', '=', 'destinations.id')
+                  ->orderBy('destinations.name', $sortDir);
+        } else {
+            $query->orderBy($modelTable . '.' . $sortBy, $sortDir);
+        }
+
+        $outbounds = $query->paginate($limit)->withQueryString();
+
+        $categories = \App\Models\MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+
+        // --- REVISI: Mengambil daftar tahun yang tersedia dari data sppm_date ---
+        $years = \App\Models\OutSppm::selectRaw('YEAR(sppm_date) as year')
+                    ->distinct()
+                    ->orderBy('year', 'desc')
+                    ->pluck('year');
+
+        return view('outbound.index', compact('outbounds', 'search', 'limit', 'categories', 'destinations', 'sortBy', 'sortDir', 'categoryId', 'destinationId', 'years', 'yearFilter'));
     }
 
     public function create()

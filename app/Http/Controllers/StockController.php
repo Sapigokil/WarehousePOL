@@ -20,7 +20,6 @@ class StockController extends Controller
             $q->whereNull('parent_id')
               ->when($search, function($query) use ($search) {
                   
-                  // Helper Subquery untuk mencari berdasarkan SPPM, Prefix, dan Rentang Seri Gudang
                   $stockSearchQuery = function($sub) use ($search) {
                       $cleanNum = preg_replace('/[^0-9]/', '', $search);
                       $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
@@ -65,7 +64,6 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // Perhitungan Total Stok untuk halaman depan (Index)
         $stockTotals = Stock::join('materials', 'stocks.material_id', '=', 'materials.id')
             ->selectRaw('stocks.material_id, SUM(CASE WHEN materials.pakai_seri = 1 AND stocks.qty < 0 THEN 0 ELSE stocks.qty END) as total_qty')
             ->groupBy('stocks.material_id')
@@ -77,53 +75,99 @@ class StockController extends Controller
         return view('stocks.stock_index', compact('categories', 'stockTotals', 'search', 'category_filter', 'allCategories'));
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $material = Material::with('category')->findOrFail($id);
+        
+        $search = $request->input('search');
+        $sortBy = $request->input('sort', 'tgl_masuk'); // default sort
+        $sortOrder = $request->input('order', 'desc'); // default order
 
-        // Ambil SEMUA riwayat kedatangan (kecuali yang QTY 0)
-        $allStockDetails = Stock::with('warehouse')
+        $query = Stock::with('warehouse')
             ->where('material_id', $id)
-            ->where('qty', '!=', 0)
-            ->orderBy('tgl_masuk', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->where('qty', '!=', 0);
 
-        // Pisahkan Stok Normal (Positif) dan Stok Minus
+        // Filter Pencarian
+        if (!empty($search) && $material->pakai_seri == 1) {
+            $query->where(function($q) use ($search) {
+                $cleanNum = preg_replace('/[^0-9]/', '', $search);
+                $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
+                $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
+
+                $q->where('no_surat_masuk', 'like', "%{$search}%")
+                  ->orWhere('prefix', 'like', "%{$search}%");
+
+                if ($cleanNum !== null) {
+                    $q->orWhere(function($q2) use ($cleanNum, $prefixStr) {
+                        $q2->where('seri_awal', '<=', $cleanNum)
+                           ->where('seri_akhir', '>=', $cleanNum);
+                        
+                        if (!empty($prefixStr)) {
+                            $q2->where('prefix', 'like', "%{$prefixStr}%");
+                        }
+                    });
+                }
+            });
+        }
+
+        // Sorting Logika
+        $allowedSorts = ['no_surat_masuk', 'tgl_masuk', 'warehouse_id', 'seri_awal', 'qty'];
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortOrder);
+        } else {
+            $query->orderBy('tgl_masuk', 'desc')->orderBy('created_at', 'desc');
+        }
+
+        $allStockDetails = $query->get();
+
         $normalStocks = $allStockDetails->where('qty', '>', 0)->values();
         $minusStocks  = $allStockDetails->where('qty', '<', 0)->values();
 
-        // Perhitungan Total Stok untuk halaman Header Show
         if ($material->pakai_seri == 1) {
             $totalStock = $normalStocks->sum('qty');
+            
+            // --- REVISI: GROUPING BERDASARKAN PREFIX & TAHUN ---
+            if ($normalStocks->isNotEmpty()) {
+                $normalStocks = $normalStocks->groupBy(function($item) {
+                    $prefix = $item->prefix ?: 'TANPA PREFIX';
+                    $tahun = date('Y', strtotime($item->tgl_masuk));
+                    return $prefix . ' - TAHUN ' . $tahun;
+                });
+            } else {
+                $normalStocks = collect();
+            }
+
         } else {
             $totalStock = $allStockDetails->sum('qty');
-        }
-
-        // --- REVISI BARU: PENGGABUNGAN STOK NON-SERI BERDASARKAN GUDANG ---
-        if ($material->pakai_seri != 1 && $normalStocks->isNotEmpty()) {
-            $groupedNormal = collect();
-            foreach ($normalStocks->groupBy('warehouse_id') as $wId => $stocks) {
-                $firstStock = $stocks->first();
+            
+            if ($normalStocks->isNotEmpty()) {
+                $groupedNormal = collect();
+                foreach ($normalStocks->groupBy('warehouse_id') as $wId => $stocks) {
+                    $firstStock = $stocks->first();
+                    $mergedStock = new \stdClass();
+                    $mergedStock->no_surat_masuk = strtoupper($firstStock->warehouse->name ?? 'GUDANG UTAMA');
+                    $mergedStock->tgl_masuk = $stocks->max('tgl_masuk');
+                    $mergedStock->warehouse = (object)['name' => $firstStock->warehouse->name ?? '-'];
+                    $mergedStock->prefix = null;
+                    $mergedStock->seri_awal = null;
+                    $mergedStock->seri_akhir = null;
+                    $mergedStock->qty = $stocks->sum('qty');
+                    $mergedStock->keterangan = 'Akumulasi Total Fisik di Gudang';
+                    
+                    $groupedNormal->push($mergedStock);
+                }
+                $normalStocks = $groupedNormal;
                 
-                // Buat object virtual agar kompatibel dengan View
-                $mergedStock = new \stdClass();
-                $mergedStock->no_surat_masuk = strtoupper($firstStock->warehouse->name ?? 'GUDANG UTAMA'); // Ganti SPPM dengan Nama Gudang
-                $mergedStock->tgl_masuk = $stocks->max('tgl_masuk'); // Ambil tanggal update terakhir
-                $mergedStock->warehouse = (object)['name' => $firstStock->warehouse->name ?? '-'];
-                $mergedStock->prefix = null;
-                $mergedStock->seri_awal = null;
-                $mergedStock->seri_akhir = null;
-                $mergedStock->qty = $stocks->sum('qty'); // Akumulasi QTY
-                $mergedStock->keterangan = 'Akumulasi Total Fisik di Gudang';
-                
-                $groupedNormal->push($mergedStock);
+                // Urutkan ulang array virtual (karena stdClass) jika disort selain tanggal
+                if ($sortBy == 'qty') {
+                    $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy('qty') : $normalStocks->sortByDesc('qty');
+                } elseif ($sortBy == 'no_surat_masuk') {
+                    $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy('no_surat_masuk') : $normalStocks->sortByDesc('no_surat_masuk');
+                }
             }
-            $normalStocks = $groupedNormal;
         }
-        // ------------------------------------------------------------------
 
-        // Penggabungan Stok Minus (Sama seperti sebelumnya)
+        // Penggabungan Stok Minus sesuai Kesepakatan (Merge Contiguous)
         $totalMinusQty = 0;
         $mergedMinusRanges = [];
 
@@ -167,7 +211,7 @@ class StockController extends Controller
         }
 
         return view('stocks.stock_detail', compact(
-            'material', 'normalStocks', 'totalStock', 'totalMinusQty', 'mergedMinusRanges'
+            'material', 'normalStocks', 'totalStock', 'totalMinusQty', 'mergedMinusRanges', 'sortBy', 'sortOrder'
         ));
     }
 
