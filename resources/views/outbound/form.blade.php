@@ -76,7 +76,7 @@
                 <div class="row">
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Nomor SPPM Keluar</label>
-                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', $outbound->sppm_no ?? '') }}" required placeholder="Contoh: OUT/001/2026" {{ $isCompleted ? 'readonly' : '' }}>
+                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', $outbound->sppm_no ?? $generatedSppm ?? '') }}" required placeholder="Contoh: SPPM/001/X/2026/DITLANTAS" {{ isset($isCompleted) && $isCompleted ? 'readonly' : '' }}>
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Tgl Surat Keluar</label>

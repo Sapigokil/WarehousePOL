@@ -116,7 +116,42 @@ class OutboundController extends Controller
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
         $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
 
-        return view('outbound.form', compact('categories', 'destinations'));
+        // 1. Dapatkan Tahun dan Bulan saat ini
+        $currentYear = date('Y');
+        $currentMonth = date('n');
+
+        // 2. Konversi Bulan ke Angka Romawi
+        $romanMonths = [
+            1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI',
+            7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X', 11 => 'XI', 12 => 'XII'
+        ];
+        $romanMonth = $romanMonths[$currentMonth];
+
+        // 3. Cari SPPM terakhir di tahun yang berjalan
+        // Menggunakan LIKE untuk memastikan hanya mengambil dokumen di tahun tersebut
+        $latestSppm = \App\Models\OutSppm::where('sppm_no', 'like', "SPPM/%/%/{$currentYear}/DITLANTAS")
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $nextNumber = 1; // Default jika ini adalah dokumen pertama di awal tahun
+
+        // 4. Ekstrak angka dari nomor terakhir dan tambahkan 1
+        if ($latestSppm) {
+            // Format asumsi: SPPM/123/VII/2026/DITLANTAS
+            // Kita pecah berdasarkan garis miring (/)
+            $parts = explode('/', $latestSppm->sppm_no);
+            
+            // Angka urut berada di index ke-1 (setelah 'SPPM')
+            if (isset($parts[1]) && is_numeric($parts[1])) {
+                $nextNumber = (int)$parts[1] + 1;
+            }
+        }
+
+        // 5. Susun string SPPM baru
+        $generatedSppm = "SPPM/{$nextNumber}/{$romanMonth}/{$currentYear}/DITLANTAS";
+
+        // Kirim variabel $generatedSppm ke view
+        return view('outbound.form', compact('categories', 'destinations', 'generatedSppm'));
     }
 
     public function store(Request $request)

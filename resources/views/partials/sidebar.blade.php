@@ -45,7 +45,7 @@
                 </a>
             </li>
             <li>
-                <a href="#" class="sidebar-link">
+                <a href="{{ route('distribusi.index') }}" class="sidebar-link">
                     <i class="fa-solid fa-truck-fast"></i> Distribusi
                 </a>
             </li>

@@ -65,6 +65,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('/outbound/template-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'downloadTemplate'])->name('outbound.template.khusus');
         Route::post('/outbound/import-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'import'])->name('outbound.import.khusus');
 
+        Route::get('/distribusi', [\App\Http\Controllers\DistribusiController::class, 'index'])->name('distribusi.index');
     });
 
     /* ==============================================
