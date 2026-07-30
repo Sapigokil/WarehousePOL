@@ -106,6 +106,11 @@
                                     <i class="fa-solid fa-table-columns me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Mapping SIMAK
                                 </a>
                             </li>
+                            <li>
+                                <a href="{{ route('report.inout.settings') }}" class="sidebar-link {{ request()->routeIs('report.inout.settings') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-table-columns me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Mapping In/Out
+                                </a>
+                            </li>
                         </ul>
                     </div>
                 </li>

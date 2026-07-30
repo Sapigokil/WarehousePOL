@@ -94,6 +94,10 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'simakMapping'])->name('settings.reports.simak');
         Route::post('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'storeSimakMapping'])->name('settings.reports.simak.store');
 
+        Route::get('/reports/settings/inout', [\App\Http\Controllers\ReportInOutController::class, 'settings'])->name('report.inout.settings');
+        Route::post('/reports/settings/inout', [\App\Http\Controllers\ReportInOutController::class, 'updateSettings'])->name('report.inout.settings.update');
+
+
     });
 
     /* ==============================================

@@ -22,6 +22,9 @@ class Material extends Model
         'ismain',
         'jmlxinduk',
         'keterangan',
+        'tnkb_rpt',
+        'tnkb_r',
+        'tnkb_ev',
     ];
 
     public function category(): BelongsTo
