@@ -43,6 +43,7 @@
     </div>
     <div class="d-flex gap-2">
         @if($isCompleted)
+            <!-- TOMBOL CETAK NEW TAB -->
             <a href="{{ route('outbounds.print', $outbound->id) }}" target="_blank" class="btn btn-sm btn-info text-white fw-bold shadow-sm px-3"><i class="fa-solid fa-print me-1"></i> Cetak SPPM</a>
         @endif
         <a href="{{ route('outbounds.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
@@ -93,6 +94,7 @@
                                     <option value="{{ $dest->id }}" {{ old('destination_id', $outbound->destination_id ?? '') == $dest->id ? 'selected' : '' }}>{{ $dest->name }}</option>
                                 @endforeach
                             </select>
+                            
                         @endif
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
@@ -113,23 +115,23 @@
                         <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan', $outbound->keterangan ?? '') }}" placeholder="Catatan pengiriman..." {{ $isCompleted ? 'readonly' : '' }}>
                     </div>
                     <!-- KOTAK INFO PEJABAT BAMAT -->
-                    <div id="bamatInfo" class="mt-2 p-3 bg-light border rounded d-none">
-                        <h6 class="fw-bold mb-2 text-muted" style="font-size: 0.8rem;"><i class="fa-solid fa-address-card me-1"></i> Info Pejabat Bamat</h6>
-                        <div class="row small">
-                            <div class="col-md-4 mb-2 mb-md-0">
-                                <span class="text-muted d-block" style="font-size: 0.7rem;">Nama:</span>
-                                <strong id="infoNama" class="text-dark">-</strong>
+                            <div id="bamatInfo" class="mt-2 p-3 bg-light border rounded d-none">
+                                <h6 class="fw-bold mb-2 text-muted" style="font-size: 0.8rem;"><i class="fa-solid fa-address-card me-1"></i> Info Pejabat Bamat</h6>
+                                <div class="row small">
+                                    <div class="col-md-4 mb-2 mb-md-0">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Nama:</span>
+                                        <strong id="infoNama" class="text-dark">-</strong>
+                                    </div>
+                                    <div class="col-md-4 mb-2 mb-md-0">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Pangkat / NRP:</span>
+                                        <strong id="infoPangkat" class="text-dark">-</strong>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <span class="text-muted d-block" style="font-size: 0.7rem;">Jabatan:</span>
+                                        <strong id="infoJabatan" class="text-dark">-</strong>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-md-4 mb-2 mb-md-0">
-                                <span class="text-muted d-block" style="font-size: 0.7rem;">Pangkat / NRP:</span>
-                                <strong id="infoPangkat" class="text-dark">-</strong>
-                            </div>
-                            <div class="col-md-4">
-                                <span class="text-muted d-block" style="font-size: 0.7rem;">Jabatan:</span>
-                                <strong id="infoJabatan" class="text-dark">-</strong>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -189,6 +191,7 @@
                                                     </div>
                                                 @endif
                                             @endif
+
                                         </td>
                                         <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">{{ $detail->material->satuan }}</td>
                                         <td class="text-center align-middle"><span class="badge bg-secondary">-</span></td>
@@ -222,49 +225,6 @@
         </div>
     </div>
 </form>
-
-<!-- MODAL WIZARD SERI -->
-<div class="modal fade" id="modalSeriWizard" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light border-bottom-0 pb-3">
-                <h6 class="modal-title fw-bold text-primary"><i class="fa-solid fa-wand-magic-sparkles me-2"></i> Wizard Pemilihan Seri Stok Gudang</h6>
-                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 bg-white">
-                <div class="d-flex justify-content-between mb-3">
-                    <div><span class="text-muted small">Materiil:</span> <strong id="wizard-mat-name" class="d-block text-dark"></strong></div>
-                    <div class="text-end"><span class="text-muted small">Target Qty Keluar:</span> <strong id="wizard-target-qty" class="d-block text-danger fs-5">0</strong></div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover" style="font-size: 0.85rem;">
-                        <thead class="bg-light text-center">
-                            <tr>
-                                <th width="5%">Pilih</th>
-                                <th width="45%">Rentang Seri Tersedia di Gudang</th>
-                                <th width="20%">Sisa Stok</th>
-                                <th width="30%">Qty Diambil</th>
-                            </tr>
-                        </thead>
-                        <tbody id="wizard-stock-list">
-                            <!-- Diisi oleh JS -->
-                        </tbody>
-                    </table>
-                </div>
-                <div class="alert alert-info mt-3 py-2 d-flex justify-content-between align-items-center mb-0 border-0 shadow-sm">
-                    <strong>Total Diambil: <span id="wizard-total-taken" class="text-primary fs-5">0</span></strong>
-                    <strong>Status: <span id="wizard-status" class="text-danger">Kekurangan</span></strong>
-                </div>
-            </div>
-            <div class="modal-footer bg-light border-0">
-                <input type="hidden" id="wizard-index">
-                <input type="hidden" id="wizard-stocks-data">
-                <button type="button" class="btn btn-sm btn-light border fw-bold px-3" data-bs-dismiss="modal">Batal</button>
-                <button type="button" id="btn-apply-wizard" class="btn btn-sm btn-primary fw-bold px-4">Terapkan Seri</button>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection
 
 @push('scripts')
@@ -298,34 +258,51 @@
     }
 
     function formatSeriVisual(num) {
-        let s = num.toString().replace(/\D/g, ''); 
-        if (!s) return '';
-        s = s.padStart(9, '0');
-        return s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        let s = num.toString().padStart(9, '0');
+        return s.substring(0,3) + '.' + s.substring(3,6) + '.' + s.substring(6,9);
     }
 
-    // FUNGSI HELPER: Sinkronisasi Teks, Kalkulasi Harga & Total (FIFO)
-    function updateRowValues(idx, qty, inputElement) {
-        const letterSpan = document.getElementById(`letter-span-${idx}`);
-        if (letterSpan) {
-            letterSpan.textContent = (qty > 0) ? terbilang(qty) : '-';
-        }
+    itemsContainer.addEventListener('input', function(e) {
+        if (e.target.classList.contains('data-qty-input')) {
+            const qty = parseInt(e.target.value) || 0;
+            const idx = e.target.dataset.index;
+            const tr = e.target.closest('tr');
+            
+            const letterSpan = document.getElementById(`letter-span-${idx}`);
+            if (letterSpan) {
+                letterSpan.textContent = (qty > 0) ? terbilang(qty) : '-';
+            }
 
-        const stocksDataStr = inputElement.dataset.stocks;
-        if (stocksDataStr) {
-            try {
-                const stocks = JSON.parse(stocksDataStr);
+            const previewContainer = tr.querySelector('.serial-preview-container');
+            if (previewContainer) {
+                const prefix = previewContainer.dataset.prefix;
+                const startSeriRaw = previewContainer.dataset.start;
+                const previewText = previewContainer.querySelector('.serial-preview-text');
+                
+                if (qty > 0 && startSeriRaw && startSeriRaw !== 'null') {
+                    const startNum = parseInt(startSeriRaw, 10);
+                    const endNum = startNum + qty - 1;
+                    
+                    const pfxHtml = (prefix && prefix !== 'null') ? `<span class="text-danger fw-bold me-1">${prefix}</span>` : '';
+                    previewText.innerHTML = `${pfxHtml}${formatSeriVisual(startNum)} <span class="fw-normal text-muted mx-1">s/d</span> ${formatSeriVisual(endNum)}`;
+                } else {
+                    previewText.innerHTML = '-';
+                }
+            }
+
+            const fifoDataStr = e.target.dataset.fifo;
+            if (fifoDataStr) {
+                const fifoQueue = JSON.parse(fifoDataStr);
                 let maxPrice = 0;
                 let sisa = qty;
                 
-                for (let i = 0; i < stocks.length; i++) {
+                for (let i = 0; i < fifoQueue.length; i++) {
                     if (sisa <= 0) break;
-                    let batch = stocks[i];
-                    let stockQty = parseInt(batch.qty) || 0;
-                    let stockPrice = parseFloat(batch.harga_satuan || batch.price) || 0;
-                    
-                    let ambil = Math.min(stockQty, sisa);
-                    if (stockPrice > maxPrice) { maxPrice = stockPrice; }
+                    let batch = fifoQueue[i];
+                    let ambil = Math.min(batch.qty, sisa);
+                    if (parseFloat(batch.price) > maxPrice) {
+                        maxPrice = parseFloat(batch.price);
+                    }
                     sisa -= ambil;
                 }
                 
@@ -340,28 +317,6 @@
                 if (totalSpan) totalSpan.textContent = formatRupiah(total);
                 if (priceInput) priceInput.value = maxPrice;
                 if (totalInput) totalInput.value = total;
-            } catch(e) { console.error("Kalkulasi Harga Gagal", e); }
-        }
-    }
-
-    // EVENT: Saat Qty diketik manual
-    itemsContainer.addEventListener('input', function(e) {
-        if (e.target.classList.contains('data-qty-input')) {
-            const qty = parseInt(e.target.value) || 0;
-            const idx = e.target.dataset.index;
-            
-            updateRowValues(idx, qty, e.target);
-
-            // OTOMATISASI: Sinkronkan ke anakan jika ismain diubah
-            const isMain = e.target.dataset.ismain;
-            if (isMain == "1" || isMain === 1) {
-                const selector = '.data-qty-input[data-jmlxinduk="1"]';
-                document.querySelectorAll(selector).forEach(childInput => {
-                    if (childInput !== e.target) {
-                        childInput.value = qty;
-                        updateRowValues(childInput.dataset.index, qty, childInput);
-                    }
-                });
             }
         }
     });
@@ -388,25 +343,13 @@
                         const hasCode = (mat.code && mat.code !== '' && mat.code !== '-');
                         let codeHtml = hasCode ? `<div class="text-muted fw-bold mt-0.5" style="font-size: ${isParent ? '0.8rem' : '0.7rem'};">KODE : ${mat.code}</div>` : '';
                         
-                        let stocksData = mat.stocks || mat.fifo_queue || [];
-                        let stocksDataString = JSON.stringify(stocksData).replace(/"/g, '&quot;');
-                        
-                        const isMainVal = (mat.ismain == 1 || mat.is_main == 1) ? 1 : 0;
-                        const isJmlxVal = (mat.jmlxinduk == 1 || mat.jml_x_induk == 1) ? 1 : 0;
-                        const readonlyAttr = (isJmlxVal == 1) ? 'readonly tabindex="-1"' : '';
-                        
-                        let serialInputHtml = '';
+                        let serialPreviewHtml = '';
                         if (mat.pakai_seri == 1 && !(isParent && hasChildren)) {
-                            serialInputHtml = `
-                                <div class="mt-2 serial-inputs-container" data-index="${gIndex}" data-pakaiseri="1">
-                                    <div class="d-flex gap-1 mb-1 serial-row">
-                                        <input type="text" name="items[${gIndex}][serials][0][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx">
-                                        <input type="text" name="items[${gIndex}][serials][0][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal">
-                                        <input type="text" name="items[${gIndex}][serials][0][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir">
-                                        <button type="button" class="btn btn-sm btn-outline-primary btn-wizard px-2 shadow-sm" data-index="${gIndex}" data-matname="${mat.name}" data-stocks="${stocksDataString}" title="Pilih dari Stok Gudang">
-                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                        </button>
-                                    </div>
+                            let prefixData = mat.next_prefix || '';
+                            let startData = mat.next_seri || '';
+                            serialPreviewHtml = `
+                                <div class="mt-1 text-muted serial-preview-container" data-prefix="${prefixData}" data-start="${startData}" style="font-size: 0.7rem;">
+                                    <i class="fa-solid fa-tags opacity-50 me-1"></i> Estimasi Seri: <span class="serial-preview-text fw-bold text-dark">-</span>
                                 </div>
                             `;
                         }
@@ -416,6 +359,8 @@
                             ? `<span class="badge bg-info bg-opacity-10 text-info border border-info">${stokStr}</span>` 
                             : `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger">KOSONG</span>`;
 
+                        let fifoDataString = JSON.stringify(mat.fifo_queue || []).replace(/"/g, '&quot;');
+
                         let html = `
                             <input type="hidden" name="items[${gIndex}][material_id]" value="${mat.id}">
                             <td class="text-center fw-bold text-muted" style="font-size: 0.85rem;">${noText}</td>
@@ -423,7 +368,7 @@
                                 ${!isParent ? '<i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-1 opacity-50"></i>' : ''}
                                 <span class="text-dark d-inline-block ${isParent ? 'fw-bold' : 'fw-semibold'}" style="font-size: ${isParent ? '0.9rem' : '0.8rem'};">${mat.name}</span>
                                 ${codeHtml}
-                                ${serialInputHtml}
+                                ${serialPreviewHtml}
                             </td>
                             <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">${mat.satuan}</td>`;
 
@@ -433,7 +378,7 @@
                             html += `
                             <td class="text-center align-middle">${stockBadge}</td>
                             <td class="align-middle">
-                                <input type="number" name="items[${gIndex}][target_qty]" class="form-control form-control-sm text-center fw-bold text-danger data-qty-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" data-stocks="${stocksDataString}" min="0" max="${mat.current_stock}" ${mat.current_stock == 0 ? 'readonly disabled placeholder="0"' : 'placeholder="0"'} ${readonlyAttr}>
+                                <input type="number" name="items[${gIndex}][target_qty]" class="form-control form-control-sm text-center fw-bold text-danger data-qty-input" data-index="${gIndex}" data-fifo="${fifoDataString}" min="0" max="${mat.current_stock}" ${mat.current_stock == 0 ? 'readonly disabled placeholder="0"' : 'placeholder="0"'}>
                             </td>
                             <td class="align-middle">
                                 <span id="letter-span-${gIndex}" class="text-letter-span">-</span>
@@ -469,7 +414,7 @@
                         }
                     });
 
-                    // Trigger data draft lama
+                    // Trigger input agar nilai draft lama terisi (Pembaruan Nomor Seri Otomatis)
                     document.querySelectorAll('.data-qty-input').forEach(input => {
                         const matId = input.closest('tr').querySelector('input[name*="[material_id]"]').value;
                         if (savedTargetData[matId]) {
@@ -480,236 +425,11 @@
                 });
         });
 
+        // Trigger AJAX on page load if editing Draft
         if (categorySelector.value !== '') {
             categorySelector.dispatchEvent(new Event('change'));
         }
     }
-
-    // --- LOGIKA WIZARD SERI STOK ---
-    const modalSeriWizardEl = document.getElementById('modalSeriWizard');
-    let wizardModal;
-    if(modalSeriWizardEl) wizardModal = new bootstrap.Modal(modalSeriWizardEl);
-
-    document.addEventListener('click', function(e) {
-        const wizardBtn = e.target.closest('.btn-wizard');
-        if(wizardBtn) {
-            const idx = wizardBtn.dataset.index;
-            const matName = wizardBtn.dataset.matname;
-            const stocks = JSON.parse(wizardBtn.dataset.stocks || '[]');
-            
-            const targetQtyInput = document.querySelector(`.data-qty-input[data-index="${idx}"]`);
-            const targetQty = targetQtyInput ? (parseInt(targetQtyInput.value) || 0) : 0;
-
-            if(targetQty <= 0) {
-                alert('PENTING: Silakan ketik Target Keluar (Qty) di tabel utama terlebih dahulu sebelum memilih seri stok.');
-                return;
-            }
-
-            document.getElementById('wizard-mat-name').textContent = matName;
-            document.getElementById('wizard-target-qty').textContent = targetQty;
-            document.getElementById('wizard-index').value = idx;
-
-            const tbody = document.getElementById('wizard-stock-list');
-            tbody.innerHTML = '';
-
-            if(stocks.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Tidak ada data rentang seri tersimpan di gudang.</td></tr>`;
-            } else {
-                stocks.forEach((st, i) => {
-                    const pfx = st.prefix || st.batch_prefix || '';
-                    const awl = st.seri_awal ? formatSeriVisual(st.seri_awal) : '';
-                    const akh = st.seri_akhir ? formatSeriVisual(st.seri_akhir) : '';
-                    const price = parseFloat(st.harga_satuan || st.price) || 0;
-                    
-                    // Format Visual: PFX.xxx.xxx.xxx s/d xxx.xxx.xxx
-                    let displaySeri = '';
-                    if (awl !== '' && akh !== '') {
-                        const pfxStr = pfx ? pfx + '.' : '';
-                        displaySeri = `<span class="fw-bold text-dark">${pfxStr}${awl}</span> <span class="fw-normal text-muted mx-1">s/d</span> <span class="fw-bold text-dark">${akh}</span>`;
-                    } else {
-                        displaySeri = `<span class="text-muted fst-italic">Tanpa Rentang Seri (Null Database)</span>`;
-                    }
-
-                    // Tampilkan Badge Harga Mentah (Membantu Pelacakan)
-                    const priceBadge = price > 0 
-                        ? `<span class="badge bg-success bg-opacity-10 text-success border border-success mt-1">Rp ${formatRupiah(price).replace('Rp ', '')}</span>` 
-                        : `<span class="badge bg-secondary bg-opacity-10 text-secondary border mt-1" title="Data harga_satuan di tabel stok bernilai 0">Rp 0</span>`;
-                    
-                    tbody.innerHTML += `
-                        <tr>
-                            <td class="text-center align-middle">
-                                <input class="form-check-input wizard-check border-primary" type="checkbox" value="${i}" id="w_check_${i}" style="transform: scale(1.3);">
-                            </td>
-                            <td class="align-middle">
-                                ${displaySeri}<br>
-                                ${priceBadge}
-                                <input type="hidden" id="w_pfx_${i}" value="${pfx}">
-                                <input type="hidden" id="w_start_${i}" value="${st.seri_awal || ''}">
-                                <input type="hidden" id="w_price_${i}" value="${price}">
-                            </td>
-                            <td class="text-center align-middle fw-bold text-info fs-6" id="w_sisa_${i}">${st.qty}</td>
-                            <td class="align-middle">
-                                <input type="number" class="form-control text-center fw-bold wizard-qty text-primary" id="w_qty_${i}" max="${st.qty}" min="0" placeholder="Qty" disabled>
-                            </td>
-                        </tr>
-                    `;
-                });
-            }
-
-            calculateWizardTotal();
-            wizardModal.show();
-        }
-    });
-
-    document.addEventListener('change', function(e) {
-        if(e.target.classList.contains('wizard-check')) {
-            const i = e.target.value;
-            const qtyInput = document.getElementById(`w_qty_${i}`);
-            if(e.target.checked) {
-                qtyInput.disabled = false;
-                const target = parseInt(document.getElementById('wizard-target-qty').textContent) || 0;
-                const taken = parseInt(document.getElementById('wizard-total-taken').textContent) || 0;
-                const sisaBeli = target - taken;
-                const maxStok = parseInt(document.getElementById(`w_sisa_${i}`).textContent) || 0;
-                
-                if(sisaBeli > 0) { qtyInput.value = Math.min(sisaBeli, maxStok); }
-            } else {
-                qtyInput.disabled = true;
-                qtyInput.value = '';
-            }
-            calculateWizardTotal();
-        }
-    });
-
-    document.addEventListener('input', function(e) {
-        if(e.target.classList.contains('wizard-qty')) { calculateWizardTotal(); }
-    });
-
-    function calculateWizardTotal() {
-        let total = 0;
-        const target = parseInt(document.getElementById('wizard-target-qty').textContent) || 0;
-        
-        document.querySelectorAll('.wizard-qty').forEach(input => {
-            if(!input.disabled) { total += parseInt(input.value) || 0; }
-        });
-
-        const spanTotal = document.getElementById('wizard-total-taken');
-        const spanStatus = document.getElementById('wizard-status');
-        if(spanTotal) spanTotal.textContent = total;
-
-        if(spanStatus) {
-            if(total === target) {
-                spanStatus.innerHTML = '<i class="fa-solid fa-check-circle"></i> Sesuai Target';
-                spanStatus.className = 'text-success fw-bold';
-            } else if(total > target) {
-                spanStatus.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Melebihi Target!';
-                spanStatus.className = 'text-warning fw-bold';
-            } else {
-                spanStatus.innerHTML = '<i class="fa-solid fa-xmark-circle"></i> Kurang dari Target';
-                spanStatus.className = 'text-danger fw-bold';
-            }
-        }
-    }
-
-    // TERAPKAN WIZARD KE SELURUH MATERIIL BERSERI
-    document.getElementById('btn-apply-wizard')?.addEventListener('click', function() {
-        const target = parseInt(document.getElementById('wizard-target-qty').textContent) || 0;
-        const totalQty = parseInt(document.getElementById('wizard-total-taken').textContent) || 0;
-
-        if(totalQty !== target) {
-            if(!confirm(`Total Qty yang diambil (${totalQty}) tidak sama dengan target form (${target}). Ingin tetap menerapkan rentang ini?`)) {
-                return;
-            }
-        }
-
-        let selectedSerials = [];
-        let maxPrice = 0;
-        let totalPrice = 0;
-
-        document.querySelectorAll('.wizard-check:checked').forEach(cb => {
-            const i = cb.value;
-            const qty = parseInt(document.getElementById(`w_qty_${i}`).value) || 0;
-            if(qty > 0) {
-                const price = parseFloat(document.getElementById(`w_price_${i}`).value) || 0;
-                totalPrice += qty * price;
-                if(price > maxPrice) maxPrice = price;
-
-                const pfx = document.getElementById(`w_pfx_${i}`).value;
-                const startRaw = document.getElementById(`w_start_${i}`).value;
-                let endRaw = '';
-                
-                if(startRaw) {
-                    const startNum = parseInt(startRaw, 10);
-                    endRaw = startNum + qty - 1;
-                }
-                
-                selectedSerials.push({
-                    prefix: pfx,
-                    start: startRaw ? formatSeriVisual(startRaw) : '',
-                    end: endRaw ? formatSeriVisual(endRaw.toString()) : ''
-                });
-            }
-        });
-
-        if(selectedSerials.length === 0) {
-            selectedSerials.push({prefix:'', start:'', end:''}); 
-        }
-
-        const originalIdx = document.getElementById('wizard-index').value;
-        const targetQtyInput = document.querySelector(`.data-qty-input[data-index="${originalIdx}"]`);
-
-        // Update Target Qty jika ternyata berbeda
-        if (targetQtyInput && totalQty !== target && totalQty > 0) {
-            targetQtyInput.value = totalQty;
-            // Sinkronisasi ismain->anak
-            targetQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-
-        // Terapkan Harga secara Final
-        if(totalQty > 0) {
-            const priceSpan = document.getElementById(`price-span-${originalIdx}`);
-            const totalSpan = document.getElementById(`total-span-${originalIdx}`);
-            const priceInput = document.getElementById(`price-input-${originalIdx}`);
-            const totalInput = document.getElementById(`total-input-${originalIdx}`);
-            
-            if (priceSpan) priceSpan.textContent = formatRupiah(maxPrice);
-            if (totalSpan) totalSpan.textContent = formatRupiah(totalPrice);
-            if (priceInput) priceInput.value = maxPrice;
-            if (totalInput) totalInput.value = totalPrice;
-        }
-
-        // Sebarkan format seri (sudah dipisah Prefix, Awal, Akhir) ke semua materiil (pakai_seri=1)
-        const allContainers = document.querySelectorAll('.serial-inputs-container[data-pakaiseri="1"]');
-        allContainers.forEach(container => {
-            const cIdx = container.dataset.index;
-            let newHtml = '';
-            
-            const currentBtn = container.querySelector('.btn-wizard');
-            const btnHtml = currentBtn ? currentBtn.outerHTML : '';
-
-            selectedSerials.forEach((ser, loopIdx) => {
-                const appendHtml = (loopIdx === 0 && btnHtml) ? btnHtml : '<div style="width:31px;"></div>'; 
-                
-                newHtml += `
-                <div class="d-flex gap-1 mb-1 serial-row">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx" value="${ser.prefix}">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal" value="${ser.start}">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir" value="${ser.end}">
-                    ${appendHtml}
-                </div>`;
-            });
-            
-            container.innerHTML = newHtml;
-        });
-
-        wizardModal.hide();
-    });
-
-    document.addEventListener('focusout', function(e) {
-        if(e.target.classList.contains('format-seri')) {
-            if(e.target.value) { e.target.value = formatSeriVisual(e.target.value); }
-        }
-    });
 
     // --- LOGIKA INFO PEJABAT BAMAT (DESTINATION) ---
     document.addEventListener("DOMContentLoaded", function() {
@@ -722,19 +442,30 @@
                 if(infoBox) infoBox.classList.add('d-none');
                 return;
             }
+
+            // Cari objek tujuan berdasarkan ID
             const dest = destinationsData.find(d => d.id == destinationId);
+            
             if (dest && infoBox) {
                 document.getElementById('infoNama').innerText = dest.nama || '-';
                 document.getElementById('infoPangkat').innerText = dest.pangkat_nrp || '-';
                 document.getElementById('infoJabatan').innerText = dest.jabatan || '-';
-                infoBox.classList.remove('d-none'); 
+                infoBox.classList.remove('d-none'); // Tampilkan kotak
             } else if (infoBox) {
-                infoBox.classList.add('d-none'); 
+                infoBox.classList.add('d-none'); // Sembunyikan jika tidak ada
             }
         }
+
+        // Jalankan saat dropdown diganti user
         if(destinationSelect) {
-            destinationSelect.addEventListener('change', function() { updateBamatInfo(this.value); });
-            if(destinationSelect.value) updateBamatInfo(destinationSelect.value);
+            destinationSelect.addEventListener('change', function() {
+                updateBamatInfo(this.value);
+            });
+            
+            // Trigger otomatis saat halaman Edit dibuka (jika select sudah ada nilainya)
+            if(destinationSelect.value) {
+                updateBamatInfo(destinationSelect.value);
+            }
         }
     });
 </script>

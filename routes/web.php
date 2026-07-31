@@ -50,6 +50,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
 
     Route::middleware(['can:Warehouse Menu'])->group(function () {
         Route::resource('stocks', StockController::class);
+        Route::put('/stocks/{material_id}/bulk-update-price', [App\Http\Controllers\StockController::class, 'bulkUpdatePrice'])->name('stocks.bulk_update_price');
     });
 
     Route::middleware(['can:Outbound Menu'])->group(function () {

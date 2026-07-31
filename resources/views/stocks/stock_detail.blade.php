@@ -108,69 +108,111 @@
     </div>
     @endif
 
-    <div class="table-responsive">
-        <table class="table-detail">
-            <thead>
-                <tr>
-                    <th width="5%" class="text-center">No</th>
-                    <th width="20%">
-                        <a href="{{ $sortUrl('no_surat_masuk') }}" class="sortable-header">
-                            {{ $material->pakai_seri == 1 ? 'No. Surat (SPPM)' : 'Kelompok Gudang' }} {!! $sortIcon('no_surat_masuk') !!}
-                        </a>
-                    </th>
-                    <th width="12%">
-                        <a href="{{ $sortUrl('tgl_masuk') }}" class="sortable-header">
-                            {{ $material->pakai_seri == 1 ? 'Tgl Masuk' : 'Update Terakhir' }} {!! $sortIcon('tgl_masuk') !!}
-                        </a>
-                    </th>
-                    <th width="10%">
-                        <a href="{{ $sortUrl('warehouse_id') }}" class="sortable-header">Lokasi Gudang {!! $sortIcon('warehouse_id') !!}</a>
-                    </th>
-                    <th width="25%">
-                        <a href="{{ $sortUrl('seri_awal') }}" class="sortable-header">Rentang Nomor Seri {!! $sortIcon('seri_awal') !!}</a>
-                    </th>
-                    <th width="10%" class="text-end">
-                        <a href="{{ $sortUrl('qty') }}" class="sortable-header justify-content-end">Qty Tersedia {!! $sortIcon('qty') !!}</a>
-                    </th>
-                    <th width="18%">Keterangan</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if($normalStocks->isEmpty() && $totalMinusQty == 0)
+    <!-- FORM MASS EDIT HARGA SATUAN -->
+    <form action="{{ route('stocks.bulk_update_price', $material->id) }}" method="POST">
+        @csrf
+        @method('PUT')
+        
+        <div class="table-responsive">
+            <table class="table-detail">
+                <thead>
                     <tr>
-                        <td colspan="7" class="text-center py-5 text-muted bg-white">
-                            <i class="fa-solid fa-clipboard-list fs-2 mb-2 opacity-25"></i>
-                            <p class="mb-0 small">Belum ada data stok @if(request('search')) atau pencarian tidak ditemukan. @endif</p>
-                        </td>
+                        <th width="4%" class="text-center">No</th>
+                        <th width="18%">
+                            <a href="{{ $sortUrl('no_surat_masuk') }}" class="sortable-header">
+                                {{ $material->pakai_seri == 1 ? 'No. Surat (SPPM)' : 'Kelompok Gudang' }} {!! $sortIcon('no_surat_masuk') !!}
+                            </a>
+                        </th>
+                        <th width="10%">
+                            <a href="{{ $sortUrl('tgl_masuk') }}" class="sortable-header">
+                                {{ $material->pakai_seri == 1 ? 'Tgl Masuk' : 'Update Terakhir' }} {!! $sortIcon('tgl_masuk') !!}
+                            </a>
+                        </th>
+                        <th width="10%">
+                            <a href="{{ $sortUrl('warehouse_id') }}" class="sortable-header">Lokasi Gudang {!! $sortIcon('warehouse_id') !!}</a>
+                        </th>
+                        <th width="22%">
+                            <a href="{{ $sortUrl('seri_awal') }}" class="sortable-header">Rentang Nomor Seri {!! $sortIcon('seri_awal') !!}</a>
+                        </th>
+                        <th width="10%" class="text-end">
+                            <a href="{{ $sortUrl('qty') }}" class="sortable-header justify-content-end">Qty {!! $sortIcon('qty') !!}</a>
+                        </th>
+                        <th width="12%" class="text-end">Harga Satuan (Rp)</th>
+                        <th width="14%">Keterangan</th>
                     </tr>
-                @else
-                    
-                    @if($material->pakai_seri == 1)
-                        {{-- 1A. STOK BERSERI (GROUPING BY PREFIX & TAHUN DENGAN ACCORDION) --}}
-                        @foreach($normalStocks as $groupLabel => $stocksGroup)
-                            @php $gId = Str::slug($groupLabel); @endphp
-                            
-                            <tr class="row-group-header" data-bs-toggle="collapse" data-bs-target=".group-{{ $gId }}" aria-expanded="false">
-                                <td colspan="7">
-                                    <div class="d-flex justify-content-between align-items-center px-2">
-                                        <span class="fw-bold text-theme fs-6">
-                                            <i class="fa-solid fa-folder-tree me-2 text-secondary"></i> LABEL: <span class="text-dark">{{ $groupLabel }}</span>
-                                        </span>
-                                        <div class="d-flex align-items-center">
-                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-3 py-2 me-3 fs-6">
-                                                {{ number_format($stocksGroup->sum('qty'), 0, ',', '.') }} Stok
+                </thead>
+                <tbody>
+                    @if($normalStocks->isEmpty() && $totalMinusQty == 0)
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted bg-white">
+                                <i class="fa-solid fa-clipboard-list fs-2 mb-2 opacity-25"></i>
+                                <p class="mb-0 small">Belum ada data stok @if(request('search')) atau pencarian tidak ditemukan. @endif</p>
+                            </td>
+                        </tr>
+                    @else
+                        
+                        @if($material->pakai_seri == 1)
+                            {{-- 1A. STOK BERSERI (GROUPING BY PREFIX & TAHUN) --}}
+                            @foreach($normalStocks as $groupLabel => $stocksGroup)
+                                @php $gId = Str::slug($groupLabel); @endphp
+                                
+                                <tr class="row-group-header" data-bs-toggle="collapse" data-bs-target=".group-{{ $gId }}" aria-expanded="false">
+                                    <td colspan="8">
+                                        <div class="d-flex justify-content-between align-items-center px-2">
+                                            <span class="fw-bold text-theme fs-6">
+                                                <i class="fa-solid fa-folder-tree me-2 text-secondary"></i> LABEL: <span class="text-dark">{{ $groupLabel }}</span>
                                             </span>
-                                            <i class="fa-solid fa-chevron-down text-secondary"></i>
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-3 py-2 me-3 fs-6">
+                                                    {{ number_format($stocksGroup->sum('qty'), 0, ',', '.') }} Stok
+                                                </span>
+                                                <i class="fa-solid fa-chevron-down text-secondary"></i>
+                                            </div>
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
+                                
+                                @foreach($stocksGroup as $index => $detail)
+                                    <tr class="collapse group-{{ $gId }}">
+                                        <td class="text-center fw-bold text-muted bg-light">{{ $index + 1 }}</td>
+                                        <td>
+                                            <span class="fw-bold text-theme"><i class="fa-solid fa-file-invoice me-1 opacity-50"></i> {{ $detail->no_surat_masuk }}</span>
+                                        </td>
+                                        <td class="fw-semibold text-dark">
+                                            {{ \Carbon\Carbon::parse($detail->tgl_masuk)->format('d M Y') }}
+                                        </td>
+                                        <td>
+                                            <i class="fa-solid fa-warehouse text-muted me-1"></i> {{ $detail->warehouse->name ?? '-' }}
+                                        </td>
+                                        <td>
+                                            <div class="serial-box">{!! $formatSeri($detail->prefix, $detail->seri_awal, $detail->seri_akhir) !!}</div>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary fs-6 px-2 py-1">
+                                                 {{ number_format($detail->qty, 0, ',', '.') }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            @can('Setting Menu')
+                                                <input type="number" name="prices[seri][{{ $detail->id }}]" class="form-control form-control-sm text-end fw-bold text-primary" value="{{ $detail->harga_satuan }}" min="0" step="0.01">
+                                            @else
+                                                <span class="fw-semibold text-secondary">{{ number_format($detail->harga_satuan, 0, ',', '.') }}</span>
+                                            @endcan
+                                        </td>
+                                        <td class="text-muted" style="font-size: 0.75rem;">
+                                            {{ $detail->keterangan ?? '-' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            @endforeach
                             
-                            @foreach($stocksGroup as $index => $detail)
-                                <tr class="collapse group-{{ $gId }}">
-                                    <td class="text-center fw-bold text-muted bg-light">{{ $index + 1 }}</td>
+                        @else
+                            {{-- 1B. STOK NON-SERI / BULK (MERGED) --}}
+                            @foreach($normalStocks as $index => $detail)
+                                <tr>
+                                    <td class="text-center fw-bold text-muted">{{ $index + 1 }}</td>
                                     <td>
-                                        <span class="fw-bold text-theme"><i class="fa-solid fa-file-invoice me-1 opacity-50"></i> {{ $detail->no_surat_masuk }}</span>
+                                        <span class="fw-bold text-success"><i class="fa-solid fa-boxes-stacked me-1 opacity-50"></i> {{ $detail->no_surat_masuk }}</span>
                                     </td>
                                     <td class="fw-semibold text-dark">
                                         {{ \Carbon\Carbon::parse($detail->tgl_masuk)->format('d M Y') }}
@@ -179,130 +221,110 @@
                                         <i class="fa-solid fa-warehouse text-muted me-1"></i> {{ $detail->warehouse->name ?? '-' }}
                                     </td>
                                     <td>
-                                        <div class="serial-box">{!! $formatSeri($detail->prefix, $detail->seri_awal, $detail->seri_akhir) !!}</div>
+                                        <span class="text-muted fst-italic">- Non Seri -</span>
                                     </td>
                                     <td class="text-end">
                                         <span class="badge bg-primary bg-opacity-10 text-primary border border-primary fs-6 px-2 py-1">
                                              {{ number_format($detail->qty, 0, ',', '.') }}
                                         </span>
                                     </td>
+                                    <td class="text-end">
+                                        @can('Setting Menu')
+                                            <input type="number" name="prices[bulk][{{ $detail->warehouse_id }}]" class="form-control form-control-sm text-end fw-bold text-primary" value="{{ $detail->harga_satuan }}" min="0" step="0.01">
+                                        @else
+                                            <span class="fw-semibold text-secondary">{{ number_format($detail->harga_satuan, 0, ',', '.') }}</span>
+                                        @endcan
+                                    </td>
                                     <td class="text-muted" style="font-size: 0.75rem;">
                                         {{ $detail->keterangan ?? '-' }}
                                     </td>
                                 </tr>
                             @endforeach
-                        @endforeach
-                        
-                    @else
-                        {{-- 1B. STOK NON-SERI / BULK (MERGED) --}}
-                        @foreach($normalStocks as $index => $detail)
-                            <tr>
-                                <td class="text-center fw-bold text-muted">{{ $index + 1 }}</td>
-                                <td>
-                                    <span class="fw-bold text-success"><i class="fa-solid fa-boxes-stacked me-1 opacity-50"></i> {{ $detail->no_surat_masuk }}</span>
-                                </td>
-                                <td class="fw-semibold text-dark">
-                                    {{ \Carbon\Carbon::parse($detail->tgl_masuk)->format('d M Y') }}
-                                </td>
-                                <td>
-                                    <i class="fa-solid fa-warehouse text-muted me-1"></i> {{ $detail->warehouse->name ?? '-' }}
-                                </td>
-                                <td>
-                                    <span class="text-muted fst-italic">- Non Seri -</span>
-                                </td>
-                                <td class="text-end">
-                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary fs-6 px-2 py-1">
-                                         {{ number_format($detail->qty, 0, ',', '.') }}
-                                    </span>
-                                </td>
-                                <td class="text-muted" style="font-size: 0.75rem;">
-                                    {{ $detail->keterangan ?? '-' }}
-                                </td>
-                            </tr>
-                        @endforeach
-                    @endif
+                        @endif
 
-                    {{-- 2. BARIS KHUSUS STOK MINUS (IDENTIK DENGAN ACCORDION GROUP) --}}
-                    @if($totalMinusQty < 0)
-                        
-                        @if($material->pakai_seri == 1 && count($mergedMinusRanges) > 0)
-                            
-                            {{-- ACCORDION HEADER KHUSUS MINUS --}}
-                            <tr class="row-group-minus-header" data-bs-toggle="collapse" data-bs-target=".group-minus-data" aria-expanded="false">
-                                <td colspan="7">
-                                    <div class="d-flex justify-content-between align-items-center px-2">
-                                        <span class="fw-bold text-danger fs-6">
-                                            <i class="fa-solid fa-circle-exclamation me-2 text-danger"></i> LABEL: <span class="text-danger">DATA MASUK TIDAK DIKETAHUI</span>
-                                        </span>
-                                        <div class="d-flex align-items-center">
-                                            <span class="badge bg-danger text-white px-3 py-2 me-3 fs-6">
-                                                {{ number_format($totalMinusQty, 0, ',', '.') }} Stok
+                        {{-- 2. BARIS KHUSUS STOK MINUS --}}
+                        @if($totalMinusQty < 0)
+                            @if($material->pakai_seri == 1 && count($mergedMinusRanges) > 0)
+                                <tr class="row-group-minus-header" data-bs-toggle="collapse" data-bs-target=".group-minus-data" aria-expanded="false">
+                                    <td colspan="8">
+                                        <div class="d-flex justify-content-between align-items-center px-2">
+                                            <span class="fw-bold text-danger fs-6">
+                                                <i class="fa-solid fa-circle-exclamation me-2 text-danger"></i> LABEL: <span class="text-danger">DATA MASUK TIDAK DIKETAHUI</span>
                                             </span>
-                                            <i class="fa-solid fa-chevron-down text-danger"></i>
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge bg-danger text-white px-3 py-2 me-3 fs-6">
+                                                    {{ number_format($totalMinusQty, 0, ',', '.') }} Stok
+                                                </span>
+                                                <i class="fa-solid fa-chevron-down text-danger"></i>
+                                            </div>
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
 
-                            {{-- BARIS DETAIL MINUS --}}
-                            @foreach($mergedMinusRanges as $index => $mRange)
-                                @php 
-                                    // Hitung QTY spesifik untuk rentang ini
-                                    $rangeQty = -($mRange['akhir'] - $mRange['awal'] + 1); 
-                                @endphp
-                                <tr class="collapse group-minus-data row-minus">
-                                    <td class="text-center fw-bold text-muted bg-light">{{ $index + 1 }}</td>
-                                    
-                                    {{-- Nama SPPM, TGL, dan Lokasi dikosongkan sesuai instruksi --}}
-                                    <td class="text-center text-muted">-</td>
-                                    <td class="text-center text-muted">-</td>
-                                    <td class="text-center text-muted">-</td>
-                                    
+                                @foreach($mergedMinusRanges as $index => $mRange)
+                                    @php $rangeQty = -($mRange['akhir'] - $mRange['awal'] + 1); @endphp
+                                    <tr class="collapse group-minus-data row-minus">
+                                        <td class="text-center fw-bold text-muted bg-light">{{ $index + 1 }}</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td>
+                                            <div class="serial-box bg-white border-danger text-danger">
+                                                {!! $formatSeri($mRange['prefix'], $mRange['awal'], $mRange['akhir']) !!}
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-danger text-white fs-6 px-2 py-1">
+                                                {{ number_format($rangeQty, 0, ',', '.') }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-danger fw-semibold" style="font-size: 0.75rem;">
+                                            Menunggu Rekonsiliasi
+                                        </td>
+                                    </tr>
+                                @endforeach
+
+                            @else
+                                <tr class="row-minus">
+                                    <td class="text-center fw-bold text-danger fs-5">*</td>
                                     <td>
-                                        <div class="serial-box bg-white border-danger text-danger">
-                                            {!! $formatSeri($mRange['prefix'], $mRange['awal'], $mRange['akhir']) !!}
-                                        </div>
+                                        <span class="fw-bold text-danger"><i class="fa-solid fa-circle-exclamation me-1 opacity-75"></i> Data Masuk tidak diketahui</span>
+                                    </td>
+                                    <td class="fw-semibold text-center text-muted">-</td>
+                                    <td class="text-center text-muted">-</td>
+                                    <td class="text-center text-muted">
+                                        <span class="fst-italic">- Non Seri -</span>
                                     </td>
                                     <td class="text-end">
                                         <span class="badge bg-danger text-white fs-6 px-2 py-1">
-                                            {{ number_format($rangeQty, 0, ',', '.') }}
+                                            {{ number_format($totalMinusQty, 0, ',', '.') }}
                                         </span>
                                     </td>
+                                    <td class="text-center text-muted">-</td>
                                     <td class="text-danger fw-semibold" style="font-size: 0.75rem;">
                                         Menunggu Rekonsiliasi
                                     </td>
                                 </tr>
-                            @endforeach
-
-                        @else
-                            {{-- TAMPILAN BULK MINUS JIKA NON-SERI --}}
-                            <tr class="row-minus">
-                                <td class="text-center fw-bold text-danger fs-5">*</td>
-                                <td>
-                                    <span class="fw-bold text-danger"><i class="fa-solid fa-circle-exclamation me-1 opacity-75"></i> Data Masuk tidak diketahui</span>
-                                </td>
-                                <td class="fw-semibold text-center text-muted">-</td>
-                                <td class="text-center text-muted">-</td>
-                                <td class="text-center text-muted">
-                                    <span class="fst-italic">- Non Seri -</span>
-                                </td>
-                                <td class="text-end">
-                                    <span class="badge bg-danger text-white fs-6 px-2 py-1">
-                                        {{ number_format($totalMinusQty, 0, ',', '.') }}
-                                    </span>
-                                </td>
-                                <td class="text-danger fw-semibold" style="font-size: 0.75rem;">
-                                    Menunggu Rekonsiliasi
-                                </td>
-                            </tr>
+                            @endif
                         @endif
 
                     @endif
+                </tbody>
+            </table>
+        </div>
 
-                @endif
-            </tbody>
-        </table>
-    </div>
+        {{-- TOMBOL SIMPAN MASSAL (Hanya Untuk Yang Punya Akses) --}}
+        @can('Setting Menu')
+            @if($normalStocks->isNotEmpty())
+            <div class="bg-light p-3 border-top text-end">
+                <button type="submit" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;">
+                    <i class="fa-solid fa-save me-1"></i> SIMPAN PERUBAHAN HARGA
+                </button>
+            </div>
+            @endif
+        @endcan
+    </form>
 </div>
 
 @endsection

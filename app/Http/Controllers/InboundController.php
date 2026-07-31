@@ -670,7 +670,10 @@ class InboundController extends Controller
             echo '<th rowspan="'.$headerRows.'" style="width: 180px;">NOMOR SERI</th>';
             echo '<th rowspan="'.$headerRows.'" style="width: 150px;">NO. BAPPM</th>';
             
-            echo '<th colspan="'.$flatMaterials->count().'" style="background-color: #d1e7dd;">RINCIAN BARANG KATEGORI: '.strtoupper($category->name).'</th>';
+            echo '<th colspan="'.$flatMaterials->count().'" style="background-color: #d1e7dd;">RINCIAN BARANG KATEGORI: '.strtoupper($category->name).' (QTY)</th>';
+            
+            // SATU KOLOM HARGA SATUAN DI PALING KANAN
+            echo '<th rowspan="'.$headerRows.'" style="width: 150px; background-color: #f8f9fa;">HARGA SATUAN<br>(Rp)</th>';
             echo '</tr>';
 
             echo '<tr style="font-weight: bold; background-color: #d1e7dd;">';
@@ -710,6 +713,7 @@ class InboundController extends Controller
             foreach ($flatMaterials as $mat) {
                 echo '<td>500</td>'; 
             }
+            echo '<td>150000</td>'; // Contoh harga satuan global
             echo '</tr>';
             
             echo '</table>';

@@ -65,7 +65,7 @@ class InboundImport implements ToCollection
             }
         }
 
-        // Tentukan jumlah baris header yang harus dilewati (2 atau 3 baris)
+        // Tentukan jumlah baris header yang harus dilewati (Kembali ke default 2 atau 3)
         $headerRowsToSkip = $hasChildren ? 3 : 2;
 
         $parseSerial = function($string) {
@@ -145,13 +145,23 @@ class InboundImport implements ToCollection
 
                 $serialParsed = $parseSerial($nomorSeriStr);
 
-                // Mulai membaca kolom materiil dinamis (Dimulai dari index ke-6 / Kolom G)
+                // Tangkap Harga Satuan dari kolom paling kanan (Kolom indeks ke: 6 + Total Jenis Material)
+                $priceIndex = 6 + $flatMaterials->count();
+                $rawGlobalPrice = $row[$priceIndex] ?? 0;
+                $globalPrice = is_numeric($rawGlobalPrice) ? (float) $rawGlobalPrice : (float) str_replace(['.', ','], '', $rawGlobalPrice);
+
+                // Mulai membaca kolom materiil dinamis (Dimulai dari index ke-6)
                 foreach ($flatMaterials as $idx => $material) {
-                    $colIndex = 6 + $idx; 
+                    $colQtyIndex = 6 + $idx; 
                     
-                    // Bersihkan angka (hilangkan titik pemisah ribuan jika ada)
-                    $rawQty = $row[$colIndex] ?? 0;
+                    // Bersihkan angka Qty
+                    $rawQty = $row[$colQtyIndex] ?? 0;
                     $qty = is_numeric($rawQty) ? (int) $rawQty : (int) str_replace(['.', ','], '', $rawQty);
+
+                    // Terapkan harga HANYA jika materiel ini adalah Ismain (Induk)
+                    $isMain = ($material->ismain == 1 || $material->is_main == 1);
+                    $price = $isMain ? $globalPrice : 0;
+                    $totalPrice = $qty * $price;
 
                     if ($qty > 0) {
                         $isSerialized = ($material->pakai_seri == 1);
@@ -160,14 +170,14 @@ class InboundImport implements ToCollection
                         $finalStart  = $isSerialized ? $serialParsed['start'] : null;
                         $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
 
-                        // 1. Rekam jejak fisik dokumen penerimaan (Mutlak sesuai fisik Excel)
+                        // 1. Rekam jejak fisik dokumen penerimaan
                         InDetail::create([
                             'in_sppm_id'        => $sppm->id,
                             'material_id'       => $material->id,
                             'target_qty'        => $qty,
                             'qty_huruf'         => null,
-                            'harga_satuan'      => 0,
-                            'harga_total'       => 0,
+                            'harga_satuan'      => $price,
+                            'harga_total'       => $totalPrice,
                             'sppm_serial_prefix'=> $finalPrefix,
                             'sppm_serial_start' => $finalStart,
                             'sppm_serial_end'   => $finalEnd,
@@ -207,6 +217,8 @@ class InboundImport implements ToCollection
                                             $negStock->qty = 0;
                                             $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
                                             $negStock->status = '-';
+                                            $negStock->harga_satuan = $price;
+                                            $negStock->total_harga = $qty * $price;
                                             $negStock->save();
                                         } else {
                                             $paidStock = $negStock->replicate();
@@ -215,6 +227,8 @@ class InboundImport implements ToCollection
                                             $paidStock->seri_akhir = $overlapAkhir;
                                             $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
                                             $paidStock->status = '-';
+                                            $paidStock->harga_satuan = $price;
+                                            $paidStock->total_harga = ($overlapAkhir - $overlapAwal + 1) * $price;
                                             $paidStock->save();
 
                                             if ($negStock->seri_awal < $overlapAwal) {
@@ -257,8 +271,8 @@ class InboundImport implements ToCollection
                                     'seri_awal'      => $u['awal'],
                                     'seri_akhir'     => $u['akhir'],
                                     'qty'            => $qtySisa,
-                                    'harga_satuan'   => 0,
-                                    'total_harga'    => 0,
+                                    'harga_satuan'   => $price,
+                                    'total_harga'    => $qtySisa * $price,
                                     'status'         => '-',
                                     'keterangan'     => 'Import otomatis via Excel',
                                 ]);
@@ -283,12 +297,16 @@ class InboundImport implements ToCollection
                                     $negStock->qty = 0;
                                     $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
                                     $negStock->status = '-';
+                                    $negStock->harga_satuan = $price;
+                                    $negStock->total_harga = $bayar * $price;
                                     $negStock->save();
                                 } else {
                                     $paidStock = $negStock->replicate();
                                     $paidStock->qty = 0;
                                     $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
                                     $paidStock->status = '-';
+                                    $paidStock->harga_satuan = $price;
+                                    $paidStock->total_harga = $bayar * $price;
                                     $paidStock->save();
 
                                     $negStock->qty += $bayar; 
@@ -307,8 +325,8 @@ class InboundImport implements ToCollection
                                     'seri_awal'      => null,
                                     'seri_akhir'     => null,
                                     'qty'            => $qty_incoming,
-                                    'harga_satuan'   => 0,
-                                    'total_harga'    => 0,
+                                    'harga_satuan'   => $price,
+                                    'total_harga'    => $qty_incoming * $price,
                                     'status'         => '-',
                                     'keterangan'     => 'Import otomatis via Excel',
                                 ]);
@@ -343,7 +361,7 @@ class InboundImport implements ToCollection
 
         } catch (\Exception $e) {
             DB::rollBack();
-            throw $e; // Lempar kembali agar ditangkap oleh Controller
+            throw $e; 
         }
     }
 }

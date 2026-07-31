@@ -126,7 +126,6 @@ class StockController extends Controller
         if ($material->pakai_seri == 1) {
             $totalStock = $normalStocks->sum('qty');
             
-            // --- REVISI: GROUPING BERDASARKAN PREFIX & TAHUN ---
             if ($normalStocks->isNotEmpty()) {
                 $normalStocks = $normalStocks->groupBy(function($item) {
                     $prefix = $item->prefix ?: 'TANPA PREFIX';
@@ -148,6 +147,8 @@ class StockController extends Controller
                     $mergedStock->no_surat_masuk = strtoupper($firstStock->warehouse->name ?? 'GUDANG UTAMA');
                     $mergedStock->tgl_masuk = $stocks->max('tgl_masuk');
                     $mergedStock->warehouse = (object)['name' => $firstStock->warehouse->name ?? '-'];
+                    $mergedStock->warehouse_id = $wId; // Injection for Mass Edit
+                    $mergedStock->harga_satuan = $firstStock->harga_satuan; // Injection for Mass Edit
                     $mergedStock->prefix = null;
                     $mergedStock->seri_awal = null;
                     $mergedStock->seri_akhir = null;
@@ -158,7 +159,7 @@ class StockController extends Controller
                 }
                 $normalStocks = $groupedNormal;
                 
-                // Urutkan ulang array virtual (karena stdClass) jika disort selain tanggal
+                // Urutkan ulang array virtual
                 if ($sortBy == 'qty') {
                     $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy('qty') : $normalStocks->sortByDesc('qty');
                 } elseif ($sortBy == 'no_surat_masuk') {
@@ -167,7 +168,7 @@ class StockController extends Controller
             }
         }
 
-        // Penggabungan Stok Minus sesuai Kesepakatan (Merge Contiguous)
+        // Penggabungan Stok Minus (Merge Contiguous)
         $totalMinusQty = 0;
         $mergedMinusRanges = [];
 
@@ -213,6 +214,61 @@ class StockController extends Controller
         return view('stocks.stock_detail', compact(
             'material', 'normalStocks', 'totalStock', 'totalMinusQty', 'mergedMinusRanges', 'sortBy', 'sortOrder'
         ));
+    }
+
+    /**
+     * FUNGSI BARU: Update Harga Satuan Secara Massal
+     */
+    public function bulkUpdatePrice(Request $request, $material_id)
+    {
+        // Proteksi Lapis Kedua (Selain Middleware)
+        if (!auth()->user()->can('Setting Menu')) {
+            abort(403, 'Anda tidak memiliki otorisasi untuk mengubah harga satuan.');
+        }
+
+        $request->validate([
+            'prices'      => 'required|array',
+            'prices.seri' => 'nullable|array',
+            'prices.bulk' => 'nullable|array',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // Mode 1: Edit Berdasarkan Rentang Seri (pakai_seri = 1)
+            if ($request->has('prices.seri')) {
+                foreach ($request->input('prices.seri') as $stockId => $price) {
+                    $stock = Stock::where('material_id', $material_id)->find($stockId);
+                    if ($stock && $stock->harga_satuan != $price) {
+                        $stock->harga_satuan = $price;
+                        $stock->total_harga  = $stock->qty * $price;
+                        $stock->save();
+                    }
+                }
+            }
+
+            // Mode 2: Edit Berdasarkan Gudang (pakai_seri = 0)
+            if ($request->has('prices.bulk')) {
+                foreach ($request->input('prices.bulk') as $warehouseId => $price) {
+                    $stocksInWarehouse = Stock::where('material_id', $material_id)
+                                              ->where('warehouse_id', $warehouseId)
+                                              ->get();
+                                              
+                    foreach ($stocksInWarehouse as $stock) {
+                        if ($stock->harga_satuan != $price) {
+                            $stock->harga_satuan = $price;
+                            $stock->total_harga  = $stock->qty * $price;
+                            $stock->save();
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', 'Harga Satuan untuk stok tersebut berhasil diperbarui secara massal.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat memperbarui harga: ' . $e->getMessage());
+        }
     }
 
     public function store(Request $request)

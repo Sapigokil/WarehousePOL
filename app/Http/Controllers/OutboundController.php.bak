@@ -533,14 +533,9 @@ class OutboundController extends Controller
             
             $fifoQueue = [];
             foreach($availableStocks as $st) {
-                // PERBAIKAN: Masukkan data prefix dan seri agar bisa dibaca oleh Wizard
                 $fifoQueue[] = [
-                    'id'           => $st->id,
-                    'qty'          => $st->qty,
-                    'price'        => $st->harga_satuan,
-                    'prefix'       => $st->prefix,
-                    'seri_awal'    => $st->seri_awal,
-                    'seri_akhir'   => $st->seri_akhir
+                    'qty' => $st->qty,
+                    'price' => $st->harga_satuan
                 ];
             }
             $mat->fifo_queue = $fifoQueue;
@@ -563,14 +558,9 @@ class OutboundController extends Controller
                     
                     $fifoQueueChild = [];
                     foreach($availableStocksChild as $st) {
-                        // PERBAIKAN: Masukkan data prefix dan seri untuk anak (child)
                         $fifoQueueChild[] = [
-                            'id'           => $st->id,
-                            'qty'          => $st->qty,
-                            'price'        => $st->harga_satuan,
-                            'prefix'       => $st->prefix,
-                            'seri_awal'    => $st->seri_awal,
-                            'seri_akhir'   => $st->seri_akhir
+                            'qty' => $st->qty,
+                            'price' => $st->harga_satuan
                         ];
                     }
                     $child->fifo_queue = $fifoQueueChild;
