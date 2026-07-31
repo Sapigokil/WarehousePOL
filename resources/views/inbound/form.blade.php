@@ -56,7 +56,7 @@
     </div>
 @endif
 
-<form action="{{ isset($inbound) ? route('inbound.update', $inbound->id) : route('inbound.store') }}" method="POST" id="formMainInbound">
+<form action="{{ isset($inbound) ? route('inbound.update', $inbound->id) : route('inbound.store') }}" method="POST" id="formMainInbound" enctype="multipart/form-data">
     @csrf
     @if(isset($inbound)) @method('PUT') @endif
 
@@ -320,14 +320,69 @@
                     </table>
                 </div>
 
-                <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
+                {{-- <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
                     @if(!isset($inbound))
                         <button type="submit" name="submit_action" value="save_new" class="btn btn-sm btn-outline-dark fw-bold px-3" style="border-radius: 6px;">SIMPAN & BARU</button>
                     @endif
                     <button type="submit" name="submit_action" value="save" class="btn btn-sm btn-theme fw-bold px-4" style="border-radius: 6px;">SIMPAN</button>
-                </div>
+                </div> --}}
             </div>
         </div>
+        <!-- SEKSI LAMPIRAN DOKUMEN -->
+            <div class="col-12 mb-4">
+                <div class="form-card shadow-sm overflow-hidden">
+                    <div class="bg-light px-4 py-3 border-bottom">
+                        <h6 class="form-header-title m-0"><i class="fa-solid fa-paperclip me-1"></i> Lampiran Dokumen SPPM Fisik</h6>
+                    </div>
+                    
+                    <div class="p-4">
+                        <div class="row">
+                            <div class="col-md-5 mb-3">
+                                <label class="field-label">Upload File (JPG, PNG, PDF | Maks 5MB)</label>
+                                <input type="file" name="file_lampiran" id="file_lampiran" class="form-control custom-input w-100" accept=".jpg,.jpeg,.png,.pdf">
+                                
+                                @if(isset($inbound) && $inbound->file_lampiran)
+                                    <div class="mt-3 small text-muted p-2 bg-light border rounded">
+                                        <i class="fa-solid fa-check-circle text-success me-1"></i> File tersimpan: 
+                                        <a href="{{ asset('storage/' . $inbound->file_lampiran) }}" target="_blank" class="fw-bold text-decoration-none d-block mt-1 text-truncate">
+                                            {{ basename($inbound->file_lampiran) }}
+                                        </a>
+                                    </div>
+                                @endif
+                            </div>
+                            
+                            <div class="col-md-7">
+                                <label class="field-label">Pratinjau Dokumen</label>
+                                <div id="preview-container" class="border rounded d-flex align-items-center justify-content-center bg-light" style="height: 300px; overflow: hidden; position: relative;">
+                                    @if(isset($inbound) && $inbound->file_lampiran)
+                                        @php $ext = pathinfo($inbound->file_lampiran, PATHINFO_EXTENSION); @endphp
+                                        @if(in_array(strtolower($ext), ['jpg', 'jpeg', 'png']))
+                                            <img src="{{ asset('storage/' . $inbound->file_lampiran) }}" class="img-fluid" style="max-height: 300px; width: auto; object-fit: contain;">
+                                        @elseif(strtolower($ext) == 'pdf')
+                                            <embed src="{{ asset('storage/' . $inbound->file_lampiran) }}" type="application/pdf" width="100%" height="100%">
+                                        @else
+                                            <div class="text-muted text-center"><i class="fa-solid fa-file fs-1 mb-2 d-block"></i> File Terlampir</div>
+                                        @endif
+                                    @else
+                                        <div class="text-muted text-center" id="preview-placeholder">
+                                            <i class="fa-regular fa-image fs-1 mb-2 opacity-50 d-block"></i>
+                                            <span class="small">Belum ada file yang diunggah</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- POSISI BARU TOMBOL SIMPAN -->
+                    <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
+                        @if(!isset($inbound))
+                            <button type="submit" name="submit_action" value="save_new" class="btn btn-sm btn-outline-dark fw-bold px-3" style="border-radius: 6px;">SIMPAN & BARU</button>
+                        @endif
+                        <button type="submit" name="submit_action" value="save" class="btn btn-sm btn-theme fw-bold px-4" style="border-radius: 6px;">SIMPAN</button>
+                    </div>
+                </div>
+            </div>
     </div>
 </form>
 
@@ -873,6 +928,34 @@
             });
         }
     });
+
+    // SCRIPT PREVIEW FILE LAMPIRAN GAMBAR / PDF
+    const fileLampiran = document.getElementById('file_lampiran');
+    const previewContainer = document.getElementById('preview-container');
+
+    if (fileLampiran && previewContainer) {
+        fileLampiran.addEventListener('change', function(e) {
+            const file = this.files[0];
+            if (file) {
+                const fileType = file.type;
+                const fileUrl = URL.createObjectURL(file);
+
+                if (fileType.startsWith('image/')) {
+                    previewContainer.innerHTML = `<img src="${fileUrl}" class="img-fluid" style="max-height: 300px; width: auto; object-fit: contain;">`;
+                } else if (fileType === 'application/pdf') {
+                    previewContainer.innerHTML = `<embed src="${fileUrl}" type="application/pdf" width="100%" height="100%">`;
+                } else {
+                    previewContainer.innerHTML = `<div class="text-muted text-center"><i class="fa-solid fa-file fs-1 mb-2 d-block text-theme"></i><span class="small fw-bold">${file.name}</span></div>`;
+                }
+            } else {
+                previewContainer.innerHTML = `
+                    <div class="text-muted text-center" id="preview-placeholder">
+                        <i class="fa-regular fa-image fs-1 mb-2 opacity-50 d-block"></i>
+                        <span class="small">Belum ada file yang diunggah</span>
+                    </div>`;
+            }
+        });
+    }
 
 </script>
 @endpush

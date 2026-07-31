@@ -14,6 +14,9 @@ use App\Models\Warehouse;
 use App\Models\SystemLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\InboundImport;
 
 class InboundController extends Controller
 {
@@ -119,6 +122,7 @@ class InboundController extends Controller
             'material_category_id' => 'required|exists:material_categories,id',
             'warehouse_id'         => 'required|exists:warehouses,id',
             'inbound_mode'         => 'required|string|in:mode-1,mode-2',
+            'file_lampiran'        => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120', // Validasi file (Maks 5MB)
             'items'                => 'required|array',
             'items.*.material_id'  => 'required|exists:materials,id',
             'items.*.target_qty'   => 'nullable|numeric|min:0', 
@@ -126,6 +130,14 @@ class InboundController extends Controller
 
         $currentMode = $request->input('inbound_mode');
         $batchDate = $currentMode === 'mode-2' ? $request->input('batch_date') : $request->sppm_date;
+
+        // Proses Upload File Lampiran
+        $lampiranPath = null;
+        if ($request->hasFile('file_lampiran')) {
+            $file = $request->file('file_lampiran');
+            $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\.\-]/', '_', $file->getClientOriginalName());
+            $lampiranPath = $file->storeAs('inbound_attachments', $filename, 'public');
+        }
 
         foreach ($request->items as $item) {
             $prefix = $item['sppm_serial_prefix'] ?? null;
@@ -143,18 +155,22 @@ class InboundController extends Controller
                     ->exists();
 
                 if ($isOverlap) {
+                    if ($lampiranPath && Storage::disk('public')->exists($lampiranPath)) {
+                        Storage::disk('public')->delete($lampiranPath); // Bersihkan file jika gagal simpan
+                    }
                     return back()->withInput()->with('error', "GAGAL! Terdapat rentang Nomor Seri yang tumpang tindih (duplikat) pada Master Stock untuk prefix {$prefix}.");
                 }
             }
         }
 
-        DB::transaction(function () use ($request, $currentMode, $batchDate) {
+        DB::transaction(function () use ($request, $currentMode, $batchDate, $lampiranPath) {
             $sppm = InSppm::create([
                 'sppm_no'              => $request->sppm_no,
                 'sppm_date'            => $request->sppm_date,
                 'material_category_id' => $request->material_category_id,
                 'warehouse_id'         => $request->warehouse_id,
                 'notes'                => $request->notes_manifes,
+                'file_lampiran'        => $lampiranPath, // Simpan path ke database
                 'status'               => $currentMode === 'mode-1' ? 'completed' : 'pending',
                 'created_by'           => auth()->id(),
                 'updated_by'           => auth()->id()
@@ -231,11 +247,12 @@ class InboundController extends Controller
                 $sppm->update(['status' => $isAllCompleted ? 'completed' : 'partial']);
             }
 
-            // --- CATAT LOG SISTEM (Format User Friendly) ---
+            // --- CATAT LOG SISTEM ---
             $this->recordLog('CREATED', 'DOKUMEN SPPM', $sppm->id, null, [
                 'Nomor SPPM'        => $sppm->sppm_no,
                 'Tanggal SPPM'      => $sppm->sppm_date,
                 'Kategori Material' => $sppm->category->name ?? $sppm->material_category_id,
+                'Lampiran'          => $lampiranPath ? 'Ada Lampiran' : 'Kosong',
                 'Status'            => $sppm->status,
                 'Keterangan'        => $sppm->notes
             ]);
@@ -364,7 +381,7 @@ class InboundController extends Controller
                     'updated_by' => auth()->id()
                 ]);
 
-                // --- CATAT LOG SISTEM (Mode 2) ---
+                // --- CATAT LOG SISTEM ---
                 $newValuesLog = array_merge([
                     'Nomor SPPM' => $sppm->sppm_no,
                     'Aktivitas'  => "Penerimaan Fisik Gelombang ke-{$nextBatch}",
@@ -382,10 +399,24 @@ class InboundController extends Controller
             'sppm_no'      => 'required|string|max:255|unique:in_sppms,sppm_no,' . $sppm->id,
             'sppm_date'    => 'required|date',
             'warehouse_id' => 'required|exists:warehouses,id',
+            'file_lampiran'=> 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
             'items'        => 'required|array',
         ]);
 
-        // PERSIAPAN DATA LOG (Pendeteksi Perubahan)
+        // Proses Replace File Lampiran jika ada upload baru
+        $lampiranPath = $sppm->file_lampiran;
+        if ($request->hasFile('file_lampiran')) {
+            // Hapus file lama jika ada
+            if ($sppm->file_lampiran && Storage::disk('public')->exists($sppm->file_lampiran)) {
+                Storage::disk('public')->delete($sppm->file_lampiran);
+            }
+            // Simpan file baru
+            $file = $request->file('file_lampiran');
+            $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\.\-]/', '_', $file->getClientOriginalName());
+            $lampiranPath = $file->storeAs('inbound_attachments', $filename, 'public');
+        }
+
+        // PERSIAPAN DATA LOG
         $oldDetails = $sppm->details->keyBy('material_id');
         $oldChanges = [];
         $newChanges = [];
@@ -397,6 +428,10 @@ class InboundController extends Controller
         if ($sppm->sppm_date != $request->sppm_date) {
             $oldChanges['Tanggal SPPM'] = $sppm->sppm_date;
             $newChanges['Tanggal SPPM'] = $request->sppm_date;
+        }
+        if ($sppm->file_lampiran != $lampiranPath) {
+            $oldChanges['Lampiran'] = $sppm->file_lampiran ? 'Ada Lampiran' : 'Kosong';
+            $newChanges['Lampiran'] = $lampiranPath ? 'Lampiran Baru Diunggah' : 'Kosong';
         }
         
         foreach ($request->items as $item) {
@@ -419,12 +454,13 @@ class InboundController extends Controller
              $newChanges['Keterangan'] = 'Update dilakukan namun tidak terdeteksi perubahan kuantitas/nomor SPPM.';
         }
 
-        DB::transaction(function () use ($request, $sppm, $oldSppmNo, $oldChanges, $newChanges) {
+        DB::transaction(function () use ($request, $sppm, $oldSppmNo, $oldChanges, $newChanges, $lampiranPath) {
             $sppm->update([
                 'sppm_no'      => $request->sppm_no,
                 'sppm_date'    => $request->sppm_date,
                 'warehouse_id' => $request->warehouse_id,
                 'notes'        => $request->notes_manifes,
+                'file_lampiran'=> $lampiranPath, // Update kolom file_lampiran
                 'updated_by'   => auth()->id()
             ]);
 
@@ -520,6 +556,11 @@ class InboundController extends Controller
             $sppm->logs()->delete();
             $sppm->details()->delete();
             
+            // Hapus File Fisik jika ada saat menghapus data
+            if ($sppm->file_lampiran && Storage::disk('public')->exists($sppm->file_lampiran)) {
+                Storage::disk('public')->delete($sppm->file_lampiran);
+            }
+
             // --- CATAT LOG SISTEM SEBELUM MODEL DIHAPUS ---
             $this->recordLog('DELETED', 'DOKUMEN SPPM', $sppm->id, [
                 'Nomor SPPM Dihapus' => $deletedSppmNo,
@@ -573,7 +614,6 @@ class InboundController extends Controller
         ]);
     }
 
-    // --- FUNGSI DOWNLOAD TEMPLATE EXCEL ---
     public function downloadTemplate(Request $request)
     {
         $request->validate(['category_id' => 'required|exists:material_categories,id']);
@@ -678,333 +718,21 @@ class InboundController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    // --- FUNGSI HANDLE UPLOAD EXCEL INBOUND ---
     public function importExcel(Request $request)
     {
         $request->validate([
             'category_id' => 'required|exists:material_categories,id',
-            'excel_file'  => 'required|file|mimes:csv,txt'
+            'excel_file'  => 'required|file|mimes:xls,xlsx,csv'
         ]);
 
         $categoryId = $request->input('category_id');
         $file = $request->file('excel_file');
-        $originalFileName = $file->getClientOriginalName();
-
-        $topLevelMaterials = Material::with(['children' => function($q) {
-                $q->orderBy('nomor_urut', 'asc');
-            }])
-            ->where('material_category_id', $categoryId)
-            ->whereNull('parent_id')
-            ->orderBy('nomor_urut', 'asc')
-            ->get();
-
-        if ($topLevelMaterials->isEmpty()) {
-            return redirect()->back()->with('error', 'Kategori ini tidak memiliki daftar material.');
-        }
-
-        $flatMaterials = collect();
-        $hasChildren = false;
         
-        foreach ($topLevelMaterials as $parent) {
-            if ($parent->children->count() > 0) {
-                $hasChildren = true;
-                foreach ($parent->children as $child) {
-                    $flatMaterials->push($child);
-                }
-            } else {
-                $flatMaterials->push($parent);
-            }
-        }
-
-        $headerRowsToSkip = $hasChildren ? 3 : 2;
-
-        $parseSerial = function($string) {
-            $result = ['prefix' => null, 'start' => null, 'end' => null];
-            if (empty(trim($string)) || trim($string) === '-') return $result;
-
-            $parts = explode('-', $string);
-            if (count($parts) == 2) {
-                $left = trim($parts[0]);
-                if (preg_match('/^([a-zA-Z\.\s]+)?([\d\.]+)$/', $left, $matches)) {
-                    if (isset($matches[1])) {
-                        $cleanPrefix = preg_replace('/[^a-zA-Z]/', '', $matches[1]);
-                        $result['prefix'] = $cleanPrefix !== '' ? strtoupper($cleanPrefix) : null;
-                    } else {
-                        $result['prefix'] = null;
-                    }
-                    
-                    $result['start'] = (int) str_replace('.', '', $matches[2]);
-                }
-                $result['end'] = (int) str_replace('.', '', trim($parts[1]));
-            }
-            return $result;
-        };
-
-        ini_set('auto_detect_line_endings', true);
-        
-        $handle = fopen($file->getPathname(), "r");
-        
-        $firstLine = fgets($handle);
-        $delimiter = strpos($firstLine, ';') !== false ? ';' : ',';
-        rewind($handle); 
-
-        $rowCounter = 0;
-        $insertedDataCount = 0;
-        $importedSppms = []; 
-
-        DB::beginTransaction();
         try {
-            while (($data = fgetcsv($handle, 2000, $delimiter)) !== FALSE) {
-                $rowCounter++;
-                if ($rowCounter <= $headerRowsToSkip) continue; 
-
-                if (count($data) < 6) continue;
-
-                $tglPenerimaanStr = $data[1] ?? null;
-                $tglSppmStr       = $data[2] ?? null;
-                $noSppm           = trim($data[3] ?? '');
-                $nomorSeriStr     = trim($data[4] ?? '');
-                $noBappm          = trim($data[5] ?? '');
-
-                if (empty($noSppm) || empty(trim($tglPenerimaanStr))) continue; 
-
-                $tglPenerimaan = date('Y-m-d', strtotime($tglPenerimaanStr));
-                $tglSppm = !empty(trim($tglSppmStr)) ? date('Y-m-d', strtotime($tglSppmStr)) : $tglPenerimaan;
-
-                $defaultWarehouse = Warehouse::first();
-                $warehouseId = $defaultWarehouse ? $defaultWarehouse->id : 1;
-
-                $existingSppm = InSppm::where('sppm_no', $noSppm)->first();
-                if ($existingSppm) {
-                    throw new \Exception("Ditemukan duplikat SPPM di dalam database untuk nomor: {$noSppm}");
-                }
-
-                $sppm = InSppm::create([
-                    'sppm_no'              => $noSppm,
-                    'sppm_date'            => $tglSppm,
-                    'no_bappm'             => $noBappm, 
-                    'material_category_id' => $categoryId,
-                    'warehouse_id'         => $warehouseId,
-                    'notes'                => 'Import otomatis via CSV',
-                    'status'               => 'completed',
-                    'created_by'           => auth()->id(),
-                    'updated_by'           => auth()->id()
-                ]);
-
-                $log = InLog::create([
-                    'in_sppm_id'   => $sppm->id,
-                    'batch_number' => 1,
-                    'receive_date' => $tglPenerimaan,
-                    'receiver_name'=> auth()->user()->name ?? 'Admin Gudang',
-                    'notes'        => 'Import otomatis via CSV'
-                ]);
-
-                $serialParsed = $parseSerial($nomorSeriStr);
-
-                foreach ($flatMaterials as $idx => $material) {
-                    $colIndex = 6 + $idx; 
-                    $qty = isset($data[$colIndex]) ? (int) str_replace(['.', ','], '', $data[$colIndex]) : 0;
-
-                    if ($qty > 0) {
-                        $isSerialized = ($material->pakai_seri == 1);
-                        
-                        $finalPrefix = $isSerialized ? $serialParsed['prefix'] : null;
-                        $finalStart  = $isSerialized ? $serialParsed['start'] : null;
-                        $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
-
-                        // 1. Rekam jejak fisik dokumen penerimaan (Mutlak sesuai fisik Excel)
-                        InDetail::create([
-                            'in_sppm_id'        => $sppm->id,
-                            'material_id'       => $material->id,
-                            'target_qty'        => $qty,
-                            'qty_huruf'         => null,
-                            'harga_satuan'      => 0,
-                            'harga_total'       => 0,
-                            'sppm_serial_prefix'=> $finalPrefix,
-                            'sppm_serial_start' => $finalStart,
-                            'sppm_serial_end'   => $finalEnd,
-                        ]);
-
-                        InStock::create([
-                            'in_log_id'    => $log->id,
-                            'material_id'  => $material->id,
-                            'qty_received' => $qty,
-                            'serial_prefix'=> $finalPrefix,
-                            'serial_start' => $finalStart,
-                            'serial_end'   => $finalEnd,
-                        ]);
-
-                        // 2. Logika Auto-Reconciliation (Pelunasan Utang Gudang)
-                        if ($isSerialized) {
-                            $unfulfilled = [['awal' => $finalStart, 'akhir' => $finalEnd]];
-
-                            // Cari semua stok minus untuk material & prefix ini
-                            $negStocks = Stock::where('material_id', $material->id)
-                                              ->where('qty', '<', 0)
-                                              ->where('prefix', $finalPrefix)
-                                              ->orderBy('created_at', 'asc')
-                                              ->lockForUpdate()
-                                              ->get();
-
-                            foreach ($negStocks as $negStock) {
-                                if (empty($unfulfilled)) break;
-                                $new_unfulfilled = [];
-
-                                foreach ($unfulfilled as $inc) {
-                                    $overlapAwal = max($negStock->seri_awal, $inc['awal']);
-                                    $overlapAkhir = min($negStock->seri_akhir, $inc['akhir']);
-
-                                    if ($overlapAwal <= $overlapAkhir) {
-                                        // Ditemukan kecocokan antara barang masuk dan utang minus
-                                        if ($overlapAwal == $negStock->seri_awal && $overlapAkhir == $negStock->seri_akhir) {
-                                            // Utang Lunas Sepenuhnya
-                                            $negStock->qty = 0;
-                                            $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                            $negStock->status = '-';
-                                            $negStock->save();
-                                        } else {
-                                            // Utang Lunas Sebagian (Mecah baris utang)
-                                            $paidStock = $negStock->replicate();
-                                            $paidStock->qty = 0;
-                                            $paidStock->seri_awal = $overlapAwal;
-                                            $paidStock->seri_akhir = $overlapAkhir;
-                                            $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                            $paidStock->status = '-';
-                                            $paidStock->save();
-
-                                            // Buat sisa utang kiri jika ada
-                                            if ($negStock->seri_awal < $overlapAwal) {
-                                                $leftNeg = $negStock->replicate();
-                                                $leftNeg->qty = -( ($overlapAwal - 1) - $negStock->seri_awal + 1 );
-                                                $leftNeg->seri_akhir = $overlapAwal - 1;
-                                                $leftNeg->save();
-                                            }
-                                            // Buat sisa utang kanan jika ada
-                                            if ($negStock->seri_akhir > $overlapAkhir) {
-                                                $rightNeg = $negStock->replicate();
-                                                $rightNeg->qty = -( $negStock->seri_akhir - ($overlapAkhir + 1) + 1 );
-                                                $rightNeg->seri_awal = $overlapAkhir + 1;
-                                                $rightNeg->save();
-                                            }
-                                            // Hapus baris utang asli yang sudah dipecah
-                                            $negStock->delete();
-                                        }
-
-                                        // Kurangi sisa barang masuk yang sudah dipakai bayar utang
-                                        if ($inc['awal'] < $overlapAwal) {
-                                            $new_unfulfilled[] = ['awal' => $inc['awal'], 'akhir' => $overlapAwal - 1];
-                                        }
-                                        if ($inc['akhir'] > $overlapAkhir) {
-                                            $new_unfulfilled[] = ['awal' => $overlapAkhir + 1, 'akhir' => $inc['akhir']];
-                                        }
-                                    } else {
-                                        $new_unfulfilled[] = $inc; // Tidak ada yang cocok, biarkan utuh
-                                    }
-                                }
-                                $unfulfilled = $new_unfulfilled;
-                            }
-
-                            // Sisa barang masuk yang tidak terpakai bayar utang akan menjadi stok positif
-                            foreach ($unfulfilled as $u) {
-                                $qtySisa = $u['akhir'] - $u['awal'] + 1;
-                                Stock::create([
-                                    'no_surat_masuk' => $sppm->sppm_no,
-                                    'tgl_masuk'      => $tglPenerimaan,
-                                    'material_id'    => $material->id,
-                                    'warehouse_id'   => $warehouseId,
-                                    'prefix'         => $finalPrefix,
-                                    'seri_awal'      => $u['awal'],
-                                    'seri_akhir'     => $u['akhir'],
-                                    'qty'            => $qtySisa,
-                                    'harga_satuan'   => 0,
-                                    'total_harga'    => 0,
-                                    'status'         => '-',
-                                    'keterangan'     => 'Import otomatis via CSV',
-                                ]);
-                            }
-
-                        } else {
-                            // --- AUTO RECONCILIATION BULK (NON-SERI) ---
-                            $qty_incoming = $qty;
-                            $negStocks = Stock::where('material_id', $material->id)
-                                              ->where('qty', '<', 0)
-                                              ->orderBy('created_at', 'asc')
-                                              ->lockForUpdate()
-                                              ->get();
-
-                            foreach($negStocks as $negStock) {
-                                if ($qty_incoming <= 0) break;
-
-                                $utang = abs($negStock->qty);
-                                $bayar = min($utang, $qty_incoming);
-
-                                if ($bayar == $utang) {
-                                    // Utang Lunas Sepenuhnya
-                                    $negStock->qty = 0;
-                                    $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                    $negStock->status = '-';
-                                    $negStock->save();
-                                } else {
-                                    // Utang Lunas Sebagian
-                                    $paidStock = $negStock->replicate();
-                                    $paidStock->qty = 0;
-                                    $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                    $paidStock->status = '-';
-                                    $paidStock->save();
-
-                                    $negStock->qty += $bayar; 
-                                    $negStock->save();
-                                }
-                                $qty_incoming -= $bayar;
-                            }
-
-                            // Sisa barang bulk masuk yang tidak terpakai bayar utang
-                            if ($qty_incoming > 0) {
-                                Stock::create([
-                                    'no_surat_masuk' => $sppm->sppm_no,
-                                    'tgl_masuk'      => $tglPenerimaan,
-                                    'material_id'    => $material->id,
-                                    'warehouse_id'   => $warehouseId,
-                                    'prefix'         => null,
-                                    'seri_awal'      => null,
-                                    'seri_akhir'     => null,
-                                    'qty'            => $qty_incoming,
-                                    'harga_satuan'   => 0,
-                                    'total_harga'    => 0,
-                                    'status'         => '-',
-                                    'keterangan'     => 'Import otomatis via CSV',
-                                ]);
-                            }
-                        }
-                    }
-                }
-                
-                $insertedDataCount++;
-                $importedSppms[] = $noSppm; 
-            }
-            fclose($handle);
-            
-            if ($insertedDataCount === 0) {
-                throw new \Exception("Sistem membaca file, tetapi tidak ada baris data yang valid. Pastikan TGL PENERIMAAN dan NO. SPPM terisi, serta Anda tidak mengubah/menghapus susunan kolom dari template asli.");
-            }
-
-            DB::commit();
-
-            // --- CATAT LOG SISTEM UNTUK IMPORT ---
-            $this->recordLog('IMPORT', 'DOKUMEN SPPM', null, null, [
-                'Nama File CSV'       => $originalFileName,
-                'Total Baris Sukses'  => $insertedDataCount,
-                'Daftar SPPM Masuk'   => implode(', ', $importedSppms)
-            ]);
-
+            Excel::import(new InboundImport($categoryId), $file);
+            return redirect()->route('inbound.index')->with('success', "Data Inbound berhasil diimport. Sistem juga telah melakukan Auto-Reconciliation pada utang stok jika ada.");
         } catch (\Exception $e) {
-            DB::rollBack();
-            if (is_resource($handle)) {
-                fclose($handle);
-            }
             return redirect()->back()->with('error', 'Gagal memproses file import: ' . $e->getMessage());
         }
-
-        return redirect()->route('inbound.index')->with('success', "Data Inbound berhasil diimport ($insertedDataCount baris dokumen SPPM). Sistem juga telah melakukan Auto-Reconciliation pada utang stok jika ada.");
     }
 }

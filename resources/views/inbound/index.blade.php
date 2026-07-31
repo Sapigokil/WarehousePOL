@@ -3,7 +3,7 @@
 
 @push('styles')
 <style>
-    /* Header Banner Styling */
+    /* Header Banner Styling (Navy Blue/Slate Theme Standar) */
     .header-banner {
         border-radius: 10px;
         padding: 25px;
@@ -11,6 +11,8 @@
         margin-bottom: 20px;
         position: relative; 
         overflow: hidden; 
+        background: linear-gradient(135deg, #1e293b, #334155); 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
     }
     .header-banner-icon {
         position: absolute;
@@ -19,7 +21,7 @@
         transform: translateY(-50%);
         font-size: 10rem;
         color: #ffffff;
-        opacity: 0.15; 
+        opacity: 0.08; 
         pointer-events: none;
         z-index: 1;
     }
@@ -67,9 +69,9 @@
     /* Styling Fitur Accordion (Collapse) */
     .accordion-toggle { cursor: pointer; text-decoration: none; display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0; }
     .accordion-toggle .fa-chevron-right { transition: transform 0.2s ease; font-size: 0.75rem; color: #94a3b8; }
-    .accordion-toggle:not(.collapsed) .fa-chevron-right { transform: rotate(90deg); color: var(--primary-color); }
+    .accordion-toggle:not(.collapsed) .fa-chevron-right { transform: rotate(90deg); color: #3b82f6; } /* Warna icon saat aktif */
     
-    .nested-table-container { background-color: #fafbfc; border-bottom: 1px solid #e2e8f0; box-shadow: inset 0 3px 6px -3px rgba(0,0,0,0.05); border-left: 3px solid var(--primary-color); }
+    .nested-table-container { background-color: #fafbfc; border-bottom: 1px solid #e2e8f0; box-shadow: inset 0 3px 6px -3px rgba(0,0,0,0.05); border-left: 3px solid #3b82f6; } /* List garis biru di sisi kiri */
     .nested-table { margin: 0; background: transparent; width: 100%; }
     .nested-table th { font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9; }
     .nested-table td { padding: 8px 15px; color: #334155; font-size: 0.85rem; border: none; border-bottom: 1px dashed #e2e8f0; vertical-align: middle;}
@@ -81,7 +83,7 @@
 
 @section('content')
 
-<div class="header-banner header-banner-theme d-flex justify-content-between align-items-center shadow-sm">
+<div class="header-banner d-flex justify-content-between align-items-center">
     <i class="fa-solid fa-truck-ramp-box header-banner-icon"></i>
     
     <div class="header-content">
@@ -90,11 +92,12 @@
     </div>
     <div class="header-content d-flex gap-2">
         @canany(['Setting Menu', 'Warehouse Menu'])
-        <button class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel">
-            <i class="fa-solid fa-file-excel me-1"></i> Import SPPM
+        <!-- PERBAIKAN: data-bs-toggle dan data-bs-target -->
+        <button type="button" class="btn btn-light fw-bold text-dark shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel" style="border-radius: 8px;">
+            <i class="fa-solid fa-file-excel text-success me-1"></i> Import SPPM
         </button>
         @endcanany
-        <a href="{{ route('inbound.create') }}" class="btn btn-sm btn-light fw-bold text-theme shadow-sm px-3 py-2">
+        <a href="{{ route('inbound.create') }}" class="btn btn-primary fw-bold shadow-sm px-4 py-2 border border-light" style="border-radius: 8px;">
             <i class="fa-solid fa-plus me-1"></i> Input SPPM Baru
         </a>
     </div>
@@ -386,30 +389,42 @@
     </div>
 </div>
 
-{{-- Modal Import Excel --}}
 @canany(['Setting Menu', 'Warehouse Menu'])
+<!-- MODAL IMPORT EXCEL INBOUND -->
 <div class="modal fade" id="modalImportExcel" tabindex="-1" aria-labelledby="modalImportExcelLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header bg-light border-bottom-0 pb-3">
                 <h6 class="modal-title fw-bold text-success" id="modalImportExcelLabel">
-                    <i class="fa-solid fa-file-import me-2"></i> Import Database SPPM
+                    <i class="fa-solid fa-file-import me-2"></i> Import SPPM Masuk
                 </h6>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             
             <div class="modal-body p-4 bg-white text-start">
                 
-                <!-- 1. Form Unduh Template (Berubah Berdasarkan Kategori) -->
+                @if($errors->any())
+                    <div class="alert alert-danger small py-2 px-3 mb-4 rounded-3 border-0">
+                        <ul class="mb-0 ps-3">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <!-- 1. Form Unduh Template -->
                 <form action="{{ route('inbound.template') }}" method="GET" class="mb-4 p-3 bg-light rounded border border-success border-opacity-25">
-                    <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">1. Unduh Format Template</h6>
-                    <p class="text-muted small mb-2">Pilih kategori untuk menyesuaikan jumlah kolom barang secara otomatis.</p>
+                    <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">
+                        <span class="badge bg-success me-1">1</span> Unduh Format Template
+                    </h6>
+                    <p class="text-muted small mb-2">Pilih kategori untuk menyesuaikan kolom template barang masuk.</p>
                     
                     <div class="mb-3">
                         <select name="category_id" class="form-select form-select-sm" required>
                             <option value="">-- Pilih Kategori Komoditas --</option>
-                            @foreach($categories as $category)
-                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @foreach($categories as $cat)
+                                <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -419,26 +434,31 @@
                     </button>
                 </form>
 
-                <!-- 2. Form Unggah File (Save As CSV) -->
+                <!-- 2. Form Unggah File -->
                 <form action="{{ route('inbound.import') }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     <div class="mb-2">
-                        <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">2. Unggah File Template (Wajib .CSV)</h6>
-                        <div class="alert alert-warning py-2 small mb-3">
-                            <i class="fa-solid fa-circle-info me-1"></i> Setelah selesai mengisi di Excel, pastikan Anda menyimpannya dengan format <b>Save As -> CSV (Comma delimited)</b>.
+                        <h6 class="fw-bold text-dark mb-2" style="font-size: 0.85rem;">
+                            <span class="badge bg-success me-1">2</span> Unggah File Template
+                        </h6>
+                        <div class="alert alert-warning py-2 small mb-3 border-0">
+                            <i class="fa-solid fa-circle-info me-1"></i> Pastikan file yang diunggah berekstensi <b>.xlsx</b> atau <b>.csv</b>.
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label text-muted" style="font-size: 0.75rem; font-weight:bold;">KATEGORI FILE YANG DIUNGGAH</label>
                             <select name="category_id" class="form-select form-select-sm" required>
                                 <option value="">-- Pastikan Sama Dengan Template --</option>
-                                @foreach($categories as $category)
-                                    <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
                                 @endforeach
                             </select>
                         </div>
 
-                        <input type="file" name="excel_file" class="form-control" accept=".csv" required>
+                        <div class="mb-3">
+                            <!-- Name menggunakan excel_file agar sesuai dengan parameter di InboundController -->
+                            <input type="file" name="excel_file" class="form-control form-control-sm" accept=".xlsx, .xls, .csv" required>
+                        </div>
                     </div>
             </div>
             
@@ -453,4 +473,6 @@
     </div>
 </div>
 @endcanany
+
 @endsection
+

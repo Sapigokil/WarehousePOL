@@ -11,11 +11,12 @@ class InSppm extends Model
     protected $fillable = [
         'sppm_no',
         'sppm_date',
-        'no_bappm', // Tambahkan field no_bappm ke dalam fillable
+        'no_bappm',
         'material_category_id',
-        'warehouse_id', // Tambahkan field warehouse_id ke dalam fillable
+        'warehouse_id',
         'status',
         'notes',
+        'file_lampiran',
         'created_by',
         'updated_by',
     ];
