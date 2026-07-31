@@ -46,20 +46,23 @@ class InboundController extends Controller
         $limit = $request->input('limit', 10);
         $category_id = $request->input('category_id');
         $bulan = $request->input('bulan');
-        $tahun = $request->input('tahun');
+        
+        // Default tahun ke tahun saat ini
+        $tahun = $request->input('tahun', date('Y'));
         $perPage = $limit === 'all' ? 999999 : $limit;
 
-        $sortBy = $request->input('sort_by', 'sppm_date');
+        // Default sort ke sppm_no (terbesar)
+        $sortBy = $request->input('sort_by', 'sppm_no');
         $sortDir = $request->input('sort_dir', 'desc');
 
         $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at']; 
         if (!in_array($sortBy, $allowedSortColumns)) {
-            $sortBy = 'sppm_date';
+            $sortBy = 'sppm_no';
         }
         
         $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
 
-        $sppms = InSppm::with([
+        $query = InSppm::with([
                 'category', 'warehouse', 'details.material', 
                 'logs' => function($q) { $q->orderBy('batch_number', 'asc'); }, 
                 'logs.stocks', 'updater', 'creator'  
@@ -87,13 +90,30 @@ class InboundController extends Controller
             })
             ->when($tahun, function ($query, $tahun) {
                 return $query->whereYear('sppm_date', $tahun);
-            })
-            ->orderBy($sortBy, $sortDir)
-            ->paginate($perPage)
-            ->withQueryString();
+            });
+
+        // Logika Sorting Algoritma Matematika khusus untuk Kolom SPPM NO
+        if ($sortBy === 'sppm_no') {
+            $query->orderByRaw("CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(sppm_no, '/', 2), '/', -1) AS UNSIGNED) $sortDir");
+        } else {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
+        $sppms = $query->paginate($perPage)->withQueryString();
 
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-        $availableYears = InSppm::selectRaw('YEAR(sppm_date) as year')->distinct()->orderBy('year', 'desc')->pluck('year');
+        
+        // Mengambil daftar tahun yang tersedia dari data sppm_date
+        $availableYears = InSppm::selectRaw('YEAR(sppm_date) as year')
+            ->distinct()
+            ->orderBy('year', 'desc')
+            ->pluck('year');
+
+        // Memastikan tahun berjalan tetap ada di dropdown opsi pilihan filter
+        $currentYear = (int) date('Y');
+        if (!$availableYears->contains($currentYear)) {
+            $availableYears->prepend($currentYear);
+        }
 
         return view('inbound.index', compact(
             'sppms', 'categories', 'search', 'limit', 

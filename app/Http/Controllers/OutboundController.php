@@ -35,7 +35,7 @@ class OutboundController extends Controller
         ]);
     }
 
-    public function index(Request $request)
+   public function index(Request $request)
     {
         $search = $request->input('search');
         $limit = $request->input('limit', 10);
@@ -43,16 +43,17 @@ class OutboundController extends Controller
         // Menangkap parameter filter
         $categoryId = $request->input('category_id');
         $destinationId = $request->input('destination_id');
-        $yearFilter = $request->input('year'); // Parameter filter tahun
+        // REVISI: Default filter tahun ke tahun saat ini (berjalan)
+        $yearFilter = $request->input('year', date('Y')); 
 
-        // Menangkap parameter sorting, default ke sppm_date menurun (terbaru)
-        $sortBy = $request->input('sort_by', 'sppm_date');
+        // REVISI: Menangkap parameter sorting, default ke sppm_no menurun (terbesar)
+        $sortBy = $request->input('sort_by', 'sppm_no');
         $sortDir = $request->input('sort_dir', 'desc');
 
         // Mencegah manipulasi nama kolom
         $allowedSortColumns = ['sppm_no', 'sppm_date', 'created_at', 'destination_name']; 
         if (!in_array($sortBy, $allowedSortColumns)) {
-            $sortBy = 'sppm_date';
+            $sortBy = 'sppm_no'; // REVISI: Fallback ke sppm_no jika tidak valid
         }
         
         $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
@@ -84,7 +85,7 @@ class OutboundController extends Controller
             $query->where($modelTable . '.destination_id', $destinationId);
         }
 
-        // --- REVISI: Filter Tahun berdasarkan sppm_date ---
+        // Filter Tahun berdasarkan sppm_date
         if ($yearFilter) {
             $query->whereYear($modelTable . '.sppm_date', $yearFilter);
         }
@@ -93,6 +94,10 @@ class OutboundController extends Controller
         if ($sortBy === 'destination_name') {
             $query->leftJoin('destinations', $modelTable . '.destination_id', '=', 'destinations.id')
                   ->orderBy('destinations.name', $sortDir);
+        } elseif ($sortBy === 'sppm_no') {
+            // Sorting Algoritma Matematika khusus untuk Kolom SPPM NO
+            // Memotong string SPPM/234/VI/2026 menjadi 234 lalu dikonversi menjadi Angka (UNSIGNED)
+            $query->orderByRaw("CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(" . $modelTable . ".sppm_no, '/', 2), '/', -1) AS UNSIGNED) $sortDir");
         } else {
             $query->orderBy($modelTable . '.' . $sortBy, $sortDir);
         }
@@ -102,11 +107,17 @@ class OutboundController extends Controller
         $categories = \App\Models\MaterialCategory::orderBy('nomor_urut', 'asc')->get();
         $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
 
-        // --- REVISI: Mengambil daftar tahun yang tersedia dari data sppm_date ---
+        // Mengambil daftar tahun yang tersedia dari data sppm_date
         $years = \App\Models\OutSppm::selectRaw('YEAR(sppm_date) as year')
                     ->distinct()
                     ->orderBy('year', 'desc')
                     ->pluck('year');
+
+        // Memastikan tahun berjalan tetap ada di dropdown opsi pilihan filter (meskipun datanya mungkin masih kosong di awal tahun)
+        $currentYear = (int) date('Y');
+        if (!$years->contains($currentYear)) {
+            $years->prepend($currentYear);
+        }
 
         return view('outbound.index', compact('outbounds', 'search', 'limit', 'categories', 'destinations', 'sortBy', 'sortDir', 'categoryId', 'destinationId', 'years', 'yearFilter'));
     }
