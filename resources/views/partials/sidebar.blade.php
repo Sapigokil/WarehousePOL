@@ -69,6 +69,18 @@
                     </a>
                     <div class="collapse {{ request()->routeIs('reports.*') ? 'show' : '' }}" id="reportMenu">
                         <ul style="list-style: none; padding-left: 20px; margin-top: 2px; margin-bottom: 2px;">
+                            
+                            <li>
+                                <a href="{{ route('reports.simak') }}" class="sidebar-link {{ request()->routeIs('reports.simak') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-file-contract me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Pendistribusian MATERIEL (SIMAK)
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ route('report.inout.index') }}" class="sidebar-link {{ request()->routeIs('report.inout.index') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                    <i class="fa-solid fa-file-contract me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Data Terima keluar
+                                </a>
+                            </li>
+
                             <li class="mb-1">
                                 <a href="{{ route('reports.mutation') }}" class="sidebar-link {{ request()->routeIs('reports.mutation') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                     <i class="fa-solid fa-chart-bar me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Mutasi Stock
@@ -82,11 +94,6 @@
                             <li>
                                 <a href="{{ route('reports.outbound') }}" class="sidebar-link {{ request()->routeIs('reports.outbound') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                     <i class="fa-solid fa-arrow-right-from-bracket me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Riwayat Distribusi
-                                </a>
-                            </li>
-                            <li>
-                                <a href="{{ route('reports.simak') }}" class="sidebar-link {{ request()->routeIs('reports.simak') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
-                                    <i class="fa-solid fa-file-contract me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Pendistribusian MATERIEL (SIMAK)
                                 </a>
                             </li>
                         </ul>

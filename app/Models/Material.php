@@ -25,6 +25,7 @@ class Material extends Model
         'tnkb_rpt',
         'tnkb_r',
         'tnkb_ev',
+        'sbst_judul',
     ];
 
     public function category(): BelongsTo
