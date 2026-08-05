@@ -21,7 +21,7 @@
         transform: translateY(-50%); 
         font-size: 10rem; 
         color: #ffffff; 
-        opacity: 0.08; /* Opacity diturunkan sedikit karena background gelap */
+        opacity: 0.08;
         pointer-events: none; 
         z-index: 1; 
     }
@@ -43,6 +43,9 @@
     .nested-table { width: 100%; font-size: 0.8rem; background: #fff; }
     .nested-table th { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; color: #64748b; border-bottom: 1px solid #e2e8f0; padding: 10px; }
     .nested-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    
+    /* Baris Induk Spesial */
+    .row-parent-header { background-color: #f8fafc; }
 </style>
 @endpush
 
@@ -70,14 +73,15 @@
         <p class="mb-0 text-white-50 small">Kelola dokumen Surat Perintah Pengiriman Materiil (SPPM) Keluar.</p>
     </div>
     <div class="header-content d-flex gap-2">
-        @canany(['Setting Menu', 'Warehouse Menu'])
+        @can('Outbound Create')
         <button type="button" class="btn btn-light fw-bold text-dark shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportStandar" style="border-radius: 8px;">
             <i class="fa-solid fa-file-excel text-success me-1"></i> Import SPPM Keluar
         </button>
-        @endcanany
+        
         <a href="{{ route('outbounds.create') }}" class="btn btn-primary fw-bold shadow-sm px-4 py-2 border border-light" style="border-radius: 8px;">
             <i class="fa-solid fa-plus me-1"></i> SPPM Keluar Baru
         </a>
+        @endcan
     </div>
 </div>
 
@@ -96,11 +100,9 @@
 
 <div class="mb-3 p-3 bg-white shadow-sm border rounded">
     <form method="GET" action="{{ route('outbounds.index') }}" class="row g-2 align-items-center">
-        <!-- Input Tersembunyi untuk mempertahankan Sorting saat Filter aktif -->
         <input type="hidden" name="sort_by" value="{{ $sortBy }}">
         <input type="hidden" name="sort_dir" value="{{ $sortDir }}">
 
-        <!-- Filter Tampil (Limit) -->
         <div class="col-auto">
             <select name="limit" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 75px;" title="Jumlah Tampil">
                 <option value="10" {{ $limit == 10 ? 'selected' : '' }}>10</option>
@@ -109,7 +111,6 @@
             </select>
         </div>
 
-        <!-- Filter Tahun -->
         <div class="col-auto">
             <select name="year" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 100px;">
                 <option value="">-- Tahun --</option>
@@ -119,7 +120,6 @@
             </select>
         </div>
 
-        <!-- Filter Kategori -->
         <div class="col-auto">
             <select name="category_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 180px;">
                 <option value="">-- Semua Kategori --</option>
@@ -129,7 +129,6 @@
             </select>
         </div>
 
-        <!-- Filter Tujuan -->
         <div class="col-auto">
             <select name="destination_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 200px;">
                 <option value="">-- Semua Tujuan / Kesatuan --</option>
@@ -139,10 +138,8 @@
             </select>
         </div>
 
-        <!-- Spacer -->
         <div class="col"></div>
 
-        <!-- Pencarian Teks -->
         <div class="col-auto">
             <div class="input-group input-group-sm" style="width: 250px;">
                 <input type="text" name="search" class="form-control px-3" placeholder="Cari No SPPM / Tujuan..." value="{{ $search }}">
@@ -236,21 +233,30 @@
                             <a href="{{ route('outbounds.print', $sppm->id) }}" target="_blank" class="btn btn-sm btn-info text-white border-0 shadow-sm rounded-1 px-2 py-0.5" title="Cetak SPPM">
                                 <i class="fa-solid fa-print"></i>
                             </a>
-                            <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Data">
-                                <i class="fa-solid fa-eye text-primary"></i>
-                            </a>
-                        @else
-                            <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Edit Draft">
-                                <i class="fa-solid fa-pen text-danger"></i>
-                            </a>
                         @endif
+                        
+                        <!-- TOMBOL SHOW (READ-ONLY) -->
+                        <a href="{{ route('outbounds.show', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Detail (Read-Only)">
+                            <i class="fa-solid fa-eye text-info"></i>
+                        </a>
 
+                        @can('Outbound Edit')
+                            <!-- TOMBOL EDIT HANYA MUNCUL JIKA DOKUMEN BUKAN FINAL -->
+                            @if($sppm->status != 'completed')
+                            <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Edit / Koreksi Data">
+                                <i class="fa-solid fa-pen text-theme"></i>
+                            </a>
+                            @endif
+                        @endcan
+
+                        @can('Outbound Delete')
                         <form action="{{ route('outbounds.destroy', $sppm->id) }}" method="POST" class="m-0 p-0" onsubmit="return confirm('{{ $sppm->status == 'completed' ? 'Yakin membatalkan SPPM Final ini? Seluruh pemotongan stok & nomor seri akan dikembalikan ke gudang secara utuh.' : 'Yakin menghapus draft ini?' }}');">
                             @csrf @method('DELETE')
                             <button type="submit" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Batalkan & Hapus Data">
                                 <i class="fa-solid fa-trash text-danger"></i>
                             </button>
                         </form>
+                        @endcan
                     </div>
                 </td>
             </tr>
@@ -271,42 +277,120 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach($sppm->details as $detail)
-                                            <tr>
-                                                <td class="fw-semibold align-middle">
-                                                    {{ $detail->material->name }} <span class="text-muted fw-normal ms-1">({{ $detail->material->satuan }})</span>
-                                                </td>
-                                                <td class="text-center text-muted align-middle">
-                                                    Rp {{ number_format($detail->harga_total, 0, ',', '.') }}
-                                                </td>
-                                                <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 border-start align-middle">
-                                                    {{ number_format($detail->target_qty, 0, ',', '.') }}
-                                                </td>
+                                        @php
+                                            $parents = $sppm->details->filter(function($d) {
+                                                return is_null($d->material->parent_id);
+                                            })->sortBy(function($d) {
+                                                return $d->material->nomor_urut ?? 9999;
+                                            });
+
+                                            $childrenGrouped = $sppm->details->filter(function($d) {
+                                                return !is_null($d->material->parent_id);
+                                            })->groupBy('material.parent_id');
+                                        @endphp
+                                        
+                                        @foreach($parents as $parentDetail)
+                                            @php
+                                                $isParentHeader = $parentDetail->material->children()->count() > 0;
+                                            @endphp
+                                            
+                                            @if($isParentHeader)
+                                                <tr class="row-parent-header bg-light">
+                                                    <td class="fw-bold text-dark text-uppercase" style="font-size: 0.8rem;">
+                                                        <i class="fa-solid fa-folder-open text-theme me-2 opacity-75"></i> {{ $parentDetail->material->name }}
+                                                    </td>
+                                                    <td class="text-center text-muted align-middle">-</td>
+                                                    <td class="text-center border-start text-muted align-middle">-</td>
+                                                    <td class="border-start text-muted align-middle">-</td>
+                                                </tr>
                                                 
-                                                <td class="border-start align-middle">
-                                                    @if($sppm->status == 'completed' && $detail->material->pakai_seri == 1)
-                                                        @php
-                                                            $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
-                                                                $q->where('out_sppm_id', $sppm->id);
-                                                            })->whereHas('stock', function($q) use ($detail) {
-                                                                $q->where('material_id', $detail->material_id);
-                                                            })->get();
-                                                        @endphp
-                                                        @foreach($outStocks as $st)
-                                                            @if($st->seri_awal || $st->seri_akhir)
-                                                                <span class="d-inline-block text-muted me-2 mb-1" style="font-size: 0.65rem; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:4px; padding:2px 6px;">
-                                                                    {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!} 
-                                                                    <span class="ms-1 fw-bold text-dark">({{ $st->qty_keluar }} pcs)</span>
-                                                                </span>
-                                                            @endif
-                                                        @endforeach
-                                                    @elseif($sppm->status != 'completed')
-                                                        <span class="text-muted fst-italic small">Belum terpotong (Draft)</span>
-                                                    @else
-                                                        <span class="text-muted">-</span>
-                                                    @endif
-                                                </td>
-                                            </tr>
+                                                @if(isset($childrenGrouped[$parentDetail->material_id]))
+                                                    @php
+                                                        $sortedChildren = $childrenGrouped[$parentDetail->material_id]->sortBy(function($c) {
+                                                            return $c->material->nomor_urut ?? 9999;
+                                                        });
+                                                    @endphp
+                                                    
+                                                    @foreach($sortedChildren as $childDetail)
+                                                        <tr>
+                                                            <td class="fw-semibold align-middle">
+                                                                <span style="margin-left: 1.5rem;"><i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i></span>
+                                                                {{ $childDetail->material->name }} <span class="text-muted fw-normal ms-1">({{ $childDetail->material->satuan ?? '-' }})</span>
+                                                            </td>
+                                                            <td class="text-center text-muted align-middle">
+                                                                {{ $childDetail->harga_total > 0 ? 'Rp ' . number_format($childDetail->harga_total, 0, ',', '.') : '-' }}
+                                                            </td>
+                                                            <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 border-start align-middle">
+                                                                {{ $childDetail->target_qty > 0 ? number_format($childDetail->target_qty, 0, ',', '.') : '-' }}
+                                                            </td>
+                                                            <td class="border-start align-middle">
+                                                                @if($sppm->status == 'completed' && $childDetail->material->pakai_seri == 1 && $childDetail->target_qty > 0)
+                                                                    @php
+                                                                        $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                                                            $q->where('out_sppm_id', $sppm->id);
+                                                                        })->whereHas('stock', function($q) use ($childDetail) {
+                                                                            $q->where('material_id', $childDetail->material_id);
+                                                                        })->get();
+                                                                    @endphp
+                                                                    @forelse($outStocks as $st)
+                                                                        @if($st->seri_awal || $st->seri_akhir)
+                                                                            <span class="d-inline-block text-muted me-2 mb-1" style="font-size: 0.65rem; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:4px; padding:2px 6px;">
+                                                                                {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!} 
+                                                                                <span class="ms-1 fw-bold text-dark">({{ $st->qty_keluar }} pcs)</span>
+                                                                            </span>
+                                                                        @endif
+                                                                    @empty
+                                                                        <span class="text-muted fst-italic small">-</span>
+                                                                    @endforelse
+                                                                @elseif($sppm->status != 'completed')
+                                                                    <span class="text-muted fst-italic small">Belum terpotong (Draft)</span>
+                                                                @else
+                                                                    <span class="text-muted">-</span>
+                                                                @endif
+                                                            </td>
+                                                        </tr>
+                                                    @endforeach
+                                                @endif
+                                            
+                                            @else
+                                                <tr>
+                                                    <td class="fw-semibold align-middle">
+                                                        <i class="fa-solid fa-cube text-muted me-2 opacity-25"></i>
+                                                        {{ $parentDetail->material->name }} <span class="text-muted fw-normal ms-1">({{ $parentDetail->material->satuan ?? '-' }})</span>
+                                                    </td>
+                                                    <td class="text-center text-muted align-middle">
+                                                        {{ $parentDetail->harga_total > 0 ? 'Rp ' . number_format($parentDetail->harga_total, 0, ',', '.') : '-' }}
+                                                    </td>
+                                                    <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 border-start align-middle">
+                                                        {{ $parentDetail->target_qty > 0 ? number_format($parentDetail->target_qty, 0, ',', '.') : '-' }}
+                                                    </td>
+                                                    <td class="border-start align-middle">
+                                                        @if($sppm->status == 'completed' && $parentDetail->material->pakai_seri == 1 && $parentDetail->target_qty > 0)
+                                                            @php
+                                                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                                                    $q->where('out_sppm_id', $sppm->id);
+                                                                })->whereHas('stock', function($q) use ($parentDetail) {
+                                                                    $q->where('material_id', $parentDetail->material_id);
+                                                                })->get();
+                                                            @endphp
+                                                            @forelse($outStocks as $st)
+                                                                @if($st->seri_awal || $st->seri_akhir)
+                                                                    <span class="d-inline-block text-muted me-2 mb-1" style="font-size: 0.65rem; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:4px; padding:2px 6px;">
+                                                                        {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!} 
+                                                                        <span class="ms-1 fw-bold text-dark">({{ $st->qty_keluar }} pcs)</span>
+                                                                    </span>
+                                                                @endif
+                                                            @empty
+                                                                <span class="text-muted fst-italic small">-</span>
+                                                            @endforelse
+                                                        @elseif($sppm->status != 'completed')
+                                                            <span class="text-muted fst-italic small">Belum terpotong (Draft)</span>
+                                                        @else
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endif
                                         @endforeach
                                     </tbody>
                                 </table>
@@ -331,8 +415,8 @@
     {{ $outbounds->links('pagination::bootstrap-5') }}
 </div>
 
+@can('Outbound Create')
 <!-- Modal Import Standar (Eks Import Khusus) -->
-@canany(['Setting Menu', 'Warehouse Menu'])
 <div class="modal fade" id="modalImportStandar" tabindex="-1" aria-labelledby="modalImportStandarLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
@@ -413,6 +497,6 @@
         </div>
     </div>
 </div>
-@endcanany
+@endcan
 
 @endsection

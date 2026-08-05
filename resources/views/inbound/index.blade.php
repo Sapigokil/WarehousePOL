@@ -69,15 +69,18 @@
     /* Styling Fitur Accordion (Collapse) */
     .accordion-toggle { cursor: pointer; text-decoration: none; display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0; }
     .accordion-toggle .fa-chevron-right { transition: transform 0.2s ease; font-size: 0.75rem; color: #94a3b8; }
-    .accordion-toggle:not(.collapsed) .fa-chevron-right { transform: rotate(90deg); color: #3b82f6; } /* Warna icon saat aktif */
+    .accordion-toggle:not(.collapsed) .fa-chevron-right { transform: rotate(90deg); color: #3b82f6; } 
     
-    .nested-table-container { background-color: #fafbfc; border-bottom: 1px solid #e2e8f0; box-shadow: inset 0 3px 6px -3px rgba(0,0,0,0.05); border-left: 3px solid #3b82f6; } /* List garis biru di sisi kiri */
+    .nested-table-container { background-color: #fafbfc; border-bottom: 1px solid #e2e8f0; box-shadow: inset 0 3px 6px -3px rgba(0,0,0,0.05); border-left: 3px solid #3b82f6; } 
     .nested-table { margin: 0; background: transparent; width: 100%; }
     .nested-table th { font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9; }
     .nested-table td { padding: 8px 15px; color: #334155; font-size: 0.85rem; border: none; border-bottom: 1px dashed #e2e8f0; vertical-align: middle;}
     .nested-table tr:last-child td { border-bottom: none; }
     
     .status-badge { font-size: 0.7rem; padding: 4px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px; }
+
+    /* Baris Induk Spesial */
+    .row-parent-header { background-color: #f8fafc; }
 </style>
 @endpush
 
@@ -91,15 +94,15 @@
         <p class="mb-0 text-white-50 small">Pencatatan Materiel Masuk berdasarkan SPPM</p>
     </div>
     <div class="header-content d-flex gap-2">
-        @canany(['Setting Menu', 'Warehouse Menu'])
-        <!-- PERBAIKAN: data-bs-toggle dan data-bs-target -->
+        @can('Inbound Create')
         <button type="button" class="btn btn-light fw-bold text-dark shadow-sm px-3 py-2" data-bs-toggle="modal" data-bs-target="#modalImportExcel" style="border-radius: 8px;">
             <i class="fa-solid fa-file-excel text-success me-1"></i> Import SPPM
         </button>
-        @endcanany
+        
         <a href="{{ route('inbound.create') }}" class="btn btn-primary fw-bold shadow-sm px-4 py-2 border border-light" style="border-radius: 8px;">
             <i class="fa-solid fa-plus me-1"></i> Input SPPM Baru
         </a>
+        @endcan
     </div>
 </div>
 
@@ -179,7 +182,7 @@
     <table class="table-dense">
         <thead>
             <tr>
-                <th width="32%">
+                <th width="30%">
                     <!-- Link Sorting untuk No. SPPM -->
                     <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_no', 'sort_dir' => ($sortBy == 'sppm_no' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                         No. SPPM / Dokumen
@@ -213,8 +216,8 @@
                         @endif
                     </a>
                 </th>
-                <th width="12%" class="text-center">Status</th>
-                <th width="8%" class="text-center">Aksi</th>
+                <th width="10%" class="text-center">Status</th>
+                <th width="12%" class="text-center">Aksi</th>
             </tr>
         </thead>
         <tbody>
@@ -268,15 +271,25 @@
                 </td>
                 <td class="text-center">
                     <div class="d-flex justify-content-center align-items-center flex-nowrap gap-1">
+                        <!-- TOMBOL SHOW (READ-ONLY) TERBUKA UNTUK SEMUA AKSES INBOUND -->
+                        <a href="{{ route('inbound.show', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" style="font-size: 0.8rem;" title="Lihat Detail (Read-Only)">
+                            <i class="fa-solid fa-eye text-info"></i>
+                        </a>
+                        
+                        @can('Inbound Edit')
                         <a href="{{ route('inbound.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" style="font-size: 0.8rem;" title="Input / Ubah Realisasi">
                             <i class="fa-solid fa-pen text-theme"></i>
                         </a>
+                        @endcan
+                        
+                        @can('Inbound Delete')
                         <form action="{{ route('inbound.destroy', $sppm->id) }}" method="POST" class="m-0 p-0" onsubmit="return confirm('Yakin menghapus dokumen SPPM ini beserta seluruh riwayat penerimaannya?');">
                             @csrf @method('DELETE')
                             <button type="submit" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" style="font-size: 0.8rem;" title="Hapus Data">
                                 <i class="fa-solid fa-trash text-danger"></i>
                             </button>
                         </form>
+                        @endcan
                     </div>
                 </td>
             </tr>
@@ -288,7 +301,9 @@
                             <div class="d-flex justify-content-between align-items-end mb-2">
                                 <h6 class="fw-bold text-theme m-0" style="font-size: 0.8rem;"><i class="fa-solid fa-clock-rotate-left me-1"></i> RIWAYAT KEDATANGAN & KELENGKAPAN BARANG</h6>
                                 @if($sppm->status != 'completed')
+                                    @can('Inbound Edit')
                                     <a href="{{ route('inbound.edit', $sppm->id) }}" class="btn btn-sm btn-dark" style="font-size: 0.7rem;"><i class="fa-solid fa-truck-loading me-1"></i> Input Gelombang Masuk</a>
+                                    @endcan
                                 @endif
                             </div>
                             <div class="table-responsive bg-white border rounded">
@@ -310,50 +325,151 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach($sppm->details as $detail)
+                                        @php
+                                            // 1. Ekstrak Parent dan Child ke dalam koleksi terpisah
+                                            $parents = $sppm->details->filter(function($d) {
+                                                return is_null($d->material->parent_id);
+                                            })->sortBy(function($d) {
+                                                return $d->material->nomor_urut ?? 9999;
+                                            });
+
+                                            $childrenGrouped = $sppm->details->filter(function($d) {
+                                                return !is_null($d->material->parent_id);
+                                            })->groupBy('material.parent_id');
+                                        @endphp
+                                        
+                                        @foreach($parents as $parentDetail)
                                             @php
+                                                $isParentHeader = $parentDetail->material->children()->count() > 0;
                                                 $totalMasuk = 0;
                                             @endphp
-                                            <tr>
-                                                <td class="fw-semibold">
-                                                    <span class="d-block">{{ $detail->material->name }} <span class="text-muted fw-normal ms-1">({{ $detail->material->satuan }})</span></span>
+                                            
+                                            @if($isParentHeader)
+                                                {{-- BARIS INDUK (PARENT HEADER) --}}
+                                                <tr class="row-parent-header">
+                                                    <td class="fw-bold text-dark text-uppercase" style="font-size: 0.8rem;">
+                                                        <i class="fa-solid fa-folder-open text-theme me-2 opacity-75"></i> {{ $parentDetail->material->name }}
+                                                    </td>
+                                                    <td class="text-center text-muted align-middle">-</td>
                                                     
-                                                    @if($detail->material->pakai_seri == 1)
-                                                        @if($detail->sppm_serial_start || $detail->sppm_serial_end)
-                                                            <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: {!! $formatSeri($detail->sppm_serial_prefix, $detail->sppm_serial_start, $detail->sppm_serial_end) !!}
-                                                            </small>
-                                                        @endif
-                                                    @endif
-                                                </td>
+                                                    @foreach($sppm->logs as $log)
+                                                        <td class="text-center border-start text-muted align-middle">-</td>
+                                                    @endforeach
+                                                    
+                                                    <td class="text-center border-start bg-light text-muted align-middle">-</td>
+                                                    <td class="text-center text-muted align-middle">-</td>
+                                                </tr>
                                                 
-                                                <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 align-middle">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
-                                                
-                                                @foreach($sppm->logs as $log)
+                                                {{-- RENDER ANAK-ANAKNYA DI BAWAH INDUK INI --}}
+                                                @if(isset($childrenGrouped[$parentDetail->material_id]))
                                                     @php
-                                                        $stock = $log->stocks->where('material_id', $detail->material_id)->first();
-                                                        $qty = $stock ? $stock->qty_received : 0;
-                                                        $totalMasuk += $qty;
+                                                        $sortedChildren = $childrenGrouped[$parentDetail->material_id]->sortBy(function($c) {
+                                                            return $c->material->nomor_urut ?? 9999;
+                                                        });
                                                     @endphp
-                                                    <td class="text-center border-start text-muted align-middle">
-                                                        <span class="d-block {{ $qty > 0 ? 'fw-bold text-dark' : '' }}">{{ $qty > 0 ? number_format($qty, 0, ',', '.') : '-' }}</span>
+                                                    
+                                                    @foreach($sortedChildren as $childDetail)
+                                                        @php
+                                                            $totalMasukChild = 0;
+                                                        @endphp
+                                                        <tr>
+                                                            <td class="fw-semibold">
+                                                                <span style="margin-left: 1.5rem;"><i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i></span>
+                                                                <span class="d-inline-block">{{ $childDetail->material->name }} <span class="text-muted fw-normal ms-1">({{ $childDetail->material->satuan ?? '-' }})</span></span>
+                                                                
+                                                                @if($childDetail->material->pakai_seri == 1 && ($childDetail->sppm_serial_start || $childDetail->sppm_serial_end))
+                                                                    <small class="text-muted d-block mt-1" style="margin-left: 2.5rem; font-size: 0.7rem;">
+                                                                        <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: {!! $formatSeri($childDetail->sppm_serial_prefix, $childDetail->sppm_serial_start, $childDetail->sppm_serial_end) !!}
+                                                                    </small>
+                                                                @endif
+                                                            </td>
+                                                            
+                                                            <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 align-middle">
+                                                                {{ $childDetail->target_qty > 0 ? number_format($childDetail->target_qty, 0, ',', '.') : '-' }}
+                                                            </td>
+                                                            
+                                                            @foreach($sppm->logs as $log)
+                                                                @php
+                                                                    $stock = $log->stocks->where('material_id', $childDetail->material_id)->first();
+                                                                    $qty = $stock ? $stock->qty_received : 0;
+                                                                    $totalMasukChild += $qty;
+                                                                @endphp
+                                                                <td class="text-center border-start text-muted align-middle">
+                                                                    <span class="d-block {{ $qty > 0 ? 'fw-bold text-dark' : '' }}">{{ $qty > 0 ? number_format($qty, 0, ',', '.') : '-' }}</span>
+                                                                    @if($stock && ($stock->serial_start || $stock->serial_end))
+                                                                        <small class="text-muted d-block mt-1" style="font-size: 0.65rem; background:#f8fafc; border-radius:4px; padding:2px;">
+                                                                            {!! $formatSeri($stock->serial_prefix, $stock->serial_start, $stock->serial_end) !!}
+                                                                        </small>
+                                                                    @endif
+                                                                </td>
+                                                            @endforeach
+                                                            
+                                                            @php
+                                                                $sisaChild = max(0, $childDetail->target_qty - $totalMasukChild);
+                                                            @endphp
+                                                            <td class="text-center border-start bg-light fw-bold text-dark align-middle">
+                                                                {{ $totalMasukChild > 0 ? number_format($totalMasukChild, 0, ',', '.') : '-' }}
+                                                            </td>
+                                                            <td class="text-center fw-bold align-middle {{ $sisaChild > 0 && $childDetail->target_qty > 0 ? 'text-danger bg-danger bg-opacity-10' : 'text-success' }}">
+                                                                @if($childDetail->target_qty == 0)
+                                                                    <span class="text-muted">-</span>
+                                                                @else
+                                                                    {{ $sisaChild > 0 ? number_format($sisaChild, 0, ',', '.') : 'LENGKAP' }}
+                                                                @endif
+                                                            </td>
+                                                        </tr>
+                                                    @endforeach
+                                                @endif
+
+                                            @else
+                                                {{-- BARIS STANDALONE (PARENT YANG TIDAK PUNYA ANAK DI MASTER) --}}
+                                                <tr>
+                                                    <td class="fw-semibold">
+                                                        <i class="fa-solid fa-cube text-muted me-2 opacity-25"></i>
+                                                        <span class="d-inline-block">{{ $parentDetail->material->name }} <span class="text-muted fw-normal ms-1">({{ $parentDetail->material->satuan ?? '-' }})</span></span>
                                                         
-                                                        @if($stock && ($stock->serial_start || $stock->serial_end))
-                                                            <small class="text-muted d-block mt-1" style="font-size: 0.65rem; background:#f8fafc; border-radius:4px; padding:2px;">
-                                                                {!! $formatSeri($stock->serial_prefix, $stock->serial_start, $stock->serial_end) !!}
+                                                        @if($parentDetail->material->pakai_seri == 1 && ($parentDetail->sppm_serial_start || $parentDetail->sppm_serial_end))
+                                                            <small class="text-muted d-block mt-1" style="margin-left: 1.5rem; font-size: 0.7rem;">
+                                                                <i class="fa-solid fa-tags me-1 opacity-75"></i>Seri: {!! $formatSeri($parentDetail->sppm_serial_prefix, $parentDetail->sppm_serial_start, $parentDetail->sppm_serial_end) !!}
                                                             </small>
                                                         @endif
                                                     </td>
-                                                @endforeach
-                                                
-                                                @php
-                                                    $sisa = $detail->target_qty - $totalMasuk;
-                                                @endphp
-                                                <td class="text-center border-start bg-light fw-bold text-dark align-middle">{{ number_format($totalMasuk, 0, ',', '.') }}</td>
-                                                <td class="text-center fw-bold align-middle {{ $sisa > 0 ? 'text-danger bg-danger bg-opacity-10' : 'text-success' }}">
-                                                    {{ $sisa > 0 ? number_format($sisa, 0, ',', '.') : 'LENGKAP' }}
-                                                </td>
-                                            </tr>
+                                                    
+                                                    <td class="text-center fw-bold text-primary bg-primary bg-opacity-10 align-middle">
+                                                        {{ $parentDetail->target_qty > 0 ? number_format($parentDetail->target_qty, 0, ',', '.') : '-' }}
+                                                    </td>
+                                                    
+                                                    @foreach($sppm->logs as $log)
+                                                        @php
+                                                            $stock = $log->stocks->where('material_id', $parentDetail->material_id)->first();
+                                                            $qty = $stock ? $stock->qty_received : 0;
+                                                            $totalMasuk += $qty;
+                                                        @endphp
+                                                        <td class="text-center border-start text-muted align-middle">
+                                                            <span class="d-block {{ $qty > 0 ? 'fw-bold text-dark' : '' }}">{{ $qty > 0 ? number_format($qty, 0, ',', '.') : '-' }}</span>
+                                                            @if($stock && ($stock->serial_start || $stock->serial_end))
+                                                                <small class="text-muted d-block mt-1" style="font-size: 0.65rem; background:#f8fafc; border-radius:4px; padding:2px;">
+                                                                    {!! $formatSeri($stock->serial_prefix, $stock->serial_start, $stock->serial_end) !!}
+                                                                </small>
+                                                            @endif
+                                                        </td>
+                                                    @endforeach
+                                                    
+                                                    @php
+                                                        $sisa = max(0, $parentDetail->target_qty - $totalMasuk);
+                                                    @endphp
+                                                    <td class="text-center border-start bg-light fw-bold text-dark align-middle">
+                                                        {{ $totalMasuk > 0 ? number_format($totalMasuk, 0, ',', '.') : '-' }}
+                                                    </td>
+                                                    <td class="text-center fw-bold align-middle {{ $sisa > 0 && $parentDetail->target_qty > 0 ? 'text-danger bg-danger bg-opacity-10' : 'text-success' }}">
+                                                        @if($parentDetail->target_qty == 0)
+                                                            <span class="text-muted">-</span>
+                                                        @else
+                                                            {{ $sisa > 0 ? number_format($sisa, 0, ',', '.') : 'LENGKAP' }}
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endif
                                         @endforeach
                                     </tbody>
                                 </table>
@@ -389,7 +505,7 @@
     </div>
 </div>
 
-@canany(['Setting Menu', 'Warehouse Menu'])
+@can('Inbound Create')
 <!-- MODAL IMPORT EXCEL INBOUND -->
 <div class="modal fade" id="modalImportExcel" tabindex="-1" aria-labelledby="modalImportExcelLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
@@ -456,7 +572,6 @@
                         </div>
 
                         <div class="mb-3">
-                            <!-- Name menggunakan excel_file agar sesuai dengan parameter di InboundController -->
                             <input type="file" name="excel_file" class="form-control form-control-sm" accept=".xlsx, .xls, .csv" required>
                         </div>
                     </div>
@@ -472,7 +587,6 @@
         </div>
     </div>
 </div>
-@endcanany
+@endcan
 
 @endsection
-

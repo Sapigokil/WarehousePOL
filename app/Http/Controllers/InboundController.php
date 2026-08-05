@@ -142,7 +142,7 @@ class InboundController extends Controller
             'material_category_id' => 'required|exists:material_categories,id',
             'warehouse_id'         => 'required|exists:warehouses,id',
             'inbound_mode'         => 'required|string|in:mode-1,mode-2',
-            'file_lampiran'        => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120', // Validasi file (Maks 5MB)
+            'file_lampiran'        => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
             'items'                => 'required|array',
             'items.*.material_id'  => 'required|exists:materials,id',
             'items.*.target_qty'   => 'nullable|numeric|min:0', 
@@ -151,7 +151,6 @@ class InboundController extends Controller
         $currentMode = $request->input('inbound_mode');
         $batchDate = $currentMode === 'mode-2' ? $request->input('batch_date') : $request->sppm_date;
 
-        // Proses Upload File Lampiran
         $lampiranPath = null;
         if ($request->hasFile('file_lampiran')) {
             $file = $request->file('file_lampiran');
@@ -176,7 +175,7 @@ class InboundController extends Controller
 
                 if ($isOverlap) {
                     if ($lampiranPath && Storage::disk('public')->exists($lampiranPath)) {
-                        Storage::disk('public')->delete($lampiranPath); // Bersihkan file jika gagal simpan
+                        Storage::disk('public')->delete($lampiranPath); 
                     }
                     return back()->withInput()->with('error', "GAGAL! Terdapat rentang Nomor Seri yang tumpang tindih (duplikat) pada Master Stock untuk prefix {$prefix}.");
                 }
@@ -190,7 +189,7 @@ class InboundController extends Controller
                 'material_category_id' => $request->material_category_id,
                 'warehouse_id'         => $request->warehouse_id,
                 'notes'                => $request->notes_manifes,
-                'file_lampiran'        => $lampiranPath, // Simpan path ke database
+                'file_lampiran'        => $lampiranPath, 
                 'status'               => $currentMode === 'mode-1' ? 'completed' : 'pending',
                 'created_by'           => auth()->id(),
                 'updated_by'           => auth()->id()
@@ -207,59 +206,59 @@ class InboundController extends Controller
             $isAllCompleted = true;
 
             foreach ($request->items as $item) {
-                if (isset($item['target_qty']) && $item['target_qty'] > 0) {
-                    
-                    $sppmPrefix = $item['sppm_serial_prefix'] ?? null;
-                    $sppmStart = isset($item['sppm_serial_start']) ? (int) str_replace('.', '', $item['sppm_serial_start']) : null;
-                    $sppmEnd = isset($item['sppm_serial_end']) ? (int) str_replace('.', '', $item['sppm_serial_end']) : null;
+                $targetQty = (int) ($item['target_qty'] ?? 0);
+                $qtyReceived = $currentMode === 'mode-1' ? $targetQty : (int) ($item['qty_received'] ?? 0);
+                
+                $sppmPrefix = $item['sppm_serial_prefix'] ?? null;
+                $sppmStart = isset($item['sppm_serial_start']) ? (int) str_replace('.', '', $item['sppm_serial_start']) : null;
+                $sppmEnd = isset($item['sppm_serial_end']) ? (int) str_replace('.', '', $item['sppm_serial_end']) : null;
 
-                    $realPrefix = $item['serial_prefix'] ?? null;
-                    $realStart = isset($item['serial_start']) ? (int) str_replace('.', '', $item['serial_start']) : null;
-                    $realEnd = isset($item['serial_end']) ? (int) str_replace('.', '', $item['serial_end']) : null;
+                $realPrefix = $item['serial_prefix'] ?? null;
+                $realStart = isset($item['serial_start']) ? (int) str_replace('.', '', $item['serial_start']) : null;
+                $realEnd = isset($item['serial_end']) ? (int) str_replace('.', '', $item['serial_end']) : null;
 
-                    InDetail::create([
-                        'in_sppm_id'        => $sppm->id,
-                        'material_id'       => $item['material_id'],
-                        'target_qty'        => $item['target_qty'],
-                        'qty_huruf'         => $item['qty_huruf'] ?? null,
-                        'harga_satuan'      => $item['harga_satuan'] ?? 0,
-                        'harga_total'       => $item['harga_total'] ?? 0,
-                        'sppm_serial_prefix'=> $sppmPrefix,
-                        'sppm_serial_start' => $sppmStart,
-                        'sppm_serial_end'   => $sppmEnd,
+                // --- PERBAIKAN: Selalu simpan Detail untuk menampilkan semua list material di view ---
+                InDetail::create([
+                    'in_sppm_id'        => $sppm->id,
+                    'material_id'       => $item['material_id'],
+                    'target_qty'        => $targetQty,
+                    'qty_huruf'         => $item['qty_huruf'] ?? null,
+                    'harga_satuan'      => $item['harga_satuan'] ?? 0,
+                    'harga_total'       => $item['harga_total'] ?? 0,
+                    'sppm_serial_prefix'=> $sppmPrefix,
+                    'sppm_serial_start' => $sppmStart,
+                    'sppm_serial_end'   => $sppmEnd,
+                ]);
+
+                if ($qtyReceived < $targetQty) {
+                    $isAllCompleted = false;
+                }
+
+                // Proses fisik stok gudang HANYA jika masuk
+                if ($qtyReceived > 0) {
+                    InStock::create([
+                        'in_log_id'    => $log->id,
+                        'material_id'  => $item['material_id'],
+                        'qty_received' => $qtyReceived,
+                        'serial_prefix'=> $currentMode === 'mode-2' ? $realPrefix : $sppmPrefix,
+                        'serial_start' => $currentMode === 'mode-2' ? $realStart : $sppmStart,
+                        'serial_end'   => $currentMode === 'mode-2' ? $realEnd : $sppmEnd,
                     ]);
 
-                    $qtyReceived = $currentMode === 'mode-1' ? $item['target_qty'] : ($item['qty_received'] ?? 0);
-                    
-                    if ($qtyReceived < $item['target_qty']) {
-                        $isAllCompleted = false;
-                    }
-
-                    if ($qtyReceived > 0) {
-                        InStock::create([
-                            'in_log_id'    => $log->id,
-                            'material_id'  => $item['material_id'],
-                            'qty_received' => $qtyReceived,
-                            'serial_prefix'=> $currentMode === 'mode-2' ? $realPrefix : $sppmPrefix,
-                            'serial_start' => $currentMode === 'mode-2' ? $realStart : $sppmStart,
-                            'serial_end'   => $currentMode === 'mode-2' ? $realEnd : $sppmEnd,
-                        ]);
-
-                        Stock::create([
-                            'no_surat_masuk' => $sppm->sppm_no,
-                            'tgl_masuk'      => $batchDate,
-                            'material_id'    => $item['material_id'],
-                            'warehouse_id'   => $request->warehouse_id,
-                            'prefix'         => $currentMode === 'mode-2' ? $realPrefix : $sppmPrefix,
-                            'seri_awal'      => $currentMode === 'mode-2' ? $realStart : $sppmStart,
-                            'seri_akhir'     => $currentMode === 'mode-2' ? $realEnd : $sppmEnd,
-                            'qty'            => $qtyReceived,
-                            'harga_satuan'   => $item['harga_satuan'] ?? 0,
-                            'total_harga'    => ($item['harga_satuan'] ?? 0) * $qtyReceived,
-                            'status'         => '-',
-                            'keterangan'     => $request->batch_notes ?? 'Penerimaan Tahap 1',
-                        ]);
-                    }
+                    Stock::create([
+                        'no_surat_masuk' => $sppm->sppm_no,
+                        'tgl_masuk'      => $batchDate,
+                        'material_id'    => $item['material_id'],
+                        'warehouse_id'   => $request->warehouse_id,
+                        'prefix'         => $currentMode === 'mode-2' ? $realPrefix : $sppmPrefix,
+                        'seri_awal'      => $currentMode === 'mode-2' ? $realStart : $sppmStart,
+                        'seri_akhir'     => $currentMode === 'mode-2' ? $realEnd : $sppmEnd,
+                        'qty'            => $qtyReceived,
+                        'harga_satuan'   => $item['harga_satuan'] ?? 0,
+                        'total_harga'    => ($item['harga_satuan'] ?? 0) * $qtyReceived,
+                        'status'         => '-',
+                        'keterangan'     => $request->batch_notes ?? 'Penerimaan Tahap 1',
+                    ]);
                 }
             }
 
@@ -267,7 +266,6 @@ class InboundController extends Controller
                 $sppm->update(['status' => $isAllCompleted ? 'completed' : 'partial']);
             }
 
-            // --- CATAT LOG SISTEM ---
             $this->recordLog('CREATED', 'DOKUMEN SPPM', $sppm->id, null, [
                 'Nomor SPPM'        => $sppm->sppm_no,
                 'Tanggal SPPM'      => $sppm->sppm_date,
@@ -280,19 +278,6 @@ class InboundController extends Controller
 
         $redirect = $request->input('submit_action') === 'save_new' ? route('inbound.create') : route('inbound.index');
         return redirect($redirect)->with('success', 'Data berhasil diverifikasi dan disimpan.');
-    }
-
-    public function edit($id)
-    {
-        $inbound = InSppm::with(['details.material', 'logs' => function($q){
-            $q->orderBy('batch_number', 'asc');
-        }, 'logs.stocks'])->findOrFail($id);
-        
-        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-        $warehouses = Warehouse::orderBy('id', 'asc')->get();
-        $inboundMode = $this->inboundMode;
-
-        return view('inbound.form', compact('inbound', 'categories', 'warehouses', 'inboundMode'));
     }
 
     public function update(Request $request, $id)
@@ -401,7 +386,6 @@ class InboundController extends Controller
                     'updated_by' => auth()->id()
                 ]);
 
-                // --- CATAT LOG SISTEM ---
                 $newValuesLog = array_merge([
                     'Nomor SPPM' => $sppm->sppm_no,
                     'Aktivitas'  => "Penerimaan Fisik Gelombang ke-{$nextBatch}",
@@ -423,20 +407,16 @@ class InboundController extends Controller
             'items'        => 'required|array',
         ]);
 
-        // Proses Replace File Lampiran jika ada upload baru
         $lampiranPath = $sppm->file_lampiran;
         if ($request->hasFile('file_lampiran')) {
-            // Hapus file lama jika ada
             if ($sppm->file_lampiran && Storage::disk('public')->exists($sppm->file_lampiran)) {
                 Storage::disk('public')->delete($sppm->file_lampiran);
             }
-            // Simpan file baru
             $file = $request->file('file_lampiran');
             $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\.\-]/', '_', $file->getClientOriginalName());
             $lampiranPath = $file->storeAs('inbound_attachments', $filename, 'public');
         }
 
-        // PERSIAPAN DATA LOG
         $oldDetails = $sppm->details->keyBy('material_id');
         $oldChanges = [];
         $newChanges = [];
@@ -480,7 +460,7 @@ class InboundController extends Controller
                 'sppm_date'    => $request->sppm_date,
                 'warehouse_id' => $request->warehouse_id,
                 'notes'        => $request->notes_manifes,
-                'file_lampiran'=> $lampiranPath, // Update kolom file_lampiran
+                'file_lampiran'=> $lampiranPath, 
                 'updated_by'   => auth()->id()
             ]);
 
@@ -495,9 +475,10 @@ class InboundController extends Controller
                     $sppmStart = isset($item['sppm_serial_start']) ? (int) str_replace('.', '', $item['sppm_serial_start']) : null;
                     $sppmEnd = isset($item['sppm_serial_end']) ? (int) str_replace('.', '', $item['sppm_serial_end']) : null;
 
-                    InDetail::where('in_sppm_id', $sppm->id)
-                        ->where('material_id', $item['material_id'])
-                        ->update([
+                    // --- PERBAIKAN: Selalu perbarui/masukkan Detail agar utuh di Master View ---
+                    InDetail::updateOrCreate(
+                        ['in_sppm_id' => $sppm->id, 'material_id' => $item['material_id']],
+                        [
                             'target_qty'        => $item['target_qty'],
                             'qty_huruf'         => $item['qty_huruf'] ?? null,
                             'harga_satuan'      => $item['harga_satuan'] ?? 0,
@@ -505,10 +486,12 @@ class InboundController extends Controller
                             'sppm_serial_prefix'=> $sppmPrefix,
                             'sppm_serial_start' => $sppmStart,
                             'sppm_serial_end'   => $sppmEnd,
-                        ]);
+                        ]
+                    );
 
                     $firstLog = $sppm->logs()->where('batch_number', 1)->first();
                     if ($firstLog) {
+                        // Proses update ke tabel Stock HANYA jika qty diketik > 0
                         if ($item['target_qty'] > 0) {
                             InStock::updateOrCreate(
                                 ['in_log_id' => $firstLog->id, 'material_id' => $item['material_id']],
@@ -546,11 +529,23 @@ class InboundController extends Controller
                 }
             }
 
-            // --- CATAT LOG SISTEM ---
             $this->recordLog('UPDATED', 'DOKUMEN SPPM', $sppm->id, $oldChanges, $newChanges);
         });
 
         return redirect()->route('inbound.index')->with('success', 'Pembaruan Dokumen & Seri berhasil disimpan.');
+    }
+
+    public function edit($id)
+    {
+        $inbound = InSppm::with(['details.material', 'logs' => function($q){
+            $q->orderBy('batch_number', 'asc');
+        }, 'logs.stocks'])->findOrFail($id);
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $warehouses = Warehouse::orderBy('id', 'asc')->get();
+        $inboundMode = $this->inboundMode;
+
+        return view('inbound.form', compact('inbound', 'categories', 'warehouses', 'inboundMode'));
     }
 
     public function destroy($id)
@@ -758,5 +753,76 @@ class InboundController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal memproses file import: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * SCRIPT AUTO-FIX (ONE-TIME RUN)
+     * Untuk menyuntikkan baris materiil ber-qty 0 ke dokumen SPPM Inbound lama.
+     */
+    public function fixOldDataInbound()
+    {
+        // Proteksi agar hanya role tertentu yang bisa mengakses script ini
+        if (!auth()->user()->can('Setting Menu')) {
+            abort(403, 'Anda tidak memiliki otorisasi untuk mengeksekusi script ini.');
+        }
+
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            // Ambil semua dokumen SPPM beserta detailnya
+            $sppms = \App\Models\InSppm::with('details')->get();
+            $insertedCount = 0;
+
+            foreach ($sppms as $sppm) {
+                $categoryId = $sppm->material_category_id;
+
+                // Ambil semua materiil (induk dan anak) yang berada di bawah kategori dokumen ini
+                $materials = \App\Models\Material::where('material_category_id', $categoryId)->get();
+                
+                // Kumpulkan ID materiil yang sudah ada di dokumen ini
+                $existingMaterialIds = $sppm->details->pluck('material_id')->toArray();
+
+                foreach ($materials as $material) {
+                    // Jika materiil dari Master belum ada di dokumen SPPM lama ini, suntikkan!
+                    if (!in_array($material->id, $existingMaterialIds)) {
+                        \App\Models\InDetail::create([
+                            'in_sppm_id'         => $sppm->id,
+                            'material_id'        => $material->id,
+                            'target_qty'         => 0,
+                            'qty_huruf'          => null,
+                            'harga_satuan'       => 0,
+                            'harga_total'        => 0,
+                            'sppm_serial_prefix' => null,
+                            'sppm_serial_start'  => null,
+                            'sppm_serial_end'    => null,
+                        ]);
+                        $insertedCount++;
+                    }
+                }
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+            return redirect()->route('inbound.index')->with('success', "Proses Auto-Fix Inbound Selesai! Sebanyak {$insertedCount} baris materiil (QTY 0) berhasil disuntikkan ke dalam dokumen lama.");
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return redirect()->route('inbound.index')->with('error', "Gagal melakukan Auto-Fix: " . $e->getMessage());
+        }
+    }
+
+    public function show($id)
+    {
+        $inbound = InSppm::with([
+            'category', 
+            'warehouse', 
+            'details.material', 
+            'logs' => function($q) {
+                $q->orderBy('batch_number', 'asc');
+            }, 
+            'logs.stocks', 
+            'creator', 
+            'updater'
+        ])->findOrFail($id);
+
+        return view('inbound.show', compact('inbound'));
     }
 }

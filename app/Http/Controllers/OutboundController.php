@@ -200,6 +200,17 @@ class OutboundController extends Controller
 
             foreach ($request->items as $item) {
                 $qty = (int) ($item['target_qty'] ?? 0);
+                
+                // --- PERBAIKAN: Selalu simpan Detail agar nama materiel muncul lengkap di View ---
+                OutDetail::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'material_id'  => $item['material_id'],
+                    'target_qty'   => $qty,
+                    'harga_satuan' => $item['harga_satuan'] ?? 0,
+                    'harga_total'  => $item['harga_total'] ?? 0,
+                ]);
+
+                // Proses fisik stok gudang HANYA jika QTY > 0
                 if ($qty > 0) {
                     $hasItems = true;
                     
@@ -210,14 +221,6 @@ class OutboundController extends Controller
                             throw new \Exception("GAGAL DISIMPAN: Jumlah barang keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia di gudang hanya {$availableStock}.");
                         }
                     }
-
-                    OutDetail::create([
-                        'out_sppm_id'  => $sppm->id,
-                        'material_id'  => $item['material_id'],
-                        'target_qty'   => $qty,
-                        'harga_satuan' => $item['harga_satuan'] ?? 0,
-                        'harga_total'  => $item['harga_total'] ?? 0,
-                    ]);
 
                     $itemsToProcess[] = $item;
                 }
@@ -297,19 +300,6 @@ class OutboundController extends Controller
         }
     }
 
-    public function edit($id)
-    {
-        $outbound = OutSppm::with('details')->findOrFail($id);
-        
-        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-        $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
-        
-        $firstDetail = $outbound->details->first();
-        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
-
-        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId'));
-    }
-
     public function update(Request $request, $id)
     {
         $request->validate([
@@ -330,7 +320,6 @@ class OutboundController extends Controller
 
         $destination = Destination::find($request->destination_id);
 
-        // PERSIAPAN DATA LOG (Pendeteksi Perubahan)
         $oldDetails = $sppm->details->keyBy('material_id');
         $oldChanges = [];
         $newChanges = [];
@@ -391,6 +380,16 @@ class OutboundController extends Controller
 
             foreach ($request->items as $item) {
                 $qty = (int) ($item['target_qty'] ?? 0);
+                
+                // --- PERBAIKAN: Selalu simpan kembali saat update agar View tetap utuh ---
+                OutDetail::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'material_id'  => $item['material_id'],
+                    'target_qty'   => $qty,
+                    'harga_satuan' => $item['harga_satuan'] ?? 0,
+                    'harga_total'  => $item['harga_total'] ?? 0,
+                ]);
+
                 if ($qty > 0) {
                     $hasItems = true;
 
@@ -401,14 +400,6 @@ class OutboundController extends Controller
                             throw new \Exception("GAGAL: Jumlah keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}.");
                         }
                     }
-
-                    OutDetail::create([
-                        'out_sppm_id'  => $sppm->id,
-                        'material_id'  => $item['material_id'],
-                        'target_qty'   => $qty,
-                        'harga_satuan' => $item['harga_satuan'] ?? 0,
-                        'harga_total'  => $item['harga_total'] ?? 0,
-                    ]);
 
                     $itemsToProcess[] = $item;
                 }
@@ -481,6 +472,19 @@ class OutboundController extends Controller
             DB::rollBack();
             return back()->withInput()->withErrors($e->getMessage());
         }
+    }
+
+    public function edit($id)
+    {
+        $outbound = OutSppm::with('details')->findOrFail($id);
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
+        
+        $firstDetail = $outbound->details->first();
+        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
+
+        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId'));
     }
 
     public function destroy($id)
@@ -961,5 +965,76 @@ class OutboundController extends Controller
         }
 
         return redirect()->route('outbounds.index')->with('success', "Data Barang Keluar berhasil diimport dan memotong stok ($insertedDataCount baris dokumen SPPM).");
+    }
+
+    /**
+     * SCRIPT AUTO-FIX OUTBOUND (ONE-TIME RUN)
+     * Untuk menyuntikkan baris materiil ber-qty 0 ke dokumen SPPM Keluar lama.
+     */
+    public function fixOldDataOutbound()
+    {
+        // Proteksi agar hanya role tertentu yang bisa mengakses script ini
+        if (!auth()->user()->can('Setting Menu')) {
+            abort(403, 'Anda tidak memiliki otorisasi untuk mengeksekusi script ini.');
+        }
+
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            // Ambil semua dokumen SPPM Keluar beserta detail dan data master materialnya
+            $sppms = \App\Models\OutSppm::with('details.material')->get();
+            $insertedCount = 0;
+
+            foreach ($sppms as $sppm) {
+                // Ambil satu barang pertama dari SPPM ini untuk mengetahui Kategori Dokumennya
+                $firstDetail = $sppm->details->first();
+                
+                if ($firstDetail && $firstDetail->material) {
+                    $categoryId = $firstDetail->material->material_category_id;
+
+                    // Ambil semua materiil (induk dan anak) yang berada di bawah kategori ini dari Master
+                    $materials = \App\Models\Material::where('material_category_id', $categoryId)->get();
+                    
+                    // Kumpulkan ID materiil yang sudah telanjur tersimpan di dokumen lama ini
+                    $existingMaterialIds = $sppm->details->pluck('material_id')->toArray();
+
+                    foreach ($materials as $material) {
+                        // Jika materiil dari Master belum ada di dokumen SPPM lama ini, suntikkan dengan angka 0!
+                        if (!in_array($material->id, $existingMaterialIds)) {
+                            \App\Models\OutDetail::create([
+                                'out_sppm_id'  => $sppm->id,
+                                'material_id'  => $material->id,
+                                'target_qty'   => 0,
+                                'harga_satuan' => 0,
+                                'harga_total'  => 0,
+                            ]);
+                            $insertedCount++;
+                        }
+                    }
+                }
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+            return redirect()->route('outbounds.index')->with('success', "Proses Auto-Fix Outbound Selesai! Sebanyak {$insertedCount} baris materiil (QTY 0) berhasil disuntikkan ke dalam dokumen lama.");
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return redirect()->route('outbounds.index')->with('error', "Gagal melakukan Auto-Fix: " . $e->getMessage());
+        }
+    }
+
+    public function show($id)
+    {
+        $outbound = \App\Models\OutSppm::with('details')->findOrFail($id);
+        
+        $categories = \App\Models\MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $destinations = \App\Models\Destination::orderBy('nomor_urut', 'asc')->get();
+        
+        $firstDetail = $outbound->details->first();
+        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
+
+        // Melempar flag khusus $isReadonly ke form
+        $isReadonly = true;
+
+        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId', 'isReadonly'));
     }
 }

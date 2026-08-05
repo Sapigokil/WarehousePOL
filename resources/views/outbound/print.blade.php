@@ -117,6 +117,9 @@
             $p = $prefix ? $prefix . ' ' : '';
             return "NO : " . $p . $padAndDot($start) . " - " . $padAndDot($end);
         };
+        
+        // Menghitung total baris untuk rowspan kolom Keterangan (termasuk 1 baris spacer kosong di bawah)
+        $totalRows = count($sppm->details) + 1;
     @endphp
 
     <div class="paper-preview">
@@ -163,7 +166,7 @@
                 <td>:</td>
                 <td>
                     <div class="dots-line">
-                        {{ $sppm->keterangan ? $sppm->keterangan . ' ' . str_repeat('.', 110) : str_repeat('.', 110) }}
+                        {{ str_repeat('.', 110) }}
                     </div>
                 </td>
             </tr>
@@ -198,50 +201,132 @@
                 </tr>
             </thead>
             <tbody>
-                @php $no = 1; @endphp
-                @foreach($sppm->details as $detail)
-                <tr>
-                    <td style="text-align: center;">{{ $no++ }}</td>
-                    <td>
-                        {{ strtoupper($detail->material->name) }}
-                        
-                        @if($detail->material->pakai_seri == 1)
+                @php 
+                    $no = 1; 
+                    $globalIndex = 0; // Penanda baris pertama untuk mencetak Rowspan Keterangan
+
+                    // Pisahkan Parent dan Child agar bisa diurutkan secara hierarki
+                    $parents = $sppm->details->filter(function($d) {
+                        return is_null($d->material->parent_id);
+                    })->sortBy(function($d) {
+                        return $d->material->nomor_urut ?? 9999;
+                    });
+
+                    $childrenGrouped = $sppm->details->filter(function($d) {
+                        return !is_null($d->material->parent_id);
+                    })->groupBy('material.parent_id');
+                @endphp
+
+                @foreach($parents as $parentDetail)
+                    @php $isParentHeader = $parentDetail->material->children()->count() > 0; @endphp
+                    
+                    @if($isParentHeader)
+                        <!-- 1. BARIS PARENT (INDUK HEADER) -->
+                        <tr>
+                            <td style="text-align: center;">{{ $no++ }}</td>
+                            <td>{{ strtoupper($parentDetail->material->name) }}</td>
+                            
+                            <!-- Kosongkan Satuan, QTY, Angka, Huruf, Harga -->
+                            <td></td> <td></td> <td></td> <td></td> <td></td>
+                            
+                            @if($globalIndex === 0)
+                                <td rowspan="{{ $totalRows }}" style="vertical-align: middle; text-align: left; font-size: 10pt; max-width: 120px; word-wrap: break-word; word-break: break-word; white-space: normal;">
+                                    {!! nl2br(e($sppm->keterangan ?? '')) !!}
+                                </td>
+                            @endif
+                        </tr>
+                        @php $globalIndex++; @endphp
+
+                        <!-- 2. RENDER BARIS ANAK DI BAWAH PARENT (CHILD) -->
+                        @if(isset($childrenGrouped[$parentDetail->material_id]))
                             @php
-                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
-                                    $q->where('out_sppm_id', $sppm->id);
-                                })->whereHas('stock', function($q) use ($detail) {
-                                    $q->where('material_id', $detail->material_id);
-                                })->get();
+                                $sortedChildren = $childrenGrouped[$parentDetail->material_id]->sortBy(function($c) {
+                                    return $c->material->nomor_urut ?? 9999;
+                                });
                             @endphp
-                            @foreach($outStocks as $st)
-                                @if($st->seri_awal !== null)
-                                    <div style="font-size: 8.5pt; margin-top: 3px; margin-bottom: 30px;">
-                                        {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!}
-                                    </div>
-                                @endif
+                            
+                            @foreach($sortedChildren as $childDetail)
+                                <tr>
+                                    <td></td> <!-- Kosongkan No Urut untuk Child -->
+                                    <td>
+                                        {{ strtoupper($childDetail->material->name) }}
+                                        
+                                        @if($childDetail->material->pakai_seri == 1 && $childDetail->target_qty > 0)
+                                            @php
+                                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                                    $q->where('out_sppm_id', $sppm->id);
+                                                })->whereHas('stock', function($q) use ($childDetail) {
+                                                    $q->where('material_id', $childDetail->material_id);
+                                                })->get();
+                                            @endphp
+                                            @foreach($outStocks as $st)
+                                                @if($st->seri_awal !== null)
+                                                    <div style="font-size: 8.5pt; margin-top: 3px; margin-bottom: 5px;">
+                                                        {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!}
+                                                    </div>
+                                                @endif
+                                            @endforeach
+                                        @endif
+                                    </td>
+                                    <td style="text-align: center;">{{ strtoupper($childDetail->material->satuan) }}</td>
+                                    <td style="text-align: center;">{{ $childDetail->target_qty > 0 ? number_format($childDetail->target_qty, 0, ',', '.') : '-' }}</td>
+                                    <td style="text-align: center;">{{ $childDetail->target_qty > 0 ? ucfirst(terbilang($childDetail->target_qty)) : '-' }}</td>
+                                    <td style="text-align: right;">{{ $childDetail->harga_satuan > 0 ? number_format($childDetail->harga_satuan, 0, ',', '.') : '-' }}</td>
+                                    <td style="text-align: right;">{{ $childDetail->harga_total > 0 ? number_format($childDetail->harga_total, 0, ',', '.') : '-' }}</td>
+                                    
+                                    @if($globalIndex === 0)
+                                        <td rowspan="{{ $totalRows }}" style="vertical-align: middle; text-align: left; font-size: 10pt; max-width: 120px; word-wrap: break-word; word-break: break-word; white-space: normal;">
+                                            {!! nl2br(e($sppm->keterangan ?? '')) !!}
+                                        </td>
+                                    @endif
+                                </tr>
+                                @php $globalIndex++; @endphp
                             @endforeach
                         @endif
-                    </td>
-                    <td style="text-align: center;">{{ strtoupper($detail->material->satuan) }}</td>
-                    <td style="text-align: center;">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
-                    <!-- Kolom huruf di center sesuai request -->
-                    <td style="text-align: center;">{{ ucfirst(terbilang($detail->target_qty)) }}</td>
-                    <td style="text-align: right;">{{ $detail->harga_satuan > 0 ? number_format($detail->harga_satuan, 0, ',', '.') : '-' }}</td>
-                    <td style="text-align: right;">{{ $detail->harga_total > 0 ? number_format($detail->harga_total, 0, ',', '.') : '-' }}</td>
-                    <td></td>
-                </tr>
+
+                    @else
+                        <!-- 3. BARIS STANDALONE (TIDAK PUNYA ANAK CABANG) -->
+                        <tr>
+                            <td style="text-align: center;">{{ $no++ }}</td>
+                            <td>
+                                {{ strtoupper($parentDetail->material->name) }}
+                                @if($parentDetail->material->pakai_seri == 1 && $parentDetail->target_qty > 0)
+                                    @php
+                                        $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                            $q->where('out_sppm_id', $sppm->id);
+                                        })->whereHas('stock', function($q) use ($parentDetail) {
+                                            $q->where('material_id', $parentDetail->material_id);
+                                        })->get();
+                                    @endphp
+                                    @foreach($outStocks as $st)
+                                        @if($st->seri_awal !== null)
+                                            <div style="font-size: 8.5pt; margin-top: 3px; margin-bottom: 5px;">
+                                                {!! $formatSeri($st->prefix, $st->seri_awal, $st->seri_akhir) !!}
+                                            </div>
+                                        @endif
+                                    @endforeach
+                                @endif
+                            </td>
+                            <td style="text-align: center;">{{ strtoupper($parentDetail->material->satuan) }}</td>
+                            <td style="text-align: center;">{{ $parentDetail->target_qty > 0 ? number_format($parentDetail->target_qty, 0, ',', '.') : '-' }}</td>
+                            <td style="text-align: center;">{{ $parentDetail->target_qty > 0 ? ucfirst(terbilang($parentDetail->target_qty)) : '-' }}</td>
+                            <td style="text-align: right;">{{ $parentDetail->harga_satuan > 0 ? number_format($parentDetail->harga_satuan, 0, ',', '.') : '-' }}</td>
+                            <td style="text-align: right;">{{ $parentDetail->harga_total > 0 ? number_format($parentDetail->harga_total, 0, ',', '.') : '-' }}</td>
+                            
+                            @if($globalIndex === 0)
+                                <td rowspan="{{ $totalRows }}" style="vertical-align: middle; text-align: left; font-size: 10pt; max-width: 120px; word-wrap: break-word; word-break: break-word; white-space: normal;">
+                                    {!! nl2br(e($sppm->keterangan ?? '')) !!}
+                                </td>
+                            @endif
+                        </tr>
+                        @php $globalIndex++; @endphp
+                    @endif
                 @endforeach
                 
-                <!-- Baris Spacer Pembentuk Blanko -->
+                <!-- Baris Spacer Pembentuk Blanko Kosong di Bawah Tabel -->
                 <tr>
-                    <td style="height: 120px;"></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    <td style="height: 30px;"></td> <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
+                    {{-- Kolom ke-8 (Keterangan) tidak perlu dicetak lagi karena sudah di-rowspan --}}
                 </tr>
             </tbody>
         </table>

@@ -163,26 +163,27 @@ class InboundImport implements ToCollection
                     $price = $isMain ? $globalPrice : 0;
                     $totalPrice = $qty * $price;
 
+                    // Siapkan data Prefix dan Seri 
+                    $isSerialized = ($material->pakai_seri == 1);
+                    $finalPrefix = $isSerialized ? $serialParsed['prefix'] : null;
+                    $finalStart  = $isSerialized ? $serialParsed['start'] : null;
+                    $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
+
+                    // --- PERBAIKAN: Selalu Rekam InDetail (Termasuk saat QTY 0) ---
+                    InDetail::create([
+                        'in_sppm_id'        => $sppm->id,
+                        'material_id'       => $material->id,
+                        'target_qty'        => $qty,
+                        'qty_huruf'         => null,
+                        'harga_satuan'      => $price,
+                        'harga_total'       => $totalPrice,
+                        'sppm_serial_prefix'=> $finalPrefix,
+                        'sppm_serial_start' => $finalStart,
+                        'sppm_serial_end'   => $finalEnd,
+                    ]);
+
+                    // --- PERBAIKAN: Proses fisik stok dan rekonsiliasi HANYA berjalan jika QTY > 0 ---
                     if ($qty > 0) {
-                        $isSerialized = ($material->pakai_seri == 1);
-                        
-                        $finalPrefix = $isSerialized ? $serialParsed['prefix'] : null;
-                        $finalStart  = $isSerialized ? $serialParsed['start'] : null;
-                        $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
-
-                        // 1. Rekam jejak fisik dokumen penerimaan
-                        InDetail::create([
-                            'in_sppm_id'        => $sppm->id,
-                            'material_id'       => $material->id,
-                            'target_qty'        => $qty,
-                            'qty_huruf'         => null,
-                            'harga_satuan'      => $price,
-                            'harga_total'       => $totalPrice,
-                            'sppm_serial_prefix'=> $finalPrefix,
-                            'sppm_serial_start' => $finalStart,
-                            'sppm_serial_end'   => $finalEnd,
-                        ]);
-
                         InStock::create([
                             'in_log_id'    => $log->id,
                             'material_id'  => $material->id,

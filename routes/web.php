@@ -42,10 +42,13 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('inbound/materials-by-category/{category_id}', [App\Http\Controllers\InboundController::class, 'getMaterialsByCategory'])->name('inbound.materials-by-category');
         Route::get('inbound/template-import', [\App\Http\Controllers\InboundController::class, 'downloadTemplate'])->name('inbound.template');
         Route::post('inbound/import-excel', [\App\Http\Controllers\InboundController::class, 'importExcel'])->name('inbound.import');
-    
+        
+        Route::get('/inbound/fix-old-data', [App\Http\Controllers\InboundController::class, 'fixOldDataInbound'])->name('inbound.fix_old_data');
         Route::resource('inbound', App\Http\Controllers\InboundController::class);
         // Tambahkan di dalam route group yang sesuai
         Route::post('/warehouses/ajax-store', [\App\Http\Controllers\InboundController::class, 'storeWarehouseAjax'])->name('warehouses.ajax.store');
+
+        
     });
 
     Route::middleware(['can:Warehouse Menu'])->group(function () {
@@ -59,6 +62,15 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
 
         Route::get('outbounds/template-import', [\App\Http\Controllers\OutboundController::class, 'downloadTemplate'])->name('outbounds.template');
         Route::post('outbounds/import-excel', [\App\Http\Controllers\OutboundController::class, 'importExcel'])->name('outbounds.import');
+
+        Route::get('/outbounds/fix-old-data', [App\Http\Controllers\OutboundController::class, 'fixOldDataOutbound'])->name('outbounds.fix_old_data');
+        Route::get('/outbounds/mass-update-keterangan', function () {
+            $text = "T.A. 2026\nSetelah materiel diterima agar dibuatkan Berita Acara Pengujian Materiel (BAPPM) dan dikirim ke Ditlantas Polda Jateng, Email : gudang_sbstpoldajtg@yahoo.com selambat-lambatnya 3 hari setelah menerima SPPM";
+            
+            $count = \App\Models\OutSppm::query()->update(['keterangan' => $text]);
+            
+            return "Berhasil mengupdate {$count} dokumen SPPM Keluar.";
+        });
 
         Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
         Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');

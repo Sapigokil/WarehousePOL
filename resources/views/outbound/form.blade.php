@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', isset($outbound) ? 'Kelola SPPM Keluar' : 'Input SPPM Keluar Baru')
+@section('title', isset($outbound) ? (isset($isReadonly) && $isReadonly ? 'Detail SPPM Keluar' : 'Kelola SPPM Keluar') : 'Input SPPM Keluar Baru')
 
 @push('styles')
 <style>
@@ -19,30 +19,73 @@
     
     .text-letter-span { font-size: 0.7rem; font-weight: 600; color: #4b5563; text-transform: uppercase; background-color: #f3f4f6; padding: 2px 8px; border-radius: 6px; display: flex; align-items: center; min-height: 31px; border: 1px dashed #cbd5e1; word-wrap: break-word; }
     .text-price-total { font-size: 0.8rem; font-weight: 700; color: var(--primary-color); }
+
+    /* Efek visual transparan untuk input yang terkunci di mode Show */
+    .readonly-overlay input, .readonly-overlay select { pointer-events: none; background-color: #f1f5f9; opacity: 0.8; }
 </style>
 @endpush
 
 @section('content')
 @php
+    // Cek apakah dokumen ini sudah Final
     $isCompleted = isset($outbound) && $outbound->status === 'completed';
+    // Cek apakah halaman diakses melalui tombol Show (Mata)
+    $readOnlyMode = isset($isReadonly) && $isReadonly;
+    // Form dikunci HANYA JIKA dokumen sudah final ATAU sedang berada di mode Show
+    $isLocked = $isCompleted || $readOnlyMode;
+
+    // Helper untuk mengubah angka menjadi huruf di sisi server (PHP)
+    $terbilang = function($n) use (&$terbilang) {
+        $bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
+        $n = (int)$n;
+        if ($n <= 0) return "-";
+        if ($n < 12) return $bil[$n];
+        if ($n < 20) return $terbilang($n - 10) . " belas";
+        if ($n < 100) return $terbilang(floor($n / 10)) . " puluh " . ($bil[$n % 10] === "" ? "" : " " . $bil[$n % 10]);
+        if ($n < 200) return "seratus " . ($n - 100 === 0 ? "" : $terbilang($n - 100));
+        if ($n < 1000) return $terbilang(floor($n / 100)) . " ratus " . ($n % 100 === 0 ? "" : " " . $terbilang($n % 100));
+        if ($n < 2000) return "seribu " . ($n - 1000 === 0 ? "" : $terbilang($n - 1000));
+        if ($n < 1000000) return $terbilang(floor($n / 1000)) . " ribu " . ($n % 1000 === 0 ? "" : " " . $terbilang($n % 1000));
+        if ($n < 1000000000) return $terbilang(floor($n / 1000000)) . " juta " . ($n % 1000000 === 0 ? "" : " " . $terbilang($n % 1000000));
+        return "";
+    };
+
+    // Helper untuk memformat visual Nomor Seri (Prefix merah + titik)
+    $formatSeriVisual = function($prefix, $start, $end) {
+        if (is_null($start) && is_null($end)) return '-';
+        $padAndDot = function($num) {
+            $s = str_pad($num ?? 0, 9, '0', STR_PAD_LEFT);
+            return substr($s, 0, 3) . '.' . substr($s, 3, 3) . '.' . substr($s, 6, 3);
+        };
+        $s_formatted = $padAndDot($start);
+        $e_formatted = $padAndDot($end);
+        
+        $p = $prefix ? "<span class='text-danger fw-bold'>{$prefix}.</span>" : '';
+        return "{$p}<span class='fw-bold'>{$s_formatted}</span> <span class='fw-normal mx-1'>s/d</span> <span class='fw-bold'>{$e_formatted}</span>";
+    };
 @endphp
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="fw-bold mb-0">
             <i class="fa-solid fa-file-export text-danger me-2"></i>
-            {{ isset($outbound) ? 'Kelola Dokumen Keluar' : 'Registrasi SPPM Keluar' }}
+            {{ isset($outbound) ? ($readOnlyMode ? 'Detail Dokumen Keluar' : 'Kelola Dokumen Keluar') : 'Registrasi SPPM Keluar' }}
+            
             @if(isset($outbound))
                 @if($isCompleted)
                     <span class="badge bg-success ms-2 fs-6 align-middle"><i class="fa-solid fa-check me-1"></i> FINAL</span>
                 @else
                     <span class="badge bg-secondary ms-2 fs-6 align-middle"><i class="fa-solid fa-pen-ruler me-1"></i> DRAFT</span>
                 @endif
+                
+                @if($readOnlyMode)
+                    <span class="badge bg-info ms-1 fs-6 align-middle"><i class="fa-solid fa-eye me-1"></i> Read-Only</span>
+                @endif
             @endif
         </h5>
     </div>
     <div class="d-flex gap-2">
-        @if($isCompleted)
+        @if($isCompleted || $readOnlyMode)
             <a href="{{ route('outbounds.print', $outbound->id) }}" target="_blank" class="btn btn-sm btn-info text-white fw-bold shadow-sm px-3"><i class="fa-solid fa-print me-1"></i> Cetak SPPM</a>
         @endif
         <a href="{{ route('outbounds.index') }}" class="btn btn-sm btn-light border fw-semibold px-3"><i class="fa-solid fa-arrow-left me-1"></i> Kembali</a>
@@ -60,11 +103,11 @@
     </div>
 @endif
 
-<form action="{{ isset($outbound) ? route('outbounds.update', $outbound->id) : route('outbounds.store') }}" method="POST" id="formMainOutbound">
+<form action="{{ isset($outbound) && !$readOnlyMode ? route('outbounds.update', $outbound->id) : route('outbounds.store') }}" method="POST" id="formMainOutbound">
     @csrf
-    @if(isset($outbound)) @method('PUT') @endif
+    @if(isset($outbound) && !$readOnlyMode) @method('PUT') @endif
 
-    <div class="row">
+    <div class="row {{ $readOnlyMode ? 'readonly-overlay' : '' }}">
         <!-- HEADER -->
         <div class="col-12 mb-3">
             <div class="form-card p-4 shadow-sm">
@@ -75,17 +118,17 @@
                 <div class="row">
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Nomor SPPM Keluar</label>
-                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', $outbound->sppm_no ?? $generatedSppm ?? '') }}" required placeholder="Contoh: SPPM/001/X/2026/DITLANTAS" {{ isset($isCompleted) && $isCompleted ? 'readonly' : '' }}>
+                        <input type="text" name="sppm_no" class="form-control custom-input w-100" value="{{ old('sppm_no', $outbound->sppm_no ?? $generatedSppm ?? '') }}" required placeholder="Contoh: SPPM/001/X/2026/DITLANTAS" {{ $isLocked ? 'readonly' : '' }}>
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Tgl Surat Keluar</label>
-                        <input type="date" name="sppm_date" class="form-control custom-input w-100" value="{{ old('sppm_date', $outbound->sppm_date ?? date('Y-m-d')) }}" required {{ $isCompleted ? 'readonly' : '' }}>
+                        <input type="date" name="sppm_date" class="form-control custom-input w-100" value="{{ old('sppm_date', $outbound->sppm_date ?? date('Y-m-d')) }}" required {{ $isLocked ? 'readonly' : '' }}>
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Tujuan Distribusi (Penerima)</label>
-                        @if($isCompleted)
-                            <input type="text" class="form-control custom-input w-100" value="{{ $outbound->destination->name }}" readonly>
-                            <input type="hidden" name="destination_id" value="{{ $outbound->destination_id }}">
+                        @if($isLocked)
+                            <input type="text" class="form-control custom-input w-100" value="{{ $outbound->destination->name ?? '-' }}" readonly>
+                            <input type="hidden" name="destination_id" value="{{ $outbound->destination_id ?? '' }}">
                         @else
                             <select name="destination_id" class="form-select custom-input w-100" required>
                                 <option value="">-- Pilih Tujuan --</option>
@@ -97,7 +140,7 @@
                     </div>
                     <div class="col-12 col-sm-6 col-md-4 col-xl-2 mb-3">
                         <label class="field-label">Kategori Komoditas</label>
-                        @if($isCompleted)
+                        @if($isLocked)
                             <input type="text" class="form-control custom-input w-100" value="{{ $outbound->details->first()->material->category->name ?? '-' }}" readonly>
                         @else
                             <select id="category-selector" class="form-select custom-input w-100" required>
@@ -110,23 +153,24 @@
                     </div>
                     <div class="col-12 col-sm-12 col-md-8 col-xl-4 mb-3">
                         <label class="field-label">Keterangan SPPM (Umum)</label>
-                        <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan', $outbound->keterangan ?? '') }}" placeholder="Catatan pengiriman..." {{ $isCompleted ? 'readonly' : '' }}>
+                        <input type="text" name="keterangan" class="form-control custom-input w-100" value="{{ old('keterangan', $outbound->keterangan ?? '') }}" placeholder="Catatan pengiriman..." {{ $isLocked ? 'readonly' : '' }}>
                     </div>
+                    
                     <!-- KOTAK INFO PEJABAT BAMAT -->
-                    <div id="bamatInfo" class="mt-2 p-3 bg-light border rounded d-none">
+                    <div id="bamatInfo" class="mt-2 p-3 bg-light border rounded {{ isset($outbound) ? '' : 'd-none' }}">
                         <h6 class="fw-bold mb-2 text-muted" style="font-size: 0.8rem;"><i class="fa-solid fa-address-card me-1"></i> Info Pejabat Bamat</h6>
                         <div class="row small">
                             <div class="col-md-4 mb-2 mb-md-0">
                                 <span class="text-muted d-block" style="font-size: 0.7rem;">Nama:</span>
-                                <strong id="infoNama" class="text-dark">-</strong>
+                                <strong id="infoNama" class="text-dark">{{ $outbound->nama_bamat ?? '-' }}</strong>
                             </div>
                             <div class="col-md-4 mb-2 mb-md-0">
                                 <span class="text-muted d-block" style="font-size: 0.7rem;">Pangkat / NRP:</span>
-                                <strong id="infoPangkat" class="text-dark">-</strong>
+                                <strong id="infoPangkat" class="text-dark">{{ $outbound->pangkat ?? '-' }}</strong>
                             </div>
                             <div class="col-md-4">
                                 <span class="text-muted d-block" style="font-size: 0.7rem;">Jabatan:</span>
-                                <strong id="infoJabatan" class="text-dark">-</strong>
+                                <strong id="infoJabatan" class="text-dark">{{ $outbound->jabatan ?? '-' }}</strong>
                             </div>
                         </div>
                     </div>
@@ -147,18 +191,21 @@
                         <thead>
                             <tr>
                                 <th width="3%" class="text-center">No</th>
-                                <th width="25%">Nama & Kode Materiil</th>
+                                <!-- Melebarkan kolom Nama jika Tersedia disembunyikan -->
+                                <th width="{{ $isLocked ? '35%' : '25%' }}">Nama & Kode Materiil</th>
                                 <th width="5%" class="text-center">Sat</th>
+                                @if(!$isLocked)
                                 <th width="10%" class="text-center text-info">Tersedia</th>
-                                <th width="10%" class="text-center text-danger">Target Keluar<br><small>(Angka)</small></th>
+                                @endif
+                                <th width="10%" class="text-center text-danger">Jumlah<br><small>(Angka)</small></th>
                                 <th width="15%">Banyaknya<br><small>(Huruf)</small></th>
                                 <th width="12%" class="text-end">Hrg Satuan<br><small>(Rp)</small></th>
                                 <th width="15%" class="text-end">Jumlah<br><small>(Rp)</small></th>
                             </tr>
                         </thead>
                         <tbody id="outbound-items-container">
-                            <!-- Jika dokumen final, langsung render data statis yang sudah tersimpan -->
-                            @if($isCompleted)
+                            <!-- Jika dokumen final / dikunci, langsung render data statis yang sudah tersimpan -->
+                            @if($isLocked)
                                 @php $parentNo = 1; @endphp
                                 @foreach($outbound->details as $idx => $detail)
                                     <tr>
@@ -167,8 +214,8 @@
                                             @if(!is_null($detail->material->parent_id)) <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-1 opacity-50"></i> @endif
                                             <span class="text-dark d-inline-block fw-semibold" style="font-size: 0.8rem;">{{ $detail->material->name }}</span>
                                             
-                                            <!-- Render Serial dari Log OutStock -->
-                                            @if($detail->material->pakai_seri == 1)
+                                            <!-- Render Serial dari Log OutStock hanya jika stok tersebut ikut dikeluarkan -->
+                                            @if($detail->material->pakai_seri == 1 && $detail->target_qty > 0)
                                                 @php
                                                     $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound){
                                                         $q->where('out_sppm_id', $outbound->id);
@@ -181,8 +228,8 @@
                                                         <small class="text-muted"><i class="fa-solid fa-tags"></i> Seri Keluar:</small><br>
                                                         @foreach($outStocks as $st)
                                                             @if($st->seri_awal !== null)
-                                                                <span class="badge bg-secondary bg-opacity-10 text-dark border fw-bold mb-1" style="font-size: 0.65rem;">
-                                                                    {{ $st->prefix }} {{ str_pad($st->seri_awal, 9, '0', STR_PAD_LEFT) }} s/d {{ str_pad($st->seri_akhir, 9, '0', STR_PAD_LEFT) }}
+                                                                <span class="badge bg-secondary bg-opacity-10 text-dark border mb-1" style="font-size: 0.7rem; font-weight: normal;">
+                                                                    {!! $formatSeriVisual($st->prefix, $st->seri_awal, $st->seri_akhir) !!}
                                                                 </span>
                                                             @endif
                                                         @endforeach
@@ -191,18 +238,28 @@
                                             @endif
                                         </td>
                                         <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">{{ $detail->material->satuan }}</td>
-                                        <td class="text-center align-middle"><span class="badge bg-secondary">-</span></td>
-                                        <td class="align-middle text-center fw-bold text-danger">{{ number_format($detail->target_qty, 0, ',', '.') }}</td>
-                                        <td class="align-middle">
-                                            <span class="text-letter-span">{{ $detail->target_qty > 0 ? '-' : '-' }}</span>
+                                        
+                                        <!-- Kolom Tersedia disembunyikan saat Locked -->
+                                        
+                                        <td class="align-middle text-center fw-bold text-danger">
+                                            {{ $detail->target_qty > 0 ? number_format($detail->target_qty, 0, ',', '.') : '-' }}
                                         </td>
-                                        <td class="text-end align-middle fw-bold text-secondary">Rp {{ number_format($detail->harga_satuan, 0, ',', '.') }}</td>
-                                        <td class="text-end align-middle"><span class="text-price-total">Rp {{ number_format($detail->harga_total, 0, ',', '.') }}</span></td>
+                                        <td class="align-middle">
+                                            <span class="text-letter-span">{{ $detail->target_qty > 0 ? $terbilang($detail->target_qty) : '-' }}</span>
+                                        </td>
+                                        <td class="text-end align-middle fw-bold text-secondary">
+                                            {{ $detail->harga_satuan > 0 ? 'Rp ' . number_format($detail->harga_satuan, 0, ',', '.') : '-' }}
+                                        </td>
+                                        <td class="text-end align-middle">
+                                            <span class="text-price-total">
+                                                {{ $detail->harga_total > 0 ? 'Rp ' . number_format($detail->harga_total, 0, ',', '.') : '-' }}
+                                            </span>
+                                        </td>
                                     </tr>
                                 @endforeach
                             @else
                                 <tr>
-                                    <td colspan="8" id="empty-state-row" class="text-center py-5 text-muted bg-white">
+                                    <td colspan="{{ $isLocked ? 7 : 8 }}" id="empty-state-row" class="text-center py-5 text-muted bg-white">
                                         <i class="fa-solid fa-arrow-pointer fs-3 mb-2 opacity-50"></i>
                                         <p class="mb-0 small">Silakan tentukan Kategori Komoditas terlebih dahulu untuk menggelar manifes barang.</p>
                                     </td>
@@ -212,7 +269,8 @@
                     </table>
                 </div>
 
-                @if(!$isCompleted)
+                <!-- Tampilkan Tombol Simpan HANYA Jika Bukan Mode ReadOnly & Bukan Final -->
+                @if(!$isLocked)
                 <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
                     <button type="submit" name="action_type" value="draft" class="btn btn-outline-secondary fw-bold px-4" style="border-radius: 6px;"><i class="fa-solid fa-pen-ruler me-1"></i> SIMPAN DRAFT</button>
                     <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan langsung memotong stok di Gudang dan dokumen tidak dapat diubah lagi. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
@@ -223,7 +281,8 @@
     </div>
 </form>
 
-<!-- MODAL WIZARD SERI -->
+<!-- MODAL WIZARD SERI (Hanya ditampilkan jika belum dikunci) -->
+@if(!$isLocked)
 <div class="modal fade" id="modalSeriWizard" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -265,10 +324,11 @@
         </div>
     </div>
 </div>
+@endif
 @endsection
 
 @push('scripts')
-@if(!$isCompleted)
+@if(!$isLocked)
 <script>
     const categorySelector = document.getElementById('category-selector');
     const itemsContainer = document.getElementById('outbound-items-container');
@@ -521,16 +581,14 @@
                     const akh = st.seri_akhir ? formatSeriVisual(st.seri_akhir) : '';
                     const price = parseFloat(st.harga_satuan || st.price) || 0;
                     
-                    // Format Visual: PFX.xxx.xxx.xxx s/d xxx.xxx.xxx
                     let displaySeri = '';
                     if (awl !== '' && akh !== '') {
-                        const pfxStr = pfx ? pfx + '.' : '';
-                        displaySeri = `<span class="fw-bold text-dark">${pfxStr}${awl}</span> <span class="fw-normal text-muted mx-1">s/d</span> <span class="fw-bold text-dark">${akh}</span>`;
+                        const pfxStr = pfx ? `<span class="text-danger fw-bold">${pfx}.</span>` : '';
+                        displaySeri = `${pfxStr}<span class="fw-bold text-dark">${awl}</span> <span class="fw-normal text-muted mx-1">s/d</span> <span class="fw-bold text-dark">${akh}</span>`;
                     } else {
                         displaySeri = `<span class="text-muted fst-italic">Tanpa Rentang Seri (Null Database)</span>`;
                     }
 
-                    // Tampilkan Badge Harga Mentah (Membantu Pelacakan)
                     const priceBadge = price > 0 
                         ? `<span class="badge bg-success bg-opacity-10 text-success border border-success mt-1">Rp ${formatRupiah(price).replace('Rp ', '')}</span>` 
                         : `<span class="badge bg-secondary bg-opacity-10 text-secondary border mt-1" title="Data harga_satuan di tabel stok bernilai 0">Rp 0</span>`;
@@ -661,7 +719,6 @@
         // Update Target Qty jika ternyata berbeda
         if (targetQtyInput && totalQty !== target && totalQty > 0) {
             targetQtyInput.value = totalQty;
-            // Sinkronisasi ismain->anak
             targetQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
@@ -678,7 +735,7 @@
             if (totalInput) totalInput.value = totalPrice;
         }
 
-        // Sebarkan format seri (sudah dipisah Prefix, Awal, Akhir) ke semua materiil (pakai_seri=1)
+        // Sebarkan format seri
         const allContainers = document.querySelectorAll('.serial-inputs-container[data-pakaiseri="1"]');
         allContainers.forEach(container => {
             const cIdx = container.dataset.index;
