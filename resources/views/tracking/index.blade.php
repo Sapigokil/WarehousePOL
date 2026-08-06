@@ -85,30 +85,21 @@
 </div>
 
 <div class="row">
-    <!-- KOLOM PENCARIAN -->
-    <div class="col-lg-4 mb-4">
+    <!-- PANEL PENCARIAN (ATAS) -->
+    <div class="col-12 mb-4">
         <div class="tracking-card">
-            <div class="tracking-card-header d-flex justify-content-between align-items-center">
-                <span><i class="fa-solid fa-filter me-2"></i> Panel Pencarian</span>
+            <div class="tracking-card-header">
+                <i class="fa-solid fa-filter me-2"></i> Panel Pencarian Materiil
             </div>
-            <div class="p-4">
-                <form action="{{ route('tracking.search') }}" method="GET">
+            <div class="p-3 bg-white">
+                <form action="{{ route('tracking.search') }}" method="GET" class="row align-items-end g-3">
                     
-                    <div class="search-type-wrapper">
-                        <div class="search-type-card">
-                            <input type="radio" name="search_type" id="type_single" value="single" {{ (isset($searchData['search_type']) && $searchData['search_type'] == 'single') || !isset($searchData['search_type']) ? 'checked' : '' }}>
-                            <label for="type_single"><i class="fa-solid fa-crosshairs"></i> Single</label>
-                        </div>
-                        <div class="search-type-card">
-                            <input type="radio" name="search_type" id="type_range" value="range" {{ isset($searchData['search_type']) && $searchData['search_type'] == 'range' ? 'checked' : '' }}>
-                            <label for="type_range"><i class="fa-solid fa-layer-group"></i> Rentang (Range)</label>
-                        </div>
-                    </div>
+                    <input type="hidden" name="search_type" value="single">
 
-                    <div class="mb-3">
-                        <label class="field-label">Kategori Materiil</label>
-                        <select name="category_id" class="form-select custom-input">
-                            <option value="">-- Semua Kategori --</option>
+                    <div class="col-md-4">
+                        <label class="field-label">Jenis Materiil</label>
+                        <select name="category_id" class="form-select custom-input" required>
+                            <option value="">-- Pilih Jenis --</option>
                             @if(isset($categories))
                                 @foreach($categories as $category)
                                     <option value="{{ $category->id }}" {{ (isset($searchData['category_id']) && $searchData['category_id'] == $category->id) ? 'selected' : '' }}>
@@ -119,244 +110,169 @@
                         </select>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="field-label">Prefix (Awalan)</label>
-                        <input type="text" name="prefix" class="form-control custom-input" placeholder="Cth: J (Kosongkan jika tidak tahu)" value="{{ $searchData['prefix'] ?? '' }}">
+                    <div class="col-md-2">
+                        <label class="field-label">Kode</label>
+                        <input type="text" name="prefix" class="form-control custom-input text-center fw-bold" placeholder="Cth: J" value="{{ $searchData['prefix'] ?? '' }}">
                     </div>
 
-                    <div class="mb-3">
-                        <label class="field-label" id="label_serial_start">Nomor Seri</label>
-                        <input type="number" name="seri_awal" class="form-control custom-input" placeholder="Cth: 12345" required value="{{ $searchData['seri_awal'] ?? '' }}">
+                    <div class="col-md-3">
+                        <label class="field-label">Nomor Seri</label>
+                        <input type="number" name="seri_awal" class="form-control custom-input text-center fw-bold text-primary" placeholder="Cth: 12345" required value="{{ $searchData['seri_awal'] ?? '' }}">
                     </div>
 
-                    <div class="mb-4" id="range_end_container" style="display: none;">
-                        <label class="field-label">Nomor Seri Akhir</label>
-                        <input type="number" name="seri_akhir" class="form-control custom-input" placeholder="Cth: 12400" value="{{ $searchData['seri_akhir'] ?? '' }}">
+                    <div class="col-md-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-theme flex-grow-1 fw-bold py-2 shadow-sm rounded-3">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i> CARI
+                        </button>
+                        
+                        @if(isset($searchData))
+                            <a href="{{ route('tracking.index') }}" class="btn btn-light fw-bold py-2 border rounded-3 text-secondary" title="Reset Pencarian">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </a>
+                        @endif
                     </div>
-
-                    <button type="submit" class="btn btn-theme w-100 fw-bold py-2 shadow-sm rounded-3">
-                        <i class="fa-solid fa-magnifying-glass me-2"></i> CARI DATA
-                    </button>
-                    
-                    @if(isset($searchData))
-                        <a href="{{ route('tracking.index') }}" class="btn btn-light w-100 fw-bold py-2 mt-2 border rounded-3 text-secondary">
-                            <i class="fa-solid fa-rotate-left me-2"></i> RESET
-                        </a>
-                    @endif
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- KOLOM HASIL PENCARIAN -->
-    <div class="col-lg-8">
+    <!-- KOLOM HASIL PENCARIAN (BAWAH) -->
+    <div class="col-12">
         @if(isset($searchData))
             
-            @if($searchData['search_type'] == 'single')
-                
-                @if(count($singleResults) > 0)
-                    <!-- HASIL UNTUK SINGLE SEARCH (MULTI PREFIX/TAHUN DENGAN ACCORDION) -->
-                    <div class="accordion tracking-accordion" id="accordionTracking">
-                        @foreach($singleResults as $index => $result)
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="heading{{ $index }}">
-                                    <!-- Accordion dipaksa collapsed (tertutup) semua -->
-                                    <button class="accordion-button collapsed d-flex justify-content-between align-items-center w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ $index }}" aria-expanded="false" aria-controls="collapse{{ $index }}">
-                                        
-                                        <div class="d-flex flex-column align-items-start">
-                                            <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem; text-transform: uppercase;">Materiil Ditemukan</div>
-                                            <h6 class="fw-bold mb-2 text-dark">{{ strtoupper($result['stock']->material->name ?? 'MATERIIL TIDAK DIKETAHUI') }}</h6>
-                                            <div class="serial-box bg-white border">
-                                                <i class="fa-solid fa-barcode me-2 text-secondary"></i> {!! $formatSeri($result['prefix'], $searchData['seri_awal']) !!}
+            @if(count($singleResults) > 0)
+                <div class="accordion tracking-accordion" id="accordionTracking">
+                    @foreach($singleResults as $index => $result)
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading{{ $index }}">
+                                <button class="accordion-button collapsed d-flex justify-content-between align-items-center w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ $index }}" aria-expanded="false" aria-controls="collapse{{ $index }}">
+                                    
+                                    <div class="d-flex flex-column align-items-start">
+                                        <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem; text-transform: uppercase;">Materiil Ditemukan</div>
+                                        <h6 class="fw-bold mb-2 text-dark">{{ strtoupper($result['stock']->material->name ?? 'MATERIIL TIDAK DIKETAHUI') }}</h6>
+                                        <div class="serial-box bg-white border">
+                                            <i class="fa-solid fa-barcode me-2 text-secondary"></i> {!! $formatSeri($result['prefix'], $searchData['seri_awal']) !!}
+                                        </div>
+                                    </div>
+
+                                    <div class="text-end ms-auto me-3">
+                                        @if($result['status'] == 'available')
+                                            <div class="status-badge bg-success bg-opacity-10 text-success border border-success mb-1">
+                                                <i class="fa-solid fa-box-check"></i> TERSEDIA
+                                            </div>
+                                            <div class="text-muted fw-bold" style="font-size: 0.7rem;"><i class="fa-solid fa-warehouse me-1"></i> {{ strtoupper($result['stock']->warehouse->name ?? '-') }}</div>
+                                        @else
+                                            <div class="status-badge bg-danger bg-opacity-10 text-danger border border-danger mb-1">
+                                                <i class="fa-solid fa-truck"></i> DIDISTRIBUSIKAN
+                                            </div>
+                                            <div class="text-muted fw-bold" style="font-size: 0.7rem;"><i class="fa-solid fa-building-shield me-1"></i> {{ strtoupper($result['outStock']->outLog->outSppm->destination->name ?? '-') }}</div>
+                                        @endif
+                                    </div>
+                                </button>
+                            </h2>
+                            
+                            <div id="collapse{{ $index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ $index }}" data-bs-parent="#accordionTracking">
+                                <div class="accordion-body">
+                                    <h6 class="fw-bold text-secondary mb-3 border-bottom pb-2" style="font-size: 0.85rem;"><i class="fa-solid fa-clock-rotate-left me-2"></i> Jejak Riwayat (Timeline)</h6>
+                                    
+                                    <div class="timeline">
+                                        <!-- Titik Kedatangan (Inbound) -->
+                                        <div class="timeline-item inbound">
+                                            <div class="timeline-content shadow-sm">
+                                                <div class="timeline-date"><i class="fa-regular fa-calendar me-1"></i> 
+                                                    {{ \Carbon\Carbon::parse($result['inStock']->log->receive_date ?? $result['stock']->tgl_masuk ?? $result['stock']->created_at)->translatedFormat('d F Y') }}
+                                                </div>
+                                                <div class="timeline-title text-success"><i class="fa-solid fa-arrow-right-to-bracket me-2"></i> Masuk Gudang (Penerimaan)</div>
+                                                
+                                                <div class="timeline-details">
+                                                    <div class="detail-item">
+                                                        <span>No. SPPM Masuk</span>
+                                                        <strong>
+                                                            @if(isset($result['inStock']->log->sppm->id))
+                                                                <a href="{{ url('inbounds/' . $result['inStock']->log->sppm->id . '/edit') }}" target="_blank" class="text-decoration-none text-success fw-bold sppm-link">
+                                                                    {{ $result['inStock']->log->sppm->sppm_no }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
+                                                                </a>
+                                                            @else
+                                                                {{ $result['stock']->no_surat_masuk ?? '-' }}
+                                                            @endif
+                                                        </strong>
+                                                    </div>
+                                                    <div class="detail-item">
+                                                        <span>Gudang Penyimpanan</span>
+                                                        <strong>{{ $result['stock']->warehouse->name ?? '-' }}</strong>
+                                                    </div>
+                                                    <div class="detail-item">
+                                                        <span>Tahap / Batch</span>
+                                                        <strong>{{ isset($result['inStock']->log->batch_number) ? 'Tahap ' . $result['inStock']->log->batch_number : '-' }}</strong>
+                                                    </div>
+                                                    <div class="detail-item">
+                                                        <span>Keterangan Gudang</span>
+                                                        <strong>{{ $result['inStock']->log->notes ?? $result['stock']->keterangan ?? '-' }}</strong>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-
-                                        <div class="text-end ms-auto me-3">
-                                            @if($result['status'] == 'available')
-                                                <div class="status-badge bg-success bg-opacity-10 text-success border border-success mb-1">
-                                                    <i class="fa-solid fa-box-check"></i> TERSEDIA
-                                                </div>
-                                                <div class="text-muted fw-bold" style="font-size: 0.7rem;"><i class="fa-solid fa-warehouse me-1"></i> {{ strtoupper($result['stock']->warehouse->name ?? '-') }}</div>
-                                            @else
-                                                <div class="status-badge bg-danger bg-opacity-10 text-danger border border-danger mb-1">
-                                                    <i class="fa-solid fa-truck"></i> DIDISTRIBUSIKAN
-                                                </div>
-                                                <div class="text-muted fw-bold" style="font-size: 0.7rem;"><i class="fa-solid fa-building-shield me-1"></i> {{ strtoupper($result['outStock']->outLog->outSppm->destination->name ?? '-') }}</div>
-                                            @endif
-                                        </div>
-
-                                    </button>
-                                </h2>
-                                
-                                <!-- Content Accordion secara default ditutup (tidak ada class 'show') -->
-                                <div id="collapse{{ $index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ $index }}" data-bs-parent="#accordionTracking">
-                                    <div class="accordion-body">
-                                        <h6 class="fw-bold text-secondary mb-3 border-bottom pb-2" style="font-size: 0.85rem;"><i class="fa-solid fa-clock-rotate-left me-2"></i> Jejak Riwayat (Timeline)</h6>
                                         
-                                        <div class="timeline">
-                                            <!-- Titik Kedatangan (Inbound) -->
-                                            <div class="timeline-item inbound">
+                                        <!-- Titik Pengeluaran (Outbound) -->
+                                        @if($result['outStock'])
+                                            <div class="timeline-item outbound">
                                                 <div class="timeline-content shadow-sm">
-                                                    <div class="timeline-date"><i class="fa-regular fa-calendar me-1"></i> 
-                                                        {{ \Carbon\Carbon::parse($result['inStock']->log->receive_date ?? $result['stock']->tgl_masuk ?? $result['stock']->created_at)->translatedFormat('d F Y') }}
-                                                    </div>
-                                                    <div class="timeline-title text-success"><i class="fa-solid fa-arrow-right-to-bracket me-2"></i> Masuk Gudang (Penerimaan)</div>
+                                                    <div class="timeline-date"><i class="fa-regular fa-calendar me-1"></i> {{ \Carbon\Carbon::parse($result['outStock']->created_at)->translatedFormat('d F Y - H:i') }} WIB</div>
+                                                    <div class="timeline-title text-danger"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i> Pengeluaran (Distribusi)</div>
                                                     
                                                     <div class="timeline-details">
                                                         <div class="detail-item">
-                                                            <span>No. SPPM Masuk</span>
+                                                            <span>No. SPPM Keluar</span>
                                                             <strong>
-                                                                @if(isset($result['inStock']->log->sppm->id))
-                                                                    <a href="{{ url('inbounds/' . $result['inStock']->log->sppm->id . '/edit') }}" target="_blank" class="text-decoration-none text-success fw-bold sppm-link">
-                                                                        {{ $result['inStock']->log->sppm->sppm_no }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
+                                                                @if(isset($result['outStock']->outLog->outSppm->id))
+                                                                    <a href="{{ url('outbounds/' . $result['outStock']->outLog->outSppm->id . '/edit') }}" target="_blank" class="text-decoration-none text-danger fw-bold sppm-link">
+                                                                        {{ $result['outStock']->outLog->outSppm->sppm_no }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
                                                                     </a>
                                                                 @else
-                                                                    {{ $result['stock']->no_surat_masuk ?? '-' }}
+                                                                    -
                                                                 @endif
                                                             </strong>
                                                         </div>
                                                         <div class="detail-item">
-                                                            <span>Gudang Penyimpanan</span>
-                                                            <strong>{{ $result['stock']->warehouse->name ?? '-' }}</strong>
+                                                            <span>Tujuan Distribusi</span>
+                                                            <strong>{{ strtoupper($result['outStock']->outLog->outSppm->destination->name ?? '-') }}</strong>
                                                         </div>
                                                         <div class="detail-item">
-                                                            <span>Tahap / Batch</span>
-                                                            <strong>{{ isset($result['inStock']->log->batch_number) ? 'Tahap ' . $result['inStock']->log->batch_number : '-' }}</strong>
-                                                        </div>
-                                                        <div class="detail-item">
-                                                            <span>Keterangan Gudang</span>
-                                                            <strong>{{ $result['inStock']->log->notes ?? $result['stock']->keterangan ?? '-' }}</strong>
+                                                            <span>Total Seri Keluar</span>
+                                                            <strong>{{ number_format($result['outStock']->qty_keluar ?? 0, 0, ',', '.') }} Lbr</strong>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            
-                                            <!-- Titik Pengeluaran (Outbound) -->
-                                            @if($result['outStock'])
-                                                <div class="timeline-item outbound">
-                                                    <div class="timeline-content shadow-sm">
-                                                        <div class="timeline-date"><i class="fa-regular fa-calendar me-1"></i> {{ \Carbon\Carbon::parse($result['outStock']->created_at)->translatedFormat('d F Y - H:i') }} WIB</div>
-                                                        <div class="timeline-title text-danger"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i> Pengeluaran (Distribusi)</div>
-                                                        
-                                                        <div class="timeline-details">
-                                                            <div class="detail-item">
-                                                                <span>No. SPPM Keluar</span>
-                                                                <strong>
-                                                                    @if(isset($result['outStock']->outLog->outSppm->id))
-                                                                        <a href="{{ url('outbounds/' . $result['outStock']->outLog->outSppm->id . '/edit') }}" target="_blank" class="text-decoration-none text-danger fw-bold sppm-link">
-                                                                            {{ $result['outStock']->outLog->outSppm->sppm_no }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
-                                                                        </a>
-                                                                    @else
-                                                                        -
-                                                                    @endif
-                                                                </strong>
-                                                            </div>
-                                                            <div class="detail-item">
-                                                                <span>Tujuan Distribusi</span>
-                                                                <strong>{{ strtoupper($result['outStock']->outLog->outSppm->destination->name ?? '-') }}</strong>
-                                                            </div>
-                                                            <div class="detail-item">
-                                                                <span>Total Seri Keluar</span>
-                                                                <strong>{{ number_format($result['outStock']->qty_keluar ?? 0, 0, ',', '.') }} Lbr</strong>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            @endif
-                                        </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>
-                        @endforeach
-                    </div>
-                @else
-                    <!-- STATE TIDAK DITEMUKAN (SINGLE) -->
-                    <div class="d-flex align-items-center justify-content-center h-100" style="min-height: 400px;">
-                        <div class="text-center text-muted opacity-75">
-                            <i class="fa-solid fa-boxes-packing" style="font-size: 5rem; margin-bottom: 15px;"></i>
-                            <h5 class="fw-bold">Data Tidak Ditemukan</h5>
-                            <p class="mb-0">Nomor seri dengan awalan <strong>{{ $searchData['prefix'] ?? 'TANPA PREFIX' }}</strong> dan urutan <strong>{{ str_pad($searchData['seri_awal'], 9, '0', STR_PAD_LEFT) }}</strong> tidak tercatat di dalam sistem.</p>
                         </div>
-                    </div>
-                @endif
-            
+                    @endforeach
+                </div>
             @else
-                
-                @if(count($rangeResults) > 0)
-                    <!-- HASIL UNTUK RANGE SEARCH -->
-                    <div class="tracking-card p-4 text-center pb-2">
-                        <i class="fa-solid fa-table-list fs-1 text-primary mb-3 opacity-75"></i>
-                        <h5 class="fw-bold">Matriks Pencarian Rentang (Range)</h5>
-                        <p class="text-muted mb-4">
-                            Menampilkan pemecahan blok seri rentang 
-                            <strong class="text-dark">{{ str_pad($searchData['seri_awal'], 9, '0', STR_PAD_LEFT) }}</strong> 
-                            s/d 
-                            <strong class="text-dark">{{ str_pad($searchData['seri_akhir'], 9, '0', STR_PAD_LEFT) }}</strong>
-                        </p>
-                        
-                        <div class="table-responsive border rounded bg-white text-start">
-                            <table class="table table-hover table-bordered mb-0" style="font-size: 0.85rem;">
-                                <thead class="bg-light">
-                                    <tr>
-                                        <th class="text-center py-3">Rentang Seri Terpecah (Ditemukan)</th>
-                                        <th class="text-center py-3">Jumlah</th>
-                                        <th class="py-3">Status / Lokasi Terkini</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($rangeResults as $res)
-                                    <tr>
-                                        <td class="text-center align-middle">
-                                            <div class="serial-box border-0 shadow-sm bg-white">
-                                                {!! $formatSeri($res['prefix'], $res['start'], $res['end']) !!}
-                                            </div>
-                                        </td>
-                                        <td class="text-center align-middle fw-bold">{{ number_format($res['qty'], 0, ',', '.') }} Lembar</td>
-                                        <td class="align-middle">
-                                            @if($res['status'] == 'available')
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="fa-solid fa-box-check me-1"></i> TERSEDIA</span>
-                                                <div class="text-muted mt-1" style="font-size: 0.7rem;"><i class="fa-solid fa-warehouse"></i> {{ strtoupper($res['warehouse']) }}</div>
-                                            @else
-                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger"><i class="fa-solid fa-truck me-1"></i> DIDISTRIBUSIKAN</span>
-                                                <div class="text-muted mt-1" style="font-size: 0.7rem;">
-                                                    <i class="fa-solid fa-building-shield"></i> {{ strtoupper($res['destination']) }} <br>
-                                                    
-                                                    @if($res['sppm_id'])
-                                                        <a href="{{ url('outbounds/' . $res['sppm_id'] . '/edit') }}" target="_blank" class="text-decoration-none text-danger opacity-75 sppm-link">
-                                                            ({{ $res['sppm_no'] }} <i class="fa-solid fa-arrow-up-right-from-square ms-1"></i>)
-                                                        </a>
-                                                    @else
-                                                        <span class="opacity-75">({{ $res['sppm_no'] }})</span>
-                                                    @endif
-                                                </div>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
+                <!-- STATE TIDAK DITEMUKAN (SINGLE) -->
+                <div class="d-flex align-items-center justify-content-center border rounded bg-white shadow-sm" style="min-height: 350px;">
+                    <div class="text-center text-muted opacity-75">
+                        <i class="fa-solid fa-boxes-packing" style="font-size: 5rem; margin-bottom: 15px;"></i>
+                        <h5 class="fw-bold">Data Tidak Ditemukan</h5>
+                        @php
+                            $paddedSeri = str_pad($searchData['seri_awal'], 9, '0', STR_PAD_LEFT);
+                            $dottedSeri = substr($paddedSeri, 0, 3) . '.' . substr($paddedSeri, 3, 3) . '.' . substr($paddedSeri, 6, 3);
+                        @endphp
+                        <p class="mb-0">Nomor seri dengan kode <strong>{{ empty($searchData['prefix']) ? 'TANPA KODE' : $searchData['prefix'] }}</strong> dan urutan <strong>{{ $dottedSeri }}</strong> tidak tercatat di sistem.</p>
                     </div>
-                @else
-                    <!-- STATE TIDAK DITEMUKAN (RANGE) -->
-                    <div class="d-flex align-items-center justify-content-center h-100" style="min-height: 400px;">
-                        <div class="text-center text-muted opacity-75">
-                            <i class="fa-solid fa-boxes-packing" style="font-size: 5rem; margin-bottom: 15px;"></i>
-                            <h5 class="fw-bold">Data Tidak Ditemukan</h5>
-                            <p class="mb-0">Tidak ada satupun nomor seri di dalam rentang tersebut yang tercatat di dalam sistem.</p>
-                        </div>
-                    </div>
-                @endif
-
+                </div>
             @endif
 
         @else
             <!-- STATE KOSONG / AWAL -->
-            <div class="d-flex align-items-center justify-content-center h-100" style="min-height: 400px;">
+            <div class="d-flex align-items-center justify-content-center border rounded bg-white shadow-sm" style="min-height: 350px;">
                 <div class="text-center text-muted opacity-50">
                     <i class="fa-solid fa-satellite-dish" style="font-size: 6rem; margin-bottom: 15px;"></i>
                     <h5 class="fw-bold">Pelacakan Siap Digunakan</h5>
-                    <p class="mb-0">Pilih jenis pencarian dan masukkan detail seri di panel sebelah kiri.</p>
+                    <p class="mb-0">Masukkan Jenis Materiil, Kode (jika ada), dan Nomor Seri di panel atas.</p>
                 </div>
             </div>
         @endif

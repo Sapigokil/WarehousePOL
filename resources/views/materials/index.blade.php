@@ -143,10 +143,13 @@
         <button type="button" class="btn-close pb-2" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 @endif
-@if($errors->any())
-    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm py-2" role="alert">
-        <i class="fa-solid fa-triangle-exclamation me-2"></i> Gagal menyimpan data. Pastikan seluruh isian form terisi lengkap.
-        <button type="button" class="btn-close pb-2" data-bs-dismiss="alert" aria-label="Close"></button>
+@if ($errors->any())
+    <div class="alert alert-danger">
+        <ul>
+            @foreach ($errors->messages() as $field => $messages)
+                <li><strong>{{ $field }}:</strong> {{ $messages[0] }}</li>
+            @endforeach
+        </ul>
     </div>
 @endif
 
@@ -355,6 +358,24 @@
                                         <input type="number" name="nomor_urut" class="form-control modal-custom-input" value="{{ $material->nomor_urut }}" min="1" required>
                                     </div>
                                 </div>
+                                
+                                <!-- TAMBAHAN IS_HARGA INDUK DI FORM EDIT -->
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label modal-label">Induk Melekat Harga Satuan?</label>
+                                        <div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="is_harga" id="edit_parent_isharga_0_{{ $material->id }}" value="0" {{ $material->is_harga == 0 ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="edit_parent_isharga_0_{{ $material->id }}">Tidak</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="is_harga" id="edit_parent_isharga_1_{{ $material->id }}" value="1" {{ $material->is_harga == 1 ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="edit_parent_isharga_1_{{ $material->id }}">Ya</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="mb-0">
                                     <label class="form-label modal-label">Keterangan Kelompok</label>
                                     <textarea name="parent_keterangan" class="form-control modal-custom-input" rows="2">{{ old('parent_keterangan', $material->keterangan) }}</textarea>
@@ -370,10 +391,11 @@
                                 <table class="table table-bordered mb-0 table-variants">
                                     <thead class="bg-light">
                                         <tr>
-                                            <th width="40%">Nama Varian / Jenis</th>
-                                            <th width="20%">Satuan</th>
+                                            <th width="35%">Nama Varian / Jenis</th>
+                                            <th width="15%">Satuan</th>
                                             <th width="15%">Min. Stok</th>
                                             <th width="15%">Lacak Seri?</th>
+                                            <th width="10%">Harga?</th>
                                             <th width="10%" class="text-center">Hapus</th>
                                         </tr>
                                     </thead>
@@ -404,6 +426,13 @@
                                                 <select name="variants[{{ $index }}][pakai_seri]" class="form-select form-select-sm" required>
                                                     <option value="0" {{ $child->pakai_seri == 0 ? 'selected' : '' }}>TIDAK</option>
                                                     <option value="1" {{ $child->pakai_seri == 1 ? 'selected' : '' }}>YA</option>
+                                                </select>
+                                            </td>
+                                            <!-- TAMBAHAN IS_HARGA CHILD DI FORM EDIT -->
+                                            <td>
+                                                <select name="variants[{{ $index }}][is_harga]" class="form-select form-select-sm" required>
+                                                    <option value="0" {{ $child->is_harga == 0 ? 'selected' : '' }}>TDK</option>
+                                                    <option value="1" {{ $child->is_harga == 1 ? 'selected' : '' }}>YA</option>
                                                 </select>
                                             </td>
                                             <td class="text-center">
@@ -470,7 +499,7 @@
                             {{-- HANYA TAMPILKAN JIKA BUKAN CHILD (TIDAK MEMILIKI PARENT) --}}
                             @if(is_null($material->parent_id))
                             <div class="row custom-attribute-row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label class="form-label modal-label">Material Utama?</label>
                                     <div>
                                         <div class="form-check form-check-inline">
@@ -483,7 +512,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6 mb-3 wrapper-jmlxinduk" style="{{ $material->ismain == 1 ? 'display: none;' : '' }}">
+                                <div class="col-md-4 mb-3 wrapper-jmlxinduk" style="{{ $material->ismain == 1 ? 'display: none;' : '' }}">
                                     <label class="form-label modal-label">Jumlah Mengikuti Induk?</label>
                                     <div>
                                         <div class="form-check form-check-inline">
@@ -493,6 +522,20 @@
                                         <div class="form-check form-check-inline">
                                             <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="edit_jmlxinduk_1_{{ $material->id }}" value="1" {{ $material->jmlxinduk == 1 ? 'checked' : '' }}>
                                             <label class="form-check-label" for="edit_jmlxinduk_1_{{ $material->id }}">Ya</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- TAMBAHAN IS_HARGA TUNGGAL DI FORM EDIT -->
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label modal-label">Melekat Harga?</label>
+                                    <div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-isharga" type="radio" name="is_harga" id="edit_isharga_0_{{ $material->id }}" value="0" {{ $material->is_harga == 0 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_isharga_0_{{ $material->id }}">Tidak</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input radio-isharga" type="radio" name="is_harga" id="edit_isharga_1_{{ $material->id }}" value="1" {{ $material->is_harga == 1 ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="edit_isharga_1_{{ $material->id }}">Ya</label>
                                         </div>
                                     </div>
                                 </div>
@@ -609,9 +652,9 @@
                             </div>
                         </div>
 
-                        <!-- TAMBAHAN MATERIAL UTAMA DAN JUMLAH MENGIKUTI INDUK DI SINI -->
+                        <!-- TAMBAHAN MATERIAL UTAMA, JML INDUK, DAN HARGA -->
                         <div class="row custom-attribute-row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label modal-label">Material Utama?</label>
                                 <div>
                                     <div class="form-check form-check-inline">
@@ -624,7 +667,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6 mb-3 wrapper-jmlxinduk">
+                            <div class="col-md-4 mb-3 wrapper-jmlxinduk">
                                 <label class="form-label modal-label">Jumlah Mengikuti Induk?</label>
                                 <div>
                                     <div class="form-check form-check-inline">
@@ -634,6 +677,20 @@
                                     <div class="form-check form-check-inline">
                                         <input class="form-check-input radio-jmlxinduk" type="radio" name="jmlxinduk" id="add_jmlxinduk_1" value="1">
                                         <label class="form-check-label" for="add_jmlxinduk_1">Ya</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- TAMBAHAN IS_HARGA TUNGGAL -->
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label modal-label">Melekat Harga?</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-isharga" type="radio" name="is_harga" id="add_isharga_0" value="0" checked>
+                                        <label class="form-check-label" for="add_isharga_0">Tidak</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input radio-isharga" type="radio" name="is_harga" id="add_isharga_1" value="1">
+                                        <label class="form-check-label" for="add_isharga_1">Ya</label>
                                     </div>
                                 </div>
                             </div>
@@ -674,6 +731,25 @@
                                     <input type="number" name="nomor_urut" id="urut_kelompok" class="form-control modal-custom-input" placeholder="Otomatis terakhir" min="1" disabled>
                                 </div>
                             </div>
+                            
+                            <!-- TAMBAHAN IS_HARGA INDUK (PARENT) -->
+                            <div class="row">
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label modal-label">Induk Melekat Harga Satuan?</label>
+                                    <div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="parent_is_harga" id="parent_isharga_0" value="0" checked disabled>
+                                            <label class="form-check-label" for="parent_isharga_0">Tidak</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="parent_is_harga" id="parent_isharga_1" value="1" disabled>
+                                            <label class="form-check-label" for="parent_isharga_1">Ya</label>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Pilih 'Ya' jika harga satuan dihitung secara total di tingkat Induk (Contoh: TNKB).</small>
+                                </div>
+                            </div>
+
                             <div class="mb-0">
                                 <label class="form-label modal-label">Keterangan Kelompok Opsional</label>
                                 <textarea name="parent_keterangan" id="ket_kelompok" class="form-control modal-custom-input" rows="2" placeholder="Catatan kelompok komoditas..." disabled></textarea>
@@ -689,16 +765,18 @@
                             <table class="table table-bordered mb-0 table-variants bg-white">
                                 <thead class="bg-light">
                                     <tr>
-                                        <th width="40%">Nama Varian / Jenis</th>
-                                        <th width="20%">Satuan</th>
+                                        <!-- PENYESUAIAN LEBAR KOLOM UNTUK MENGAKOMODASI HARGA? -->
+                                        <th width="35%">Nama Varian / Jenis</th>
+                                        <th width="15%">Satuan</th>
                                         <th width="15%">Min. Stok</th>
                                         <th width="15%">Lacak Seri?</th>
+                                        <th width="10%">Harga?</th>
                                         <th width="10%" class="text-center">Hapus</th>
                                     </tr>
                                 </thead>
                                 <tbody id="variant-container">
                                     <tr>
-                                        <td><input type="text" name="variants[0][name]" class="form-control form-control-sm" placeholder="Contoh: Warna Hijau (Mobil Penumpang)" disabled required></td>
+                                        <td><input type="text" name="variants[0][name]" class="form-control form-control-sm" placeholder="Contoh: Warna Hijau" disabled required></td>
                                         <td>
                                             <select name="variants[0][satuan]" class="form-select form-select-sm" disabled required>
                                                 <option value="LBR">LBR</option>
@@ -715,6 +793,13 @@
                                         <td>
                                             <select name="variants[0][pakai_seri]" class="form-select form-select-sm" disabled required>
                                                 <option value="0" selected>TIDAK</option>
+                                                <option value="1">YA</option>
+                                            </select>
+                                        </td>
+                                        <!-- TAMBAHAN IS_HARGA CHILD (VARIAN) -->
+                                        <td>
+                                            <select name="variants[0][is_harga]" class="form-select form-select-sm" disabled required>
+                                                <option value="0" selected>TDK</option>
                                                 <option value="1">YA</option>
                                             </select>
                                         </td>
@@ -915,6 +1000,13 @@
                     <option value="1">YA</option>
                 </select>
             </td>
+            <!-- TAMBAHAN: Kolom is_harga untuk Baris Tambah Varian Baru -->
+            <td>
+                <select name="variants[${variantIndex}][is_harga]" class="form-select form-select-sm" required>
+                    <option value="0" selected>TDK</option>
+                    <option value="1">YA</option>
+                </select>
+            </td>
             <td class="text-center"><button type="button" class="btn btn-sm btn-light border text-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
         `;
         document.getElementById('variant-container').appendChild(tr);
@@ -948,6 +1040,13 @@
             <td>
                 <select name="variants[${index}][pakai_seri]" class="form-select form-select-sm" required>
                     <option value="0" selected>TIDAK</option>
+                    <option value="1">YA</option>
+                </select>
+            </td>
+            <!-- TAMBAHAN: Kolom is_harga untuk Baris Edit Varian Baru -->
+            <td>
+                <select name="variants[${index}][is_harga]" class="form-select form-select-sm" required>
+                    <option value="0" selected>TDK</option>
                     <option value="1">YA</option>
                 </select>
             </td>

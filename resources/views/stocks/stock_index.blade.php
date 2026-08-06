@@ -67,39 +67,74 @@
                 <th width="5%" class="text-center">No</th>
                 <th width="45%">Nama Barang & Kode</th>
                 <th width="15%" class="text-center">Satuan</th>
-                <th width="20%" class="text-end">Total Stok Fisik</th>
+                <th width="20%" class="text-end">Stok</th>
                 <th width="15%" class="text-center">Aksi</th>
             </tr>
         </thead>
         <tbody id="sortable-warehouses">
             @forelse($categories as $category)
                 @if($category->materials->count() > 0)
-                    <tr class="row-category">
-                        <td colspan="5"><i class="fa-solid fa-layer-group me-2 opacity-75"></i> {{ $category->name }}</td>
+                    @php 
+                        // Cari material utama (ismain = 1) untuk diambil QTY-nya ke Header Kategori
+                        $mainMat = $category->materials->firstWhere('ismain', 1);
+                        $mainQty = $mainMat ? ($stockTotals[$mainMat->id] ?? 0) : 0;
+                    @endphp
+
+                    <!-- 1. BARIS HEADER KATEGORI (SEBAGAI TOMBOL ACCORDION) -->
+                    <tr class="row-category" style="cursor: pointer; background-color: #f8fafc;" data-bs-toggle="collapse" data-bs-target=".collapse-cat-{{ $category->id }}" aria-expanded="false" title="Klik untuk membuka rincian material">
+                        <td class="text-center fw-bold text-dark">{{ $loop->iteration }}</td>
+                        <td class="fw-bold text-dark" style="font-size: 0.9rem;">
+                            <i class="fa-solid fa-folder-closed text-theme me-2 opacity-75"></i> {{ strtoupper($category->name) }}
+                        </td>
+                        <td class="text-center"></td>
+                        <td class="text-end">
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="Total Stok Material Utama (ismain = 1)">
+                                {{ number_format($mainQty, 0, ',', '.') }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <i class="fa-solid fa-chevron-down text-muted"></i>
+                        </td>
                     </tr>
                     
-                    @php $noUrut = 1; @endphp
-                    @foreach($category->materials as $parent)
+                    @php 
+                        // Saring hanya material Induk/Standalone (yang tidak punya parent_id)
+                        $topLevelMats = $category->materials->filter(function($m) {
+                            return is_null($m->parent_id);
+                        })->sortBy(function($m) {
+                            return $m->nomor_urut ?? 9999;
+                        });
+                    @endphp
+                    
+                    <!-- 2. ISI ACCORDION (MATERIAL DI DALAM KATEGORI) -->
+                    @foreach($topLevelMats as $parent)
                         @php 
                             $parentQty = $stockTotals[$parent->id] ?? 0; 
                             $hasChildren = $parent->children->count() > 0;
                         @endphp
                         
                         @if($hasChildren)
-                            <!-- PARENT DENGAN CHILD (NAMA TIDAK BISA DIKLIK) -->
-                            <tr>
-                                <td class="text-center fw-bold text-muted">{{ $noUrut++ }}</td>
-                                <td class="fw-bold text-dark">{{ $parent->name }}</td>
+                            <!-- MATERIEL PARENT (Miliki Child) -> Tidak Menampilkan QTY -->
+                            <tr class="collapse collapse-cat-{{ $category->id }}">
+                                <td></td>
+                                <td class="fw-semibold text-dark ps-4">
+                                    <i class="fa-solid fa-minus text-muted me-2 opacity-50"></i> {{ $parent->name }}
+                                </td>
                                 <td></td><td></td><td></td>
                             </tr>
 
-                            @foreach($parent->children as $child)
+                            <!-- ANAK DARI MATERIEL PARENT (Child) -->
+                            @php
+                                $sortedChildren = $parent->children->sortBy(function($c) {
+                                    return $c->nomor_urut ?? 9999;
+                                });
+                            @endphp
+                            @foreach($sortedChildren as $child)
                                 @php $childQty = $stockTotals[$child->id] ?? 0; @endphp
-                                <tr class="bg-light bg-opacity-25">
-                                    <td class="text-center"></td>
-                                    <td class="ps-4 text-secondary">
+                                <tr class="bg-light bg-opacity-25 collapse collapse-cat-{{ $category->id }}">
+                                    <td></td>
+                                    <td class="ps-5 text-secondary">
                                         <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i>
-                                        <!-- CHILD BISA DIKLIK -->
                                         <a href="{{ route('stocks.show', $child->id) }}" target="_blank" class="text-decoration-none text-secondary">
                                             {{ $child->name }} 
                                         </a>
@@ -107,7 +142,6 @@
                                     </td>
                                     <td class="text-center fw-semibold text-muted">{{ $child->satuan }}</td>
                                     <td class="text-end">
-                                        <!-- STYLE QTY SAMA DENGAN PARENT TANPA CHILD -->
                                         <span class="qty-badge {{ $childQty > 0 ? 'bg-success bg-opacity-10 text-success border border-success' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary' }}">
                                             {{ number_format($childQty, 0, ',', '.') }}
                                         </span>
@@ -120,13 +154,15 @@
                                 </tr>
                             @endforeach
                         @else
-                            <!-- PARENT TANPA CHILD (NAMA BISA DIKLIK) -->
-                            <tr>
-                                <td class="text-center fw-bold text-muted">{{ $noUrut++ }}</td>
-                                <td class="fw-bold text-dark">
-                                    <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="text-decoration-none text-dark">
+                            <!-- MATERIEL STANDALONE (Tidak punya Child) -->
+                            <tr class="collapse collapse-cat-{{ $category->id }}">
+                                <td></td>
+                                <td class="ps-4">
+                                    <i class="fa-solid fa-minus text-muted me-2 opacity-50"></i>
+                                    <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="text-decoration-none text-dark fw-semibold">
                                         {{ $parent->name }}
                                     </a>
+                                    @if($parent->code) <small class="text-muted ms-2">[{{ $parent->code }}]</small> @endif
                                 </td>
                                 <td class="text-center fw-semibold text-muted">{{ $parent->satuan }}</td>
                                 <td class="text-end">

@@ -28,9 +28,17 @@
 
 <div class="header-banner shadow-sm d-flex justify-content-between align-items-center">
     <i class="fa-solid fa-chart-pie header-banner-icon"></i>
+    
     <div class="header-content">
         <h4 class="fw-bold mb-1"><i class="fa-solid fa-chart-area me-2"></i> Laporan Distribusi</h4>
         <p class="mb-0 text-white-50 small">Peta sebaran material utama (Main Material) ke berbagai kesatuan.</p>
+    </div>
+    
+    <!-- Tambahan Tombol Laporan -->
+    <div class="header-content d-flex gap-2">
+        <a href="{{ route('reports.simak') }}" class="btn btn-light fw-bold text-dark shadow-sm px-4 py-2" style="border-radius: 8px;">
+            <i class="fa-solid fa-file-contract text-primary me-1"></i> Lihat Laporan SIMAK
+        </a>
     </div>
 </div>
 

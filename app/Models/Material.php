@@ -20,6 +20,7 @@ class Material extends Model
         'minimal_stok',
         'pakai_seri',
         'ismain',
+        'is_harga',
         'jmlxinduk',
         'keterangan',
         'tnkb_rpt',

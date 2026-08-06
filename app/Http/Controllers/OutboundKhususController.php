@@ -53,7 +53,7 @@ class OutboundKhususController extends Controller
         }
 
         $hasSeri = $flatMaterials->where('pakai_seri', 1)->count() > 0;
-        $fileName = 'Template_Migrasi_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xls';
+        $fileName = 'Template_Outbound_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xls';
 
         $headers = [
             "Content-type"        => "application/vnd.ms-excel",
@@ -222,15 +222,39 @@ class OutboundKhususController extends Controller
                 $tujuanStr   = trim($row[2] ?? '');
                 $noSppmRaw   = trim($row[3] ?? '');
                 $blnSppm     = trim($row[4] ?? '');
-                $tglSppmStr  = $row[5] ?? null;
+                $tglSppmStr  = trim($row[5] ?? '');
                 $namaBamat   = trim($row[6] ?? '');
                 $pangkatNrp  = trim($row[7] ?? '');
                 $jabatan     = trim($row[8] ?? '');
                 $prefixRaw   = trim($row[9] ?? '');
 
                 if (!$tglSppmStr) continue;
-                $tglSppm = date('Y-m-d', strtotime($tglSppmStr));
+                // --- LOGIKA TRANSLATE TANGGAL ---
+                if (is_numeric($tglSppmStr)) {
+                    // Jika Excel mengirim format Serial Number (misal: 45245)
+                    $tglSppm = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($tglSppmStr)->format('Y-m-d');
+                } else {
+                    // Kamus Bulan Indonesia ke Inggris agar terbaca oleh strtotime()
+                    $bulanIndo = [
+                        'Januari'  => 'January',  'Februari' => 'February', 'Pebruari' => 'February',
+                        'Maret'    => 'March',    'April'    => 'April',    'Mei'      => 'May',
+                        'Juni'     => 'June',     'Juli'     => 'July',     'Agustus'  => 'August',
+                        'September'=> 'September','Oktober'  => 'October',  'November' => 'November',
+                        'Nopember' => 'November', 'Desember' => 'December'
+                    ];
+                    
+                    // Terjemahkan nama bulan di dalam string
+                    $tglSppmEng = str_ireplace(array_keys($bulanIndo), array_values($bulanIndo), $tglSppmStr);
+                    $tglSppm = date('Y-m-d', strtotime($tglSppmEng));
+                }
+
+                // Fallback jika format tetap gagal terbaca
+                if (!$tglSppm || $tglSppm == '1970-01-01') {
+                    $tglSppm = date('Y-m-d'); 
+                }
+
                 $tahunSppm = date('Y', strtotime($tglSppm));
+                // ---------------------------------
                 
                 $currentSppmNo = "SPPM/{$noSppmRaw}/{$blnSppm}/{$tahunSppm}/DITLANTAS";
 

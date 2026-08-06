@@ -54,7 +54,7 @@ class MaterialController extends Controller
         $validated = $request->validate([
             'parent_id'            => 'nullable|exists:materials,id',
             'code'                 => 'nullable|string|max:50|unique:materials,code',
-            'name'                 => 'required|string|max:255',
+            'name'                 => 'required_if:tipe_input,tunggal|string|max:255|nullable',
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
             'minimal_stok'         => 'nullable|numeric',
@@ -62,36 +62,101 @@ class MaterialController extends Controller
             'ismain'               => 'nullable|integer|in:0,1',
             'jmlxinduk'            => 'nullable|integer|in:0,1',
             'keterangan'           => 'nullable|string',
+            'is_harga'             => 'nullable|boolean', // Ditambahkan
         ]);
 
-        // Aturan: Jika material adalah Child (punya parent_id), nilai ismain dan jmlxinduk selalu 0
-        if (!empty($validated['parent_id'])) {
-            $validated['ismain'] = 0;
-            $validated['jmlxinduk'] = 0;
-        } else {
-            // Jika ismain diset 1 (Ya), maka jmlxinduk otomatis diset 0
+        $tipeInput = $request->input('tipe_input', 'tunggal');
+
+        if ($tipeInput == 'tunggal') {
+            // --- LOGIKA PENYIMPANAN BARANG TUNGGAL ---
             $validated['ismain'] = $request->input('ismain', 0);
             if ($validated['ismain'] == 1) {
                 $validated['jmlxinduk'] = 0;
             } else {
                 $validated['jmlxinduk'] = $request->input('jmlxinduk', 0);
             }
+
+            $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
+            $validated['is_harga'] = $request->input('is_harga') == 1 ? 1 : 0;
+            
+            // Tambahkan nomor_urut otomatis jika kosong
+            if (!$request->filled('nomor_urut')) {
+                $maxUrut = Material::where('material_category_id', $validated['material_category_id'])->max('nomor_urut');
+                $validated['nomor_urut'] = $maxUrut ? $maxUrut + 1 : 1;
+            } else {
+                $validated['nomor_urut'] = $request->input('nomor_urut');
+            }
+
+            Material::create($validated);
+
+        } else {
+            // --- LOGIKA PENYIMPANAN BARANG BERKELOMPOK (INDUK + VARIAN) ---
+            $request->validate([
+                'parent_name' => 'required|string|max:255',
+                'variants'    => 'required|array|min:1',
+                'variants.*.name' => 'required|string|max:255',
+                'variants.*.satuan' => 'required|string',
+                'variants.*.minimal_stok' => 'required|numeric',
+                'variants.*.pakai_seri' => 'required|boolean',
+                'variants.*.is_harga' => 'required|boolean', // Ditambahkan
+            ]);
+
+            // 1. Buat Induk (Parent)
+            $parentData = [
+                'name' => $request->input('parent_name'),
+                'code' => $request->input('parent_code'),
+                'material_category_id' => $validated['material_category_id'],
+                'keterangan' => $request->input('parent_keterangan'),
+                'is_harga' => $request->input('parent_is_harga', 0), // Tangkap status harga induk
+                'ismain' => 0, // Induk kelompok tidak pernah main material
+                'jmlxinduk' => 0,
+                'pakai_seri' => 0,
+            ];
+
+            if (!$request->filled('nomor_urut')) {
+                $maxUrut = Material::where('material_category_id', $validated['material_category_id'])->max('nomor_urut');
+                $parentData['nomor_urut'] = $maxUrut ? $maxUrut + 1 : 1;
+            } else {
+                $parentData['nomor_urut'] = $request->input('nomor_urut');
+            }
+
+            $parentMaterial = Material::create($parentData);
+
+            // 2. Buat Anak-anaknya (Variants)
+            foreach ($request->variants as $variant) {
+                Material::create([
+                    'parent_id' => $parentMaterial->id,
+                    'name' => $variant['name'],
+                    'material_category_id' => $validated['material_category_id'],
+                    'satuan' => $variant['satuan'],
+                    'minimal_stok' => $variant['minimal_stok'],
+                    'pakai_seri' => $variant['pakai_seri'] == 1 ? 1 : 0,
+                    'is_harga' => $variant['is_harga'] == 1 ? 1 : 0, // Tangkap status harga anak
+                    'ismain' => 0,
+                    'jmlxinduk' => 0,
+                    'nomor_urut' => $parentMaterial->nomor_urut, // Urutan sama dengan induk
+                ]);
+            }
         }
 
-        // PERBAIKAN: Ambil value yang dikirimkan oleh select dropdown, bukan mendeteksi keberadaan key
-        $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
-
-        Material::create($validated);
+        if ($request->input('submit_action') == 'save_new') {
+            return redirect()->back()->with('success', 'Material berhasil ditambahkan. Silakan tambah data lagi.')->withInput();
+        }
 
         return redirect()->back()->with('success', 'Material berhasil ditambahkan.');
     }
 
     public function update(Request $request, Material $material)
     {
+        $hasChildren = $material->children()->exists();
+
+        // 1. Sesuaikan aturan validasi dinamis berdasarkan jenis datanya
         $validated = $request->validate([
             'parent_id'            => 'nullable|exists:materials,id',
             'code'                 => 'nullable|string|max:50|unique:materials,code,' . $material->id,
-            'name'                 => 'required|string|max:255',
+            // Jika punya anak (kelompok), validasi parent_name. Jika tunggal, validasi name.
+            'name'                 => $hasChildren ? 'nullable' : 'required|string|max:255',
+            'parent_name'          => $hasChildren ? 'required|string|max:255' : 'nullable',
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
             'minimal_stok'         => 'nullable|numeric',
@@ -99,13 +164,17 @@ class MaterialController extends Controller
             'ismain'               => 'nullable|integer|in:0,1',
             'jmlxinduk'            => 'nullable|integer|in:0,1',
             'keterangan'           => 'nullable|string',
+            'is_harga'             => 'nullable|boolean', 
+            'nomor_urut'           => 'nullable|integer',
         ]);
 
-        // Cek apakah material ini memiliki turunan (Child)
-        $hasChildren = $material->children()->exists();
+        // 2. Jika ini kelompok, pindahkan isi parent_name ke index 'name' agar tersimpan ke kolom database 'name'
+        if ($hasChildren && $request->filled('parent_name')) {
+            $validated['name'] = $request->input('parent_name');
+        }
 
-        // Aturan: Jika merupakan Parent (memiliki child) ATAU merupakan Child (punya parent_id)
-        if ($hasChildren || !empty($validated['parent_id'])) {
+        // Aturan logika ismain & jmlxinduk yang sudah ada sebelumnya
+        if ($hasChildren || !empty($material->parent_id)) {
             $validated['ismain'] = 0;
             $validated['jmlxinduk'] = 0;
         } else {
@@ -117,10 +186,20 @@ class MaterialController extends Controller
             }
         }
 
-        // PERBAIKAN: Ambil value yang dikirimkan oleh select dropdown, bukan mendeteksi keberadaan key
         $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
+        $validated['is_harga'] = $request->input('is_harga') == 1 ? 1 : 0; 
+        
+        if ($request->filled('nomor_urut')) {
+             $validated['nomor_urut'] = $request->input('nomor_urut');
+        }
 
         $material->update($validated);
+
+        if ($hasChildren) {
+            $material->children()->update([
+                'material_category_id' => $validated['material_category_id']
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Material berhasil diperbarui.');
     }
