@@ -14,12 +14,14 @@ class SettingController extends Controller
         $data = [
             'app_theme'          => $settings['app_theme'] ?? 'light-blue',
             'inbound_mode'       => $settings['inbound_mode'] ?? 'mode-1',
-            'max_batch'          => $settings['max_batch'] ?? '5', // Default maksimal 5 batch
+            'max_batch'          => $settings['max_batch'] ?? '5', 
             'signatory_name'     => $settings['signatory_name'] ?? 'NAMA DIREKTUR',
             'signatory_nrp'      => $settings['signatory_nrp'] ?? 'NRP. 12345678',
             'signatory_position' => $settings['signatory_position'] ?? 'BRIGADIR JENDERAL POLISI',
             'allow_double_login' => $settings['allow_double_login'] ?? '0',
             'login_timeout'      => $settings['login_timeout'] ?? '120',
+            // TAMBAHAN OPSI OUTBOUND MINUS
+            'allow_minus_stock'  => $settings['allow_minus_stock'] ?? '0', 
         ];
 
         return view('settings.index', compact('data'));
@@ -36,12 +38,13 @@ class SettingController extends Controller
             'signatory_position' => 'required|string|max:255',
             'allow_double_login' => 'required|in:1,0',
             'login_timeout'      => 'required|integer|min:1|max:1440', 
+            // TAMBAHAN OPSI OUTBOUND MINUS
+            'allow_minus_stock'  => 'required|in:1,0',
         ]);
 
         $settings = $request->except(['_token', '_method']);
         
         foreach ($settings as $key => $value) {
-            // Jika max_batch dikosongkan saat submit (karena hidden di mode-1), set default ke 5
             if ($key === 'max_batch' && is_null($value)) {
                 $value = 5;
             }

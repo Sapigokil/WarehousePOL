@@ -162,7 +162,8 @@ class OutboundController extends Controller
         $generatedSppm = "SPPM/{$nextNumber}/{$romanMonth}/{$currentYear}/DITLANTAS";
 
         // Kirim variabel $generatedSppm ke view
-        return view('outbound.form', compact('categories', 'destinations', 'generatedSppm'));
+        $isLocked = false;
+        return view('outbound.form', compact('categories', 'destinations', 'generatedSppm', 'isLocked'));
     }
 
     public function store(Request $request)
@@ -176,6 +177,9 @@ class OutboundController extends Controller
             'items.*.material_id' => 'required|exists:materials,id',
             'items.*.target_qty'  => 'nullable|numeric|min:0',
         ]);
+
+        $allowMinusStock = \App\Models\Setting::where('key', 'allow_minus_stock')->value('value') == '1';
+        $defaultWarehouseId = \App\Models\Warehouse::first()->id ?? 1;
 
         DB::beginTransaction();
         try {
@@ -191,38 +195,246 @@ class OutboundController extends Controller
                 'pangkat'        => $destination->pangkat_nrp ?? null,
                 'jabatan'        => $destination->jabatan ?? null,
                 'status'         => $action === 'final' ? 'completed' : 'pending', 
-                'created_by'     => Auth::id(),
-                'updated_by'     => Auth::id(),
+                'created_by'     => \Illuminate\Support\Facades\Auth::id(),
+                'updated_by'     => \Illuminate\Support\Facades\Auth::id(),
             ]);
 
+            $log = null;
+            if ($action === 'final') {
+                $log = OutLog::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'batch_number' => 1,
+                    'tgl_keluar'   => $request->sppm_date,
+                    'keterangan'   => 'Realisasi keluar manual.',
+                ]);
+            }
+
             $hasItems = false;
-            $itemsToProcess = [];
 
             foreach ($request->items as $item) {
                 $qty = (int) ($item['target_qty'] ?? 0);
+                if ($qty <= 0) continue;
                 
-                // --- PERBAIKAN: Selalu simpan Detail agar nama materiel muncul lengkap di View ---
-                OutDetail::create([
-                    'out_sppm_id'  => $sppm->id,
-                    'material_id'  => $item['material_id'],
-                    'target_qty'   => $qty,
-                    'harga_satuan' => $item['harga_satuan'] ?? 0,
-                    'harga_total'  => $item['harga_total'] ?? 0,
-                ]);
-
-                // Proses fisik stok gudang HANYA jika QTY > 0
-                if ($qty > 0) {
-                    $hasItems = true;
+                $hasItems = true;
+                $material = Material::find($item['material_id']);
+                
+                // 1. Ekstrak Seri dari Form (Jika Barang Berseri)
+                $seriesList = [];
+                $isSerialized = false;
+                
+                if ($material->pakai_seri == 1 && !empty($item['serials'])) {
+                    $isSerialized = true;
+                    $totalSeriQty = 0;
                     
-                    if ($action === 'final') {
-                        $availableStock = Stock::where('material_id', $item['material_id'])->sum('qty');
-                        if ($qty > $availableStock) {
-                            $matName = Material::find($item['material_id'])->name ?? 'Barang';
-                            throw new \Exception("GAGAL DISIMPAN: Jumlah barang keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia di gudang hanya {$availableStock}.");
+                    foreach ($item['serials'] as $seriReq) {
+                        $pfx = strtoupper(preg_replace('/[^a-zA-Z]/', '', $seriReq['prefix'] ?? ''));
+                        $sAw = preg_replace('/[^0-9]/', '', $seriReq['start'] ?? '');
+                        $sAk = preg_replace('/[^0-9]/', '', $seriReq['end'] ?? '');
+                        
+                        if ($sAw !== '' && $sAk !== '') {
+                            $sqty = ((int)$sAk - (int)$sAw) + 1;
+                            $seriesList[] = [
+                                'prefix' => $pfx, 
+                                'awal'   => (int)$sAw, 
+                                'akhir'  => (int)$sAk, 
+                                'qty'    => $sqty
+                            ];
+                            $totalSeriQty += $sqty;
                         }
                     }
+                    
+                    // Timpa QTY utama dengan perhitungan pasti dari rentang seri
+                    if ($totalSeriQty > 0) {
+                        $qty = $totalSeriQty;
+                    }
+                }
 
-                    $itemsToProcess[] = $item;
+                $hargaSatuan = $item['harga_satuan'] ?? 0;
+                $hargaTotal = $qty * $hargaSatuan;
+
+                // 2. Simpan Catatan Detail (Selalu disave untuk Draft maupun Final)
+                OutDetail::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'material_id'  => $material->id,
+                    'target_qty'   => $qty,
+                    'harga_satuan' => $hargaSatuan,
+                    'harga_total'  => $hargaTotal,
+                ]);
+
+                // 3. Proses Pemotongan Fisik Stok Gudang
+                if ($action === 'final') {
+                    $availableStock = Stock::where('material_id', $material->id)->where('qty', '>', 0)->sum('qty');
+                    
+                    // Cegat jika stok kurang dan fitur Minus DILARANG
+                    if (!$allowMinusStock && $qty > $availableStock) {
+                        throw new \Exception("GAGAL DISIMPAN: Jumlah keluar [{$material->name}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}. Mode Transaksi Stok Minus sedang Dinonaktifkan.");
+                    }
+
+                    if ($isSerialized && !empty($seriesList)) {
+                        // LOGIKA IRISAN SERI (OVERLAP)
+                        foreach ($seriesList as $seri) {
+                            $unfulfilled = [['awal' => $seri['awal'], 'akhir' => $seri['akhir']]];
+                            $prefix = $seri['prefix'];
+                            
+                            $queryStock = Stock::where('material_id', $material->id)
+                                               ->where('qty', '>', 0)
+                                               ->where('seri_awal', '<=', $seri['akhir'])
+                                               ->where('seri_akhir', '>=', $seri['awal']);
+                            
+                            if ($prefix) {
+                                $queryStock->where('prefix', $prefix);
+                            }
+                            
+                            $availableStocks = $queryStock->orderBy('tgl_masuk', 'asc')->lockForUpdate()->get();
+                            
+                            foreach ($availableStocks as $stock) {
+                                if (empty($unfulfilled)) break;
+                                
+                                $newUnfulfilled = [];
+                                $stockConsumed = false;
+                                
+                                foreach ($unfulfilled as $u) {
+                                    if ($stockConsumed) { 
+                                        $newUnfulfilled[] = $u; 
+                                        continue; 
+                                    }
+                                    
+                                    $overlapAwal = max($stock->seri_awal, $u['awal']);
+                                    $overlapAkhir = min($stock->seri_akhir, $u['akhir']);
+                                    
+                                    if ($overlapAwal <= $overlapAkhir) {
+                                        $stockConsumed = true; 
+                                        $overlapQty = $overlapAkhir - $overlapAwal + 1;
+                                        
+                                        OutStock::create([
+                                            'out_log_id' => $log->id,
+                                            'stock_id'   => $stock->id,
+                                            'qty_keluar' => $overlapQty,
+                                            'prefix'     => $stock->prefix,
+                                            'seri_awal'  => $overlapAwal,
+                                            'seri_akhir' => $overlapAkhir,
+                                        ]);
+                                        
+                                        // Pecah sisa seri kiri
+                                        if ($stock->seri_awal < $overlapAwal) {
+                                            $leftStock = $stock->replicate();
+                                            $leftStock->qty = ($overlapAwal - 1) - $stock->seri_awal + 1;
+                                            $leftStock->seri_akhir = $overlapAwal - 1;
+                                            $leftStock->save();
+                                        }
+                                        
+                                        // Pecah sisa seri kanan
+                                        if ($stock->seri_akhir > $overlapAkhir) {
+                                            $rightStock = $stock->replicate();
+                                            $rightStock->qty = $stock->seri_akhir - ($overlapAkhir + 1) + 1;
+                                            $rightStock->seri_awal = $overlapAkhir + 1;
+                                            $rightStock->save();
+                                        }
+                                        
+                                        $stock->qty = 0;
+                                        $stock->seri_awal = null;
+                                        $stock->seri_akhir = null;
+                                        $stock->save();
+                                        
+                                        if ($u['awal'] < $overlapAwal) {
+                                            $newUnfulfilled[] = ['awal' => $u['awal'], 'akhir' => $overlapAwal - 1];
+                                        }
+                                        if ($u['akhir'] > $overlapAkhir) {
+                                            $newUnfulfilled[] = ['awal' => $overlapAkhir + 1, 'akhir' => $u['akhir']];
+                                        }
+                                    } else {
+                                        $newUnfulfilled[] = $u;
+                                    }
+                                }
+                                $unfulfilled = $newUnfulfilled;
+                            }
+                            
+                            // JIKA TERDAPAT SERI YANG TIDAK TERPENUHI (STOK MINUS)
+                            foreach ($unfulfilled as $u) {
+                                $missingQty = $u['akhir'] - $u['awal'] + 1;
+                                $negStock = Stock::create([
+                                    'no_surat_masuk' => 'MINUS-' . $sppm->sppm_no, 
+                                    'material_id'    => $material->id,
+                                    'warehouse_id'   => $defaultWarehouseId, 
+                                    'qty'            => -$missingQty,
+                                    'prefix'         => $prefix,
+                                    'seri_awal'      => $u['awal'],
+                                    'seri_akhir'     => $u['akhir'],
+                                    'tgl_masuk'      => $request->sppm_date,
+                                    'harga_satuan'   => $hargaSatuan,
+                                    'total_harga'    => -($missingQty * $hargaSatuan),
+                                    'status'         => 'Minus',
+                                    'keterangan'     => 'Stok Minus Otomatis (Form Manual)',
+                                ]);
+                                
+                                OutStock::create([
+                                    'out_log_id' => $log->id,
+                                    'stock_id'   => $negStock->id,
+                                    'qty_keluar' => $missingQty,
+                                    'prefix'     => $prefix,
+                                    'seri_awal'  => $u['awal'],
+                                    'seri_akhir' => $u['akhir'],
+                                ]);
+                            }
+                        }
+
+                    } else {
+                        // LOGIKA STOK FIFO (BULK)
+                        $sisaKebutuhan = $qty;
+                        $availableStocks = Stock::where('material_id', $material->id)
+                                           ->where('qty', '>', 0)
+                                           ->orderBy('tgl_masuk', 'asc')
+                                           ->orderBy('id', 'asc')
+                                           ->lockForUpdate()
+                                           ->get();
+                        
+                        foreach ($availableStocks as $stock) {
+                            if ($sisaKebutuhan <= 0) break;
+                            
+                            $qtyAmbil = min($stock->qty, $sisaKebutuhan);
+                            
+                            OutStock::create([
+                                'out_log_id' => $log->id,
+                                'stock_id'   => $stock->id,
+                                'qty_keluar' => $qtyAmbil,
+                                'prefix'     => $stock->prefix,
+                                'seri_awal'  => null,
+                                'seri_akhir' => null,
+                            ]);
+                            
+                            $stock->qty -= $qtyAmbil;
+                            $stock->save();
+                            
+                            $sisaKebutuhan -= $qtyAmbil;
+                        }
+                        
+                        // JIKA STOK MINUS (FIFO)
+                        if ($sisaKebutuhan > 0) {
+                            $negStock = Stock::create([
+                                'no_surat_masuk' => 'MINUS-' . $sppm->sppm_no,
+                                'material_id'    => $material->id,
+                                'warehouse_id'   => $defaultWarehouseId, 
+                                'qty'            => -$sisaKebutuhan,
+                                'prefix'         => null,
+                                'seri_awal'      => null,
+                                'seri_akhir'     => null,
+                                'tgl_masuk'      => $request->sppm_date,
+                                'harga_satuan'   => $hargaSatuan,
+                                'total_harga'    => -($sisaKebutuhan * $hargaSatuan),
+                                'status'         => 'Minus',
+                                'keterangan'     => 'Stok Minus Otomatis (Form Manual)',
+                            ]);
+                            
+                            OutStock::create([
+                                'out_log_id' => $log->id,
+                                'stock_id'   => $negStock->id,
+                                'qty_keluar' => $sisaKebutuhan,
+                                'prefix'     => null,
+                                'seri_awal'  => null,
+                                'seri_akhir' => null,
+                            ]);
+                        }
+                    } 
                 }
             }
 
@@ -230,65 +442,15 @@ class OutboundController extends Controller
                 throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
             }
 
-            if ($action === 'final') {
-                $log = OutLog::create([
-                    'out_sppm_id'  => $sppm->id,
-                    'batch_number' => 1,
-                    'tgl_keluar'   => $request->sppm_date,
-                    'keterangan'   => 'Realisasi keluar otomatis.',
-                ]);
-
-                foreach ($itemsToProcess as $item) {
-                    $sisaKebutuhan = (int) $item['target_qty'];
-                    $availableStocks = Stock::where('material_id', $item['material_id'])
-                        ->where('qty', '>', 0)
-                        ->orderBy('tgl_masuk', 'asc')
-                        ->orderBy('id', 'asc')
-                        ->lockForUpdate()
-                        ->get();
-
-                    foreach ($availableStocks as $stock) {
-                        if ($sisaKebutuhan <= 0) break;
-
-                        $qtyAmbil = min($stock->qty, $sisaKebutuhan);
-                        $outSeriAwal = null;
-                        $outSeriAkhir = null;
-
-                        if ($stock->seri_awal !== null) {
-                            $outSeriAwal = $stock->seri_awal;
-                            $outSeriAkhir = $stock->seri_awal + $qtyAmbil - 1;
-
-                            if ($qtyAmbil < $stock->qty) {
-                                $stock->seri_awal = $outSeriAkhir + 1;
-                            } else {
-                                $stock->seri_awal = null;
-                                $stock->seri_akhir = null;
-                            }
-                        }
-
-                        OutStock::create([
-                            'out_log_id' => $log->id,
-                            'stock_id'   => $stock->id,
-                            'qty_keluar' => $qtyAmbil,
-                            'prefix'     => $stock->prefix,
-                            'seri_awal'  => $outSeriAwal,
-                            'seri_akhir' => $outSeriAkhir,
-                        ]);
-
-                        $stock->qty -= $qtyAmbil;
-                        $stock->save();
-                        $sisaKebutuhan -= $qtyAmbil;
-                    }
-                }
-            }
-
             // --- CATAT LOG SISTEM ---
-            $this->recordLog('CREATED', 'DOKUMEN SPPM KELUAR', $sppm->id, null, [
-                'Nomor SPPM' => $sppm->sppm_no,
-                'Tanggal'    => $sppm->sppm_date,
-                'Tujuan'     => $destination->name ?? 'Unknown',
-                'Status'     => $sppm->status
-            ]);
+            if (method_exists($this, 'recordLog')) {
+                $this->recordLog('CREATED', 'DOKUMEN SPPM KELUAR', $sppm->id, null, [
+                    'Nomor SPPM' => $sppm->sppm_no,
+                    'Tanggal'    => $sppm->sppm_date,
+                    'Tujuan'     => $destination->name ?? 'Unknown',
+                    'Status'     => $sppm->status
+                ]);
+            }
 
             DB::commit();
             $msg = $action === 'final' ? 'Dokumen berhasil disimpan dan stok gudang telah dipotong.' : 'Dokumen berhasil disimpan sebagai DRAFT.';
@@ -299,6 +461,7 @@ class OutboundController extends Controller
             return back()->withInput()->withErrors($e->getMessage());
         }
     }
+
 
     public function update(Request $request, $id)
     {
@@ -318,8 +481,11 @@ class OutboundController extends Controller
             return back()->withErrors('Dokumen yang sudah Final / Selesai tidak dapat diubah kembali.');
         }
 
+        $allowMinusStock = \App\Models\Setting::where('key', 'allow_minus_stock')->value('value') == '1';
+        $defaultWarehouseId = \App\Models\Warehouse::first()->id ?? 1;
         $destination = Destination::find($request->destination_id);
 
+        // Pencatatan Log Perubahan
         $oldDetails = $sppm->details->keyBy('material_id');
         $oldChanges = [];
         $newChanges = [];
@@ -370,45 +536,13 @@ class OutboundController extends Controller
                 'pangkat'        => $destination->pangkat_nrp ?? null,
                 'jabatan'        => $destination->jabatan ?? null,
                 'status'         => $action === 'final' ? 'completed' : 'pending',
-                'updated_by'     => Auth::id(),
+                'updated_by'     => \Illuminate\Support\Facades\Auth::id(),
             ]);
 
+            // Hapus rincian lama karena ini Draft yang belum memotong stok fisik
             $sppm->details()->delete();
 
-            $hasItems = false;
-            $itemsToProcess = [];
-
-            foreach ($request->items as $item) {
-                $qty = (int) ($item['target_qty'] ?? 0);
-                
-                // --- PERBAIKAN: Selalu simpan kembali saat update agar View tetap utuh ---
-                OutDetail::create([
-                    'out_sppm_id'  => $sppm->id,
-                    'material_id'  => $item['material_id'],
-                    'target_qty'   => $qty,
-                    'harga_satuan' => $item['harga_satuan'] ?? 0,
-                    'harga_total'  => $item['harga_total'] ?? 0,
-                ]);
-
-                if ($qty > 0) {
-                    $hasItems = true;
-
-                    if ($action === 'final') {
-                        $availableStock = Stock::where('material_id', $item['material_id'])->sum('qty');
-                        if ($qty > $availableStock) {
-                            $matName = Material::find($item['material_id'])->name ?? 'Barang';
-                            throw new \Exception("GAGAL: Jumlah keluar untuk [{$matName}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}.");
-                        }
-                    }
-
-                    $itemsToProcess[] = $item;
-                }
-            }
-
-            if (!$hasItems) {
-                throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
-            }
-
+            $log = null;
             if ($action === 'final') {
                 $log = OutLog::create([
                     'out_sppm_id'  => $sppm->id,
@@ -416,56 +550,240 @@ class OutboundController extends Controller
                     'tgl_keluar'   => $request->sppm_date,
                     'keterangan'   => 'Realisasi keluar otomatis (Update dari Draft).',
                 ]);
+            }
 
-                foreach ($itemsToProcess as $item) {
-                    $sisaKebutuhan = (int) $item['target_qty'];
-                    $availableStocks = Stock::where('material_id', $item['material_id'])
-                        ->where('qty', '>', 0)
-                        ->orderBy('tgl_masuk', 'asc')
-                        ->orderBy('id', 'asc')
-                        ->lockForUpdate()
-                        ->get();
+            $hasItems = false;
 
-                    foreach ($availableStocks as $stock) {
-                        if ($sisaKebutuhan <= 0) break;
+            foreach ($request->items as $item) {
+                $qty = (int) ($item['target_qty'] ?? 0);
+                if ($qty <= 0) continue;
+                
+                $hasItems = true;
+                $material = Material::find($item['material_id']);
+                
+                // 1. Ekstrak Seri dari Form (Jika Barang Berseri)
+                $seriesList = [];
+                $isSerialized = false;
+                
+                if ($material->pakai_seri == 1 && !empty($item['serials'])) {
+                    $isSerialized = true;
+                    $totalSeriQty = 0;
+                    
+                    foreach ($item['serials'] as $seriReq) {
+                        $pfx = strtoupper(preg_replace('/[^a-zA-Z]/', '', $seriReq['prefix'] ?? ''));
+                        $sAw = preg_replace('/[^0-9]/', '', $seriReq['start'] ?? '');
+                        $sAk = preg_replace('/[^0-9]/', '', $seriReq['end'] ?? '');
+                        
+                        if ($sAw !== '' && $sAk !== '') {
+                            $sqty = ((int)$sAk - (int)$sAw) + 1;
+                            $seriesList[] = [
+                                'prefix' => $pfx, 
+                                'awal'   => (int)$sAw, 
+                                'akhir'  => (int)$sAk, 
+                                'qty'    => $sqty
+                            ];
+                            $totalSeriQty += $sqty;
+                        }
+                    }
+                    
+                    if ($totalSeriQty > 0) {
+                        $qty = $totalSeriQty;
+                    }
+                }
 
-                        $qtyAmbil = min($stock->qty, $sisaKebutuhan);
-                        $outSeriAwal = null;
-                        $outSeriAkhir = null;
+                $hargaSatuan = $item['harga_satuan'] ?? 0;
+                $hargaTotal = $qty * $hargaSatuan;
 
-                        if ($stock->seri_awal !== null) {
-                            $outSeriAwal = $stock->seri_awal;
-                            $outSeriAkhir = $stock->seri_awal + $qtyAmbil - 1;
+                OutDetail::create([
+                    'out_sppm_id'  => $sppm->id,
+                    'material_id'  => $material->id,
+                    'target_qty'   => $qty,
+                    'harga_satuan' => $hargaSatuan,
+                    'harga_total'  => $hargaTotal,
+                ]);
 
-                            if ($qtyAmbil < $stock->qty) {
-                                $stock->seri_awal = $outSeriAkhir + 1;
-                            } else {
-                                $stock->seri_awal = null;
-                                $stock->seri_akhir = null;
+                // 3. Proses Pemotongan Fisik Stok Gudang
+                if ($action === 'final') {
+                    $availableStock = Stock::where('material_id', $material->id)->where('qty', '>', 0)->sum('qty');
+                    
+                    if (!$allowMinusStock && $qty > $availableStock) {
+                        throw new \Exception("GAGAL DISIMPAN: Jumlah keluar [{$material->name}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}. Mode Transaksi Stok Minus sedang Dinonaktifkan.");
+                    }
+
+                    if ($isSerialized && !empty($seriesList)) {
+                        foreach ($seriesList as $seri) {
+                            $unfulfilled = [['awal' => $seri['awal'], 'akhir' => $seri['akhir']]];
+                            $prefix = $seri['prefix'];
+                            
+                            $queryStock = Stock::where('material_id', $material->id)
+                                               ->where('qty', '>', 0)
+                                               ->where('seri_awal', '<=', $seri['akhir'])
+                                               ->where('seri_akhir', '>=', $seri['awal']);
+                            
+                            if ($prefix) {
+                                $queryStock->where('prefix', $prefix);
+                            }
+                            
+                            $availableStocks = $queryStock->orderBy('tgl_masuk', 'asc')->lockForUpdate()->get();
+                            
+                            foreach ($availableStocks as $stock) {
+                                if (empty($unfulfilled)) break;
+                                
+                                $newUnfulfilled = [];
+                                $stockConsumed = false;
+                                
+                                foreach ($unfulfilled as $u) {
+                                    if ($stockConsumed) { 
+                                        $newUnfulfilled[] = $u; 
+                                        continue; 
+                                    }
+                                    
+                                    $overlapAwal = max($stock->seri_awal, $u['awal']);
+                                    $overlapAkhir = min($stock->seri_akhir, $u['akhir']);
+                                    
+                                    if ($overlapAwal <= $overlapAkhir) {
+                                        $stockConsumed = true; 
+                                        $overlapQty = $overlapAkhir - $overlapAwal + 1;
+                                        
+                                        OutStock::create([
+                                            'out_log_id' => $log->id,
+                                            'stock_id'   => $stock->id,
+                                            'qty_keluar' => $overlapQty,
+                                            'prefix'     => $stock->prefix,
+                                            'seri_awal'  => $overlapAwal,
+                                            'seri_akhir' => $overlapAkhir,
+                                        ]);
+                                        
+                                        if ($stock->seri_awal < $overlapAwal) {
+                                            $leftStock = $stock->replicate();
+                                            $leftStock->qty = ($overlapAwal - 1) - $stock->seri_awal + 1;
+                                            $leftStock->seri_akhir = $overlapAwal - 1;
+                                            $leftStock->save();
+                                        }
+                                        
+                                        if ($stock->seri_akhir > $overlapAkhir) {
+                                            $rightStock = $stock->replicate();
+                                            $rightStock->qty = $stock->seri_akhir - ($overlapAkhir + 1) + 1;
+                                            $rightStock->seri_awal = $overlapAkhir + 1;
+                                            $rightStock->save();
+                                        }
+                                        
+                                        $stock->qty = 0;
+                                        $stock->seri_awal = null;
+                                        $stock->seri_akhir = null;
+                                        $stock->save();
+                                        
+                                        if ($u['awal'] < $overlapAwal) {
+                                            $newUnfulfilled[] = ['awal' => $u['awal'], 'akhir' => $overlapAwal - 1];
+                                        }
+                                        if ($u['akhir'] > $overlapAkhir) {
+                                            $newUnfulfilled[] = ['awal' => $overlapAkhir + 1, 'akhir' => $u['akhir']];
+                                        }
+                                    } else {
+                                        $newUnfulfilled[] = $u;
+                                    }
+                                }
+                                $unfulfilled = $newUnfulfilled;
+                            }
+                            
+                            foreach ($unfulfilled as $u) {
+                                $missingQty = $u['akhir'] - $u['awal'] + 1;
+                                $negStock = Stock::create([
+                                    'no_surat_masuk' => 'MINUS-' . $sppm->sppm_no, 
+                                    'material_id'    => $material->id,
+                                    'warehouse_id'   => $defaultWarehouseId, 
+                                    'qty'            => -$missingQty,
+                                    'prefix'         => $prefix,
+                                    'seri_awal'      => $u['awal'],
+                                    'seri_akhir'     => $u['akhir'],
+                                    'tgl_masuk'      => $request->sppm_date,
+                                    'harga_satuan'   => $hargaSatuan,
+                                    'total_harga'    => -($missingQty * $hargaSatuan),
+                                    'status'         => 'Minus',
+                                    'keterangan'     => 'Stok Minus Otomatis (Update Manual)',
+                                ]);
+                                
+                                OutStock::create([
+                                    'out_log_id' => $log->id,
+                                    'stock_id'   => $negStock->id,
+                                    'qty_keluar' => $missingQty,
+                                    'prefix'     => $prefix,
+                                    'seri_awal'  => $u['awal'],
+                                    'seri_akhir' => $u['akhir'],
+                                ]);
                             }
                         }
 
-                        OutStock::create([
-                            'out_log_id' => $log->id,
-                            'stock_id'   => $stock->id,
-                            'qty_keluar' => $qtyAmbil,
-                            'prefix'     => $stock->prefix,
-                            'seri_awal'  => $outSeriAwal,
-                            'seri_akhir' => $outSeriAkhir,
-                        ]);
-
-                        $stock->qty -= $qtyAmbil;
-                        $stock->save();
-                        $sisaKebutuhan -= $qtyAmbil;
-                    }
+                    } else {
+                        // LOGIKA STOK FIFO (BULK)
+                        $sisaKebutuhan = $qty;
+                        $availableStocks = Stock::where('material_id', $material->id)
+                                           ->where('qty', '>', 0)
+                                           ->orderBy('tgl_masuk', 'asc')
+                                           ->orderBy('id', 'asc')
+                                           ->lockForUpdate()
+                                           ->get();
+                        
+                        foreach ($availableStocks as $stock) {
+                            if ($sisaKebutuhan <= 0) break;
+                            
+                            $qtyAmbil = min($stock->qty, $sisaKebutuhan);
+                            
+                            OutStock::create([
+                                'out_log_id' => $log->id,
+                                'stock_id'   => $stock->id,
+                                'qty_keluar' => $qtyAmbil,
+                                'prefix'     => $stock->prefix,
+                                'seri_awal'  => null,
+                                'seri_akhir' => null,
+                            ]);
+                            
+                            $stock->qty -= $qtyAmbil;
+                            $stock->save();
+                            
+                            $sisaKebutuhan -= $qtyAmbil;
+                        }
+                        
+                        // JIKA STOK MINUS (FIFO)
+                        if ($sisaKebutuhan > 0) {
+                            $negStock = Stock::create([
+                                'no_surat_masuk' => 'MINUS-' . $sppm->sppm_no,
+                                'material_id'    => $material->id,
+                                'warehouse_id'   => $defaultWarehouseId, 
+                                'qty'            => -$sisaKebutuhan,
+                                'prefix'         => null,
+                                'seri_awal'      => null,
+                                'seri_akhir'     => null,
+                                'tgl_masuk'      => $request->sppm_date,
+                                'harga_satuan'   => $hargaSatuan,
+                                'total_harga'    => -($sisaKebutuhan * $hargaSatuan),
+                                'status'         => 'Minus',
+                                'keterangan'     => 'Stok Minus Otomatis (Update Manual)',
+                            ]);
+                            
+                            OutStock::create([
+                                'out_log_id' => $log->id,
+                                'stock_id'   => $negStock->id,
+                                'qty_keluar' => $sisaKebutuhan,
+                                'prefix'     => null,
+                                'seri_awal'  => null,
+                                'seri_akhir' => null,
+                            ]);
+                        }
+                    } 
                 }
             }
 
-            // --- CATAT LOG SISTEM ---
-            $this->recordLog('UPDATED', 'DOKUMEN SPPM KELUAR', $sppm->id, $oldChanges, $newChanges);
+            if (!$hasItems) {
+                throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
+            }
+
+            if (method_exists($this, 'recordLog')) {
+                $this->recordLog('UPDATED', 'DOKUMEN SPPM KELUAR', $sppm->id, $oldChanges, $newChanges);
+            }
 
             DB::commit();
-            $msg = $action === 'final' ? 'Draft berhasil disimpan dan stok gudang telah dipotong.' : 'DRAFT berhasil diperbarui.';
+            $msg = $action === 'final' ? 'Draft berhasil di-Finalisasi dan stok gudang telah dipotong.' : 'DRAFT berhasil diperbarui.';
             return redirect()->route('outbounds.index')->with('success', $msg);
 
         } catch (\Exception $e) {
@@ -473,6 +791,7 @@ class OutboundController extends Controller
             return back()->withInput()->withErrors($e->getMessage());
         }
     }
+
 
     public function edit($id)
     {

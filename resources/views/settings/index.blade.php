@@ -17,7 +17,6 @@
     
     .radio-card-wrapper { display: flex; gap: 10px; }
     
-    /* Tambahan agar opsi mode barang masuk bersusun ke bawah */
     .radio-card-vertical { flex-direction: column; }
     .radio-card-vertical .radio-card label { display: flex; align-items: center; text-align: left; padding: 12px 15px; }
     .radio-card-vertical .radio-card .icon { margin-bottom: 0; margin-right: 15px; font-size: 1.5rem; }
@@ -71,31 +70,16 @@
     
     <div class="row g-4">
         
-        <!-- KOLOM 1: Preferensi Sistem -->
-        <div class="col-lg-4">
+        <!-- KOLOM KIRI: INBOUND & OUTBOUND RULES -->
+        <div class="col-lg-6">
             <div class="setting-card">
                 <div class="setting-card-header">
-                    <i class="fa-solid fa-desktop text-primary fs-5"></i> Preferensi Sistem
+                    <i class="fa-solid fa-boxes-packing text-primary fs-5"></i> Aturan Logistik (Masuk & Keluar)
                 </div>
                 <div class="setting-card-body">
                     
                     <div class="mb-4">
-                        <label class="field-label">Tema Warna Aplikasi</label>
-                        <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
-                            <span class="input-group-text bg-light border-0"><i class="fa-solid fa-palette text-muted"></i></span>
-                            <select name="app_theme" id="theme-selector" class="form-select custom-input border-0" required>
-                                <option value="light-blue" {{ $data['app_theme'] == 'light-blue' ? 'selected' : '' }}>Light Blue (Terang & Bersih)</option>
-                                <option value="ocean-blue" {{ $data['app_theme'] == 'ocean-blue' ? 'selected' : '' }}>Ocean Blue (Biru Laut)</option>
-                                <option value="modern-blue" {{ $data['app_theme'] == 'modern-blue' ? 'selected' : '' }}>Modern Blue (Elegan)</option>
-                                <option value="navy-blue" {{ $data['app_theme'] == 'navy-blue' ? 'selected' : '' }}>Navy Blue (Gelap & Profesional)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <hr class="text-muted opacity-25 my-4">
-
-                    <div class="mb-2">
-                        <label class="field-label">Sistem Kedatangan Barang Masuk</label>
+                        <label class="field-label">Sistem Kedatangan Barang Masuk (Inbound)</label>
                         <div class="radio-card-wrapper radio-card-vertical">
                             
                             <div class="radio-card">
@@ -134,8 +118,8 @@
                         </div>
                     </div>
 
-                    <!-- Input Max Batch (Akan di-hide/show oleh JavaScript) -->
-                    <div class="mt-4" id="max_batch_container" style="display: none;">
+                    <!-- Input Max Batch -->
+                    <div class="mb-4" id="max_batch_container" style="display: none;">
                         <label class="field-label">Batas Maksimal Batch (Parsial)</label>
                         <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
                             <span class="input-group-text bg-light border-0"><i class="fa-solid fa-layer-group text-muted"></i></span>
@@ -144,97 +128,140 @@
                         <small class="text-muted" style="font-size: 0.7rem;">Maksimal pemecahan tahap penerimaan barang untuk 1 SPPM.</small>
                     </div>
 
-                </div>
-            </div>
-        </div>
-
-        <!-- KOLOM 2: Keamanan & Sesi Akses -->
-        <div class="col-lg-4">
-            <div class="setting-card">
-                <div class="setting-card-header">
-                    <i class="fa-solid fa-shield-halved text-success fs-5"></i> Keamanan & Sesi
-                </div>
-                <div class="setting-card-body">
-                    <div class="mb-4">
-                        <label class="field-label">Izinkan Double Login (Multi Device)</label>
-                        <div class="radio-card-wrapper">
-                            <div class="radio-card">
-                                <input type="radio" name="allow_double_login" id="dl_1" value="1" {{ $data['allow_double_login'] == '1' ? 'checked' : '' }}>
-                                <label for="dl_1">
-                                    <i class="fa-solid fa-check-double icon text-success"></i>
-                                    <span class="title">Diizinkan</span>
-                                    <span class="desc">Bisa login di HP & PC bersamaan.</span>
-                                </label>
-                            </div>
-                            <div class="radio-card">
-                                <input type="radio" name="allow_double_login" id="dl_0" value="0" {{ $data['allow_double_login'] == '0' ? 'checked' : '' }}>
-                                <label for="dl_0">
-                                    <i class="fa-solid fa-ban icon text-danger"></i>
-                                    <span class="title">Diblokir</span>
-                                    <span class="desc">Akun lama ter-logout otomatis.</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
                     <hr class="text-muted opacity-25 my-4">
 
-                    <div class="mb-3">
-                        <label class="field-label">Waktu Auto Logout (Idle Timeout)</label>
-                        <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
-                            <span class="input-group-text bg-light border-0"><i class="fa-solid fa-clock-rotate-left text-muted"></i></span>
-                            <input type="number" name="login_timeout" class="form-control custom-input border-0 text-center fw-bold" value="{{ old('login_timeout', $data['login_timeout']) }}" min="1" required>
-                            <span class="input-group-text bg-light border-0 text-muted fw-bold">Menit</span>
+                    <!-- TAMBAHAN: IZINKAN MINUS OUTBOUND -->
+                    <div class="mb-2">
+                        <label class="field-label">Izinkan Transaksi Outbound Tanpa Stok (Minus)</label>
+                        <div class="radio-card-wrapper">
+                            <div class="radio-card">
+                                <input type="radio" name="allow_minus_stock" id="minus_1" value="1" {{ $data['allow_minus_stock'] == '1' ? 'checked' : '' }}>
+                                <label for="minus_1">
+                                    <i class="fa-solid fa-check-circle icon text-success"></i>
+                                    <span class="title">Diizinkan</span>
+                                    <span class="desc">Dapat input Qty > Stok saat ini.</span>
+                                </label>
+                            </div>
+                            <div class="radio-card">
+                                <input type="radio" name="allow_minus_stock" id="minus_0" value="0" {{ $data['allow_minus_stock'] == '0' ? 'checked' : '' }}>
+                                <label for="minus_0">
+                                    <i class="fa-solid fa-ban icon text-danger"></i>
+                                    <span class="title">Dilarang (Strict)</span>
+                                    <span class="desc">Input Qty wajib < Stok saat ini.</span>
+                                </label>
+                            </div>
                         </div>
-                        <small class="text-muted" style="font-size: 0.7rem;">Sistem akan me-logout otomatis jika tidak ada aktivitas halaman melebihi waktu ini.</small>
+                        <small class="text-muted d-block mt-2" style="font-size: 0.7rem;">Jika diizinkan, form Outbound tidak akan mengunci kolom QTY meskipun gudang kosong, dan sistem akan otomatis membuat entri surat "MINUS-SPPM" pada tabel Stok.</small>
                     </div>
+
                 </div>
             </div>
         </div>
 
-        <!-- KOLOM 3: Pengaturan Cetak -->
-        <div class="col-lg-4">
-            <div class="setting-card">
-                <div class="setting-card-header">
-                    <i class="fa-solid fa-file-signature text-danger fs-5"></i> Penandatangan Surat
-                </div>
-                <div class="setting-card-body">
-                    <div class="info-box mb-4">
-                        <i class="fa-solid fa-circle-info info-box-icon"></i>
-                        <div class="info-box-text">
-                            <p>Data penandatangan otomatis muncul pada Footer dokumen cetak.</p>
+        <!-- KOLOM KANAN: KEAMANAN & CETAK (Digabung Vertikal) -->
+        <div class="col-lg-6">
+            <div class="row g-4">
+                
+                <div class="col-12">
+                    <div class="setting-card">
+                        <div class="setting-card-header">
+                            <i class="fa-solid fa-desktop text-info fs-5"></i> Tema & Tampilan
                         </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="field-label">Nama Pejabat</label>
-                        <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
-                            <span class="input-group-text bg-light border-0"><i class="fa-solid fa-user-tie text-muted"></i></span>
-                            <input type="text" name="signatory_name" class="form-control custom-input border-0" value="{{ old('signatory_name', $data['signatory_name']) }}" placeholder="Cth: ENDRO SUSILO" required>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="field-label">Pangkat / NRP</label>
-                        <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
-                            <span class="input-group-text bg-light border-0"><i class="fa-solid fa-id-badge text-muted"></i></span>
-                            <input type="text" name="signatory_nrp" class="form-control custom-input border-0" value="{{ old('signatory_nrp', $data['signatory_nrp']) }}" placeholder="Cth: BRIPKA / 86041391">
-                        </div>
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="field-label">Nama Jabatan</label>
-                        <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
-                            <span class="input-group-text bg-light border-0"><i class="fa-solid fa-sitemap text-muted"></i></span>
-                            <input type="text" name="signatory_position" class="form-control custom-input border-0" value="{{ old('signatory_position', $data['signatory_position']) }}" placeholder="Cth: DIREKTUR" required>
+                        <div class="setting-card-body pb-3">
+                            <div class="mb-2">
+                                <label class="field-label">Tema Warna Aplikasi</label>
+                                <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
+                                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-palette text-muted"></i></span>
+                                    <select name="app_theme" id="theme-selector" class="form-select custom-input border-0" required>
+                                        <option value="light-blue" {{ $data['app_theme'] == 'light-blue' ? 'selected' : '' }}>Light Blue (Terang & Bersih)</option>
+                                        <option value="ocean-blue" {{ $data['app_theme'] == 'ocean-blue' ? 'selected' : '' }}>Ocean Blue (Biru Laut)</option>
+                                        <option value="modern-blue" {{ $data['app_theme'] == 'modern-blue' ? 'selected' : '' }}>Modern Blue (Elegan)</option>
+                                        <option value="navy-blue" {{ $data['app_theme'] == 'navy-blue' ? 'selected' : '' }}>Navy Blue (Gelap & Profesional)</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                <div class="col-12">
+                    <div class="setting-card">
+                        <div class="setting-card-header">
+                            <i class="fa-solid fa-shield-halved text-success fs-5"></i> Keamanan & Sesi
+                        </div>
+                        <div class="setting-card-body">
+                            <div class="mb-4">
+                                <label class="field-label">Izinkan Double Login (Multi Device)</label>
+                                <div class="radio-card-wrapper">
+                                    <div class="radio-card">
+                                        <input type="radio" name="allow_double_login" id="dl_1" value="1" {{ $data['allow_double_login'] == '1' ? 'checked' : '' }}>
+                                        <label for="dl_1">
+                                            <i class="fa-solid fa-check-double icon text-success"></i>
+                                            <span class="title">Diizinkan</span>
+                                            <span class="desc">Bisa login bersamaan.</span>
+                                        </label>
+                                    </div>
+                                    <div class="radio-card">
+                                        <input type="radio" name="allow_double_login" id="dl_0" value="0" {{ $data['allow_double_login'] == '0' ? 'checked' : '' }}>
+                                        <label for="dl_0">
+                                            <i class="fa-solid fa-ban icon text-danger"></i>
+                                            <span class="title">Diblokir</span>
+                                            <span class="desc">Logout otomatis.</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label class="field-label">Waktu Auto Logout (Idle Timeout)</label>
+                                <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
+                                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-clock-rotate-left text-muted"></i></span>
+                                    <input type="number" name="login_timeout" class="form-control custom-input border-0 text-center fw-bold" value="{{ old('login_timeout', $data['login_timeout']) }}" min="1" required>
+                                    <span class="input-group-text bg-light border-0 text-muted fw-bold">Menit</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="setting-card">
+                        <div class="setting-card-header">
+                            <i class="fa-solid fa-file-signature text-danger fs-5"></i> Penandatangan Surat Cetak
+                        </div>
+                        <div class="setting-card-body">
+                            <div class="mb-3">
+                                <label class="field-label">Nama Pejabat</label>
+                                <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
+                                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-user-tie text-muted"></i></span>
+                                    <input type="text" name="signatory_name" class="form-control custom-input border-0" value="{{ old('signatory_name', $data['signatory_name']) }}" placeholder="Cth: ENDRO SUSILO" required>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="field-label">Pangkat / NRP</label>
+                                <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
+                                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-id-badge text-muted"></i></span>
+                                    <input type="text" name="signatory_nrp" class="form-control custom-input border-0" value="{{ old('signatory_nrp', $data['signatory_nrp']) }}" placeholder="Cth: BRIPKA / 86041391">
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label class="field-label">Nama Jabatan</label>
+                                <div class="input-group shadow-sm" style="border-radius: 6px; overflow:hidden;">
+                                    <span class="input-group-text bg-light border-0"><i class="fa-solid fa-sitemap text-muted"></i></span>
+                                    <input type="text" name="signatory_position" class="form-control custom-input border-0" value="{{ old('signatory_position', $data['signatory_position']) }}" placeholder="Cth: DIREKTUR" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
         
         <!-- Tombol Aksi Simpan -->
-        <div class="col-12 text-end">
+        <div class="col-12 text-end mt-4">
             <button type="submit" class="btn btn-primary fw-bold px-5 py-2 shadow-sm" style="border-radius: 8px;">
                 <i class="fa-solid fa-save me-2"></i> SIMPAN PENGATURAN
             </button>
@@ -247,7 +274,6 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Logika Live Preview Tema
         const themeSelector = document.getElementById('theme-selector');
         if (themeSelector) {
             themeSelector.addEventListener('change', function() {
@@ -257,7 +283,6 @@
             });
         }
 
-        // Logika Toggle Visibilitas Input Max Batch
         const inboundRadios = document.querySelectorAll('input[name="inbound_mode"]');
         const maxBatchContainer = document.getElementById('max_batch_container');
 
@@ -265,7 +290,6 @@
             const selectedMode = document.querySelector('input[name="inbound_mode"]:checked').value;
             if (selectedMode === 'mode-2' || selectedMode === 'mode-3') {
                 maxBatchContainer.style.display = 'block';
-                // Jika tidak ada isian, kembalikan ke default 5
                 const input = maxBatchContainer.querySelector('input');
                 if(!input.value) input.value = 5;
             } else {
@@ -277,7 +301,6 @@
             radio.addEventListener('change', toggleMaxBatch);
         });
 
-        // Jalankan saat pertama kali halaman dimuat
         toggleMaxBatch();
     });
 </script>

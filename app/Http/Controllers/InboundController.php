@@ -629,14 +629,15 @@ class InboundController extends Controller
         ]);
     }
 
+    // --- FUNGSI DOWNLOAD TEMPLATE EXCEL INBOUND - NATIVE XLSX ---
     public function downloadTemplate(Request $request)
     {
         $request->validate(['category_id' => 'required|exists:material_categories,id']);
         
         $categoryId = $request->input('category_id');
-        $category = MaterialCategory::findOrFail($categoryId);
+        $category = \App\Models\MaterialCategory::findOrFail($categoryId);
 
-        $topLevelMaterials = Material::with(['children' => function($q) {
+        $topLevelMaterials = \App\Models\Material::with(['children' => function($q) {
                 $q->orderBy('nomor_urut', 'asc');
             }])
             ->where('material_category_id', $categoryId)
@@ -662,79 +663,161 @@ class InboundController extends Controller
             }
         }
 
-        $fileName = 'Template_Import_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xls';
+        // Inisiasi PhpSpreadsheet
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        
+        // Styling Default
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Arial')->setSize(10);
+        $spreadsheet->getDefaultStyle()->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+        $spreadsheet->getDefaultStyle()->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
 
-        $headers = [
-            "Content-type"        => "application/vnd.ms-excel",
-            "Content-Disposition" => "attachment; filename=$fileName",
-            "Pragma"              => "no-cache",
-            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
-            "Expires"             => "0"
-        ];
-
-        $callback = function() use ($topLevelMaterials, $flatMaterials, $category, $hasChildren) {
-            echo '<table border="1" style="font-family: Arial; font-size: 10px; text-align: center;">';
-            
-            $headerRows = $hasChildren ? 3 : 2;
-
-            echo '<tr style="font-weight: bold; background-color: #f8f9fa;">';
-            echo '<th rowspan="'.$headerRows.'" style="width: 40px;">NO</th>';
-            echo '<th rowspan="'.$headerRows.'" style="width: 120px;">TGL PENERIMAAN<br>(YYYY-MM-DD)</th>';
-            echo '<th rowspan="'.$headerRows.'" style="width: 120px;">TGL SPPM<br>(YYYY-MM-DD)</th>';
-            echo '<th rowspan="'.$headerRows.'" style="width: 180px;">NO. SPPM KORLANTAS</th>';
-            echo '<th rowspan="'.$headerRows.'" style="width: 180px;">NOMOR SERI</th>';
-            echo '<th rowspan="'.$headerRows.'" style="width: 150px;">NO. BAPPM</th>';
-            
-            echo '<th colspan="'.$flatMaterials->count().'" style="background-color: #d1e7dd;">RINCIAN BARANG KATEGORI: '.strtoupper($category->name).' (QTY)</th>';
-            
-            // SATU KOLOM HARGA SATUAN DI PALING KANAN
-            echo '<th rowspan="'.$headerRows.'" style="width: 150px; background-color: #f8f9fa;">HARGA SATUAN<br>(Rp)</th>';
-            echo '</tr>';
-
-            echo '<tr style="font-weight: bold; background-color: #d1e7dd;">';
-            foreach ($topLevelMaterials as $mat) {
-                if ($mat->children->count() > 0) {
-                    echo '<th colspan="'.$mat->children->count().'" style="background-color: #badce3;">'.strtoupper($mat->name).'</th>';
-                } else {
-                    $rs = $hasChildren ? 2 : 1;
-                    if ($rs > 1) {
-                        echo '<th rowspan="'.$rs.'">'.strtoupper($mat->name).'</th>';
-                    } else {
-                        echo '<th>'.strtoupper($mat->name).'</th>';
-                    }
-                }
-            }
-            echo '</tr>';
-
-            if ($hasChildren) {
-                echo '<tr style="font-weight: bold; background-color: #e2e3e5;">';
-                foreach ($topLevelMaterials as $mat) {
-                    if ($mat->children->count() > 0) {
-                        foreach ($mat->children as $child) {
-                            echo '<th>'.$child->name.'</th>';
-                        }
-                    }
-                }
-                echo '</tr>';
-            }
-
-            echo '<tr>';
-            echo '<td>1</td>';
-            echo '<td>'.date('Y-m-d').'</td>';
-            echo '<td>'.date('Y-m-d').'</td>';
-            echo '<td>SPPM/001/VII/'.date('Y').'</td>';
-            echo '<td>H. 01.300.001 - 01.400.000</td>';
-            echo '<td>BAPPM-001</td>';
-            foreach ($flatMaterials as $mat) {
-                echo '<td>500</td>'; 
-            }
-            echo '<td>150000</td>'; // Contoh harga satuan global
-            echo '</tr>';
-            
-            echo '</table>';
+        // Helper untuk mengubah index angka menjadi huruf kolom (1=A, 2=B, dst)
+        $colString = function($c) {
+            return \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
         };
 
-        return response()->stream($callback, 200, $headers);
+        $headerRows = $hasChildren ? 3 : 2;
+
+        // =================================================================
+        // BARIS 1: HEADER UTAMA
+        // =================================================================
+        $headersAwal = [
+            'NO', 
+            "TGL PENERIMAAN\n(YYYY-MM-DD)", 
+            "TGL SPPM\n(YYYY-MM-DD)", 
+            'NO. SPPM KORLANTAS', 
+            'NOMOR SERI', 
+            'NO. BAPPM'
+        ];
+        
+        $col = 1;
+        foreach ($headersAwal as $head) {
+            $sheet->setCellValue($colString($col) . '1', $head);
+            $sheet->mergeCells($colString($col) . '1:' . $colString($col) . $headerRows);
+            $sheet->getStyle($colString($col) . '1')->getFont()->setBold(true);
+            $sheet->getStyle($colString($col) . "1:" . $colString($col) . $headerRows)
+                  ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                  ->getStartColor()->setARGB('FFF8F9FA'); // Background light gray
+            $col++;
+        }
+
+        // Blok Rincian Barang
+        $startColBarang = $col;
+        $endColBarang = $col + $flatMaterials->count() - 1;
+        
+        $sheet->setCellValue($colString($startColBarang) . '1', 'RINCIAN BARANG KATEGORI: ' . strtoupper($category->name) . ' (QTY)');
+        $sheet->mergeCells($colString($startColBarang) . '1:' . $colString($endColBarang) . '1');
+        $sheet->getStyle($colString($startColBarang) . '1')->getFont()->setBold(true);
+        $sheet->getStyle($colString($startColBarang) . '1')
+              ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+              ->getStartColor()->setARGB('FFD1E7DD'); // Background light green
+
+        // Kolom Harga Satuan di Ujung Kanan
+        $colHarga = $endColBarang + 1;
+        $sheet->setCellValue($colString($colHarga) . '1', "HARGA SATUAN\n(Rp)");
+        $sheet->mergeCells($colString($colHarga) . '1:' . $colString($colHarga) . $headerRows);
+        $sheet->getStyle($colString($colHarga) . '1')->getFont()->setBold(true);
+        $sheet->getStyle($colString($colHarga) . "1:" . $colString($colHarga) . $headerRows)
+              ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+              ->getStartColor()->setARGB('FFF8F9FA');
+
+        // =================================================================
+        // BARIS 2 (DAN BARIS 3 JIKA ADA ANAK): SUB-HEADER BARANG
+        // =================================================================
+        $subCol = $startColBarang;
+        
+        foreach ($topLevelMaterials as $mat) {
+            $anakCount = $mat->children->count();
+            
+            if ($anakCount > 0) {
+                // Parent memiliki Anak
+                $sheet->setCellValue($colString($subCol) . '2', strtoupper($mat->name));
+                $sheet->mergeCells($colString($subCol) . '2:' . $colString($subCol + $anakCount - 1) . '2');
+                $sheet->getStyle($colString($subCol) . '2')->getFont()->setBold(true);
+                $sheet->getStyle($colString($subCol) . '2:' . $colString($subCol + $anakCount - 1) . '2')
+                      ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                      ->getStartColor()->setARGB('FFBADCE3'); 
+
+                // Tulis nama Anak-anaknya di Baris 3
+                $childCol = $subCol;
+                foreach ($mat->children as $child) {
+                    $sheet->setCellValue($colString($childCol) . '3', $child->name);
+                    $sheet->getStyle($colString($childCol) . '3')->getFont()->setBold(true);
+                    $sheet->getStyle($colString($childCol) . '3')
+                          ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                          ->getStartColor()->setARGB('FFE2E3E5');
+                    $childCol++;
+                }
+                $subCol += $anakCount;
+
+            } else {
+                // Parent Tunggal (Tanpa Anak)
+                $sheet->setCellValue($colString($subCol) . '2', strtoupper($mat->name));
+                
+                if ($hasChildren) {
+                    // Merge sampai baris 3 jika sheet ini memiliki baris ke-3
+                    $sheet->mergeCells($colString($subCol) . '2:' . $colString($subCol) . '3');
+                }
+                
+                $sheet->getStyle($colString($subCol) . '2')->getFont()->setBold(true);
+                $sheet->getStyle($colString($subCol) . '2:' . $colString($subCol) . ($hasChildren ? '3' : '2'))
+                      ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                      ->getStartColor()->setARGB('FFD1E7DD'); 
+                $subCol++;
+            }
+        }
+
+        // =================================================================
+        // BARIS DUMMY DATA
+        // =================================================================
+        $rowDummy = $headerRows + 1;
+
+        $sheet->setCellValue('A' . $rowDummy, '1');
+        $sheet->setCellValue('B' . $rowDummy, date('Y-m-d'));
+        $sheet->setCellValue('C' . $rowDummy, date('Y-m-d'));
+        $sheet->setCellValue('D' . $rowDummy, 'SPPM/001/VII/' . date('Y'));
+        $sheet->setCellValue('E' . $rowDummy, 'H. 01.300.001 - 01.400.000');
+        $sheet->setCellValue('F' . $rowDummy, 'BAPPM-001');
+
+        $colData = 7; // Dimulai dari Kolom G
+        foreach ($flatMaterials as $mat) {
+            $sheet->setCellValue($colString($colData) . $rowDummy, '500'); 
+            $colData++;
+        }
+        
+        // Harga Dummy
+        $sheet->setCellValue($colString($colData) . $rowDummy, '150000'); 
+
+        $maxColAlpha = $colString($colHarga);
+
+        // =================================================================
+        // FORMATTING (AUTO SIZE & BORDERS)
+        // =================================================================
+        // Borders
+        $sheet->getStyle("A1:{$maxColAlpha}{$rowDummy}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        
+        // AutoSize
+        foreach (range(1, $colHarga) as $columnID) {
+            $sheet->getColumnDimension($colString($columnID))->setAutoSize(true);
+        }
+        
+        // Wrap Text Header Surat (Kolom B dan C) dan Kolom Harga
+        $sheet->getStyle("B1:C1")->getAlignment()->setWrapText(true);
+        $sheet->getStyle("{$maxColAlpha}1")->getAlignment()->setWrapText(true);
+
+        // =================================================================
+        // OUTPUT FILE MURNI XLSX
+        // =================================================================
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $fileName = 'Template_Inbound_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xlsx';
+
+        return response()->streamDownload(function() use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 
     public function importExcel(Request $request)

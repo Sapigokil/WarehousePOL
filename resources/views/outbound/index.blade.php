@@ -449,7 +449,7 @@
                     <div class="mb-3">
                         <select name="category_id" class="form-select form-select-sm" required>
                             <option value="">-- Pilih Kategori Komoditas --</option>
-                            @foreach(\App\Models\MaterialCategory::orderBy('name', 'asc')->get() as $cat)
+                            @foreach(\App\Models\MaterialCategory::orderBy('nomor_urut', 'asc')->get() as $cat)
                                 <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
                             @endforeach
                         </select>
@@ -475,7 +475,7 @@
                             <label class="form-label text-muted" style="font-size: 0.75rem; font-weight:bold;">KATEGORI FILE YANG DIUNGGAH</label>
                             <select name="category_id" class="form-select form-select-sm" required>
                                 <option value="">-- Pastikan Sama Dengan Template --</option>
-                                @foreach(\App\Models\MaterialCategory::orderBy('name', 'asc')->get() as $cat)
+                                @foreach(\App\Models\MaterialCategory::orderBy('nomor_urut', 'asc')->get() as $cat)
                                     <option value="{{ $cat->id }}">{{ strtoupper($cat->name) }}</option>
                                 @endforeach
                             </select>

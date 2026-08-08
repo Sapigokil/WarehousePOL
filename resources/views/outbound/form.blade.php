@@ -27,12 +27,14 @@
 
 @section('content')
 @php
-    // Cek apakah dokumen ini sudah Final
+    // Cek dengan isset untuk mencegah undefined variable error
     $isCompleted = isset($outbound) && $outbound->status === 'completed';
-    // Cek apakah halaman diakses melalui tombol Show (Mata)
     $readOnlyMode = isset($isReadonly) && $isReadonly;
-    // Form dikunci HANYA JIKA dokumen sudah final ATAU sedang berada di mode Show
-    $isLocked = $isCompleted || $readOnlyMode;
+    // Terapkan default false jika variabel dari controller tidak dikirim
+    $isLocked = $isCompleted || $readOnlyMode ? true : false;
+
+    // BACA PENGATURAN ALLOW MINUS STOCK DARI DATABASE
+    $allowMinusStock = \App\Models\Setting::where('key', 'allow_minus_stock')->value('value') == '1';
 
     // Helper untuk mengubah angka menjadi huruf di sisi server (PHP)
     $terbilang = function($n) use (&$terbilang) {
@@ -83,6 +85,10 @@
                 @endif
             @endif
         </h5>
+        
+        @if($allowMinusStock && !$isLocked)
+            <small class="text-warning fw-bold"><i class="fa-solid fa-triangle-exclamation"></i> Peringatan: Mode Transaksi Stok Minus Sedang Aktif.</small>
+        @endif
     </div>
     <div class="d-flex gap-2">
         @if($isCompleted || $readOnlyMode)
@@ -191,7 +197,6 @@
                         <thead>
                             <tr>
                                 <th width="3%" class="text-center">No</th>
-                                <!-- Melebarkan kolom Nama jika Tersedia disembunyikan -->
                                 <th width="{{ $isLocked ? '35%' : '25%' }}">Nama & Kode Materiil</th>
                                 <th width="5%" class="text-center">Sat</th>
                                 @if(!$isLocked)
@@ -214,7 +219,7 @@
                                             @if(!is_null($detail->material->parent_id)) <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-1 opacity-50"></i> @endif
                                             <span class="text-dark d-inline-block fw-semibold" style="font-size: 0.8rem;">{{ $detail->material->name }}</span>
                                             
-                                            <!-- Render Serial dari Log OutStock hanya jika stok tersebut ikut dikeluarkan -->
+                                            <!-- Render Serial dari Log OutStock -->
                                             @if($detail->material->pakai_seri == 1 && $detail->target_qty > 0)
                                                 @php
                                                     $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound){
@@ -239,8 +244,6 @@
                                         </td>
                                         <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">{{ $detail->material->satuan }}</td>
                                         
-                                        <!-- Kolom Tersedia disembunyikan saat Locked -->
-                                        
                                         <td class="align-middle text-center fw-bold text-danger">
                                             {{ $detail->target_qty > 0 ? number_format($detail->target_qty, 0, ',', '.') : '-' }}
                                         </td>
@@ -259,7 +262,7 @@
                                 @endforeach
                             @else
                                 <tr>
-                                    <td colspan="{{ $isLocked ? 7 : 8 }}" id="empty-state-row" class="text-center py-5 text-muted bg-white">
+                                    <td colspan="8" id="empty-state-row" class="text-center py-5 text-muted bg-white">
                                         <i class="fa-solid fa-arrow-pointer fs-3 mb-2 opacity-50"></i>
                                         <p class="mb-0 small">Silakan tentukan Kategori Komoditas terlebih dahulu untuk menggelar manifes barang.</p>
                                     </td>
@@ -273,7 +276,7 @@
                 @if(!$isLocked)
                 <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
                     <button type="submit" name="action_type" value="draft" class="btn btn-outline-secondary fw-bold px-4" style="border-radius: 6px;"><i class="fa-solid fa-pen-ruler me-1"></i> SIMPAN DRAFT</button>
-                    <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan langsung memotong stok di Gudang dan dokumen tidak dapat diubah lagi. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
+                    <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan memotong stok di Gudang dan dokumen tidak dapat diubah lagi. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
                 </div>
                 @endif
             </div>
@@ -330,12 +333,13 @@
 @push('scripts')
 @if(!$isLocked)
 <script>
+    const allowMinusStock = {{ $allowMinusStock ? 'true' : 'false' }};
     const categorySelector = document.getElementById('category-selector');
     const itemsContainer = document.getElementById('outbound-items-container');
     const loadingIndicator = document.getElementById('loading-indicator');
     
-    // Injeksi data draft lama
-    const savedTargetData = {!! isset($outbound) ? json_encode($outbound->details->pluck('target_qty', 'material_id')) : '{}' !!};
+    // Injeksi data draft lama (cek isset agar aman)
+    const savedTargetData = {!! (isset($outbound) && isset($outbound->details)) ? json_encode($outbound->details->pluck('target_qty', 'material_id')) : '{}' !!};
 
     function terbilang(n) {
         const bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
@@ -407,9 +411,18 @@
     // EVENT: Saat Qty diketik manual
     itemsContainer.addEventListener('input', function(e) {
         if (e.target.classList.contains('data-qty-input')) {
-            const qty = parseInt(e.target.value) || 0;
-            const idx = e.target.dataset.index;
+            let qty = parseInt(e.target.value) || 0;
             
+            // JIKA ALLOW MINUS TIDAK AKTIF, paksa nilai agar tidak melebihi MAX
+            if (!allowMinusStock) {
+                const max = parseInt(e.target.getAttribute('max')) || 0;
+                if (qty > max) {
+                    qty = max;
+                    e.target.value = max;
+                }
+            }
+
+            const idx = e.target.dataset.index;
             updateRowValues(idx, qty, e.target);
 
             // OTOMATISASI: Sinkronkan ke anakan jika ismain diubah
@@ -453,6 +466,8 @@
                         
                         const isMainVal = (mat.ismain == 1 || mat.is_main == 1) ? 1 : 0;
                         const isJmlxVal = (mat.jmlxinduk == 1 || mat.jml_x_induk == 1) ? 1 : 0;
+                        const isHargaVal = (mat.is_harga == 1) ? 1 : 0;
+                        
                         const readonlyAttr = (isJmlxVal == 1) ? 'readonly tabindex="-1"' : '';
                         
                         let serialInputHtml = '';
@@ -471,10 +486,20 @@
                             `;
                         }
                         
-                        const stokStr = mat.current_stock.toLocaleString('id-ID');
-                        let stockBadge = mat.current_stock > 0 
+                        let currentStock = parseInt(mat.current_stock) || 0;
+                        const stokStr = currentStock.toLocaleString('id-ID');
+                        
+                        let stockBadge = currentStock > 0 
                             ? `<span class="badge bg-info bg-opacity-10 text-info border border-info">${stokStr}</span>` 
                             : `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger">KOSONG</span>`;
+
+                        // IMPLEMENTASI ALLOW MINUS PADA INPUT QTY
+                        let qtyInputAttrs = '';
+                        if (currentStock === 0 && !allowMinusStock) {
+                            qtyInputAttrs = `max="0" readonly disabled placeholder="0"`;
+                        } else {
+                            qtyInputAttrs = `min="0" ${!allowMinusStock ? `max="${currentStock}"` : ''} placeholder="0"`;
+                        }
 
                         let html = `
                             <input type="hidden" name="items[${gIndex}][material_id]" value="${mat.id}">
@@ -485,7 +510,7 @@
                                 ${codeHtml}
                                 ${serialInputHtml}
                             </td>
-                            <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">${mat.satuan}</td>`;
+                            <td class="text-center fw-bold text-secondary" style="font-size: 0.8rem;">${mat.satuan || '-'}</td>`;
 
                         if (isParent && hasChildren) {
                             html += `<td></td><td></td><td></td><td></td><td></td>`;
@@ -493,7 +518,7 @@
                             html += `
                             <td class="text-center align-middle">${stockBadge}</td>
                             <td class="align-middle">
-                                <input type="number" name="items[${gIndex}][target_qty]" class="form-control form-control-sm text-center fw-bold text-danger data-qty-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" data-stocks="${stocksDataString}" min="0" max="${mat.current_stock}" ${mat.current_stock == 0 ? 'readonly disabled placeholder="0"' : 'placeholder="0"'} ${readonlyAttr}>
+                                <input type="number" name="items[${gIndex}][target_qty]" class="form-control form-control-sm text-center fw-bold text-danger data-qty-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" data-isharga="${isHargaVal}" data-stocks="${stocksDataString}" ${qtyInputAttrs} ${readonlyAttr}>
                             </td>
                             <td class="align-middle">
                                 <span id="letter-span-${gIndex}" class="text-letter-span">-</span>
@@ -537,6 +562,11 @@
                             input.dispatchEvent(new Event('input'));
                         }
                     });
+                })
+                .catch(error => {
+                    console.error("Fetch Error:", error);
+                    if(loadingIndicator) loadingIndicator.classList.add('d-none');
+                    alert("Gagal memuat data kategori. Periksa koneksi atau console log.");
                 });
         });
 
@@ -573,7 +603,12 @@
             tbody.innerHTML = '';
 
             if(stocks.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Tidak ada data rentang seri tersimpan di gudang.</td></tr>`;
+                // Modifikasi pesan wizard jika allow_minus aktif
+                if (allowMinusStock) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Gudang kosong. Silakan <strong>ketik manual Seri Awal dan Seri Akhir</strong> di kolom tabel depan untuk mencatat stok minus.</td></tr>`;
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Tidak ada data rentang seri tersimpan di gudang.</td></tr>`;
+                }
             } else {
                 stocks.forEach((st, i) => {
                     const pfx = st.prefix || st.batch_prefix || '';
@@ -675,6 +710,8 @@
         const totalQty = parseInt(document.getElementById('wizard-total-taken').textContent) || 0;
 
         if(totalQty !== target) {
+            // Jika allow minus stock aktif, wizard tidak membatasi pemilihan lebih kecil dari form
+            // Tapi jika admin memaksa, tampilkan warning.
             if(!confirm(`Total Qty yang diambil (${totalQty}) tidak sama dengan target form (${target}). Ingin tetap menerapkan rentang ini?`)) {
                 return;
             }
@@ -716,8 +753,8 @@
         const originalIdx = document.getElementById('wizard-index').value;
         const targetQtyInput = document.querySelector(`.data-qty-input[data-index="${originalIdx}"]`);
 
-        // Update Target Qty jika ternyata berbeda
-        if (targetQtyInput && totalQty !== target && totalQty > 0) {
+        // Update Target Qty jika ternyata berbeda (Hanya jika admin memilih untuk mengubah)
+        if (targetQtyInput && totalQty !== target && totalQty > 0 && !allowMinusStock) {
             targetQtyInput.value = totalQty;
             targetQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
