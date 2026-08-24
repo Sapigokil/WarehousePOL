@@ -26,14 +26,38 @@ class InboundImport implements ToCollection
     }
 
     /**
-     * Helper untuk memparsing tanggal Excel (bisa berupa serial number excel atau string)
+     * Helper untuk memparsing tanggal Excel (bisa berupa serial number excel atau string bahasa Indo/Eng)
      */
     private function parseDate($value)
     {
+        if (empty(trim($value))) return null;
+
+        // Jika berupa angka murni (Serial Number Excel)
         if (is_numeric($value)) {
             return Date::excelToDateTimeObject($value)->format('Y-m-d');
         }
-        return date('Y-m-d', strtotime($value));
+
+        // Kamus Terjemahan Bulan Bahasa Indonesia ke Bahasa Inggris
+        $bulanIndo = [
+            'Januari'  => 'January',  'Februari' => 'February', 'Pebruari' => 'February',
+            'Maret'    => 'March',    'April'    => 'April',    'Mei'      => 'May',
+            'Juni'     => 'June',     'Juli'     => 'July',     'Agustus'  => 'August',
+            'September'=> 'September','Oktober'  => 'October',  'November' => 'November',
+            'Nopember' => 'November', 'Desember' => 'December'
+        ];
+
+        // Lakukan pencarian dan pergantian string (Case Insensitive)
+        $tglEng = str_ireplace(array_keys($bulanIndo), array_values($bulanIndo), trim($value));
+        
+        // Ubah menjadi format standar database
+        $parsed = date('Y-m-d', strtotime($tglEng));
+        
+        // Jika strtotime gagal membaca, akan menghasilkan 1970-01-01, kembalikan null atau tanggal hari ini
+        if ($parsed === '1970-01-01' || !$parsed) {
+            return date('Y-m-d'); // Fallback aman
+        }
+
+        return $parsed;
     }
 
     public function collection(Collection $rows)
@@ -262,7 +286,14 @@ class InboundImport implements ToCollection
 
                             // Sisa positif
                             foreach ($unfulfilled as $u) {
-                                $qtySisa = $u['akhir'] - $u['awal'] + 1;
+                                // Pengecekan Opsi A: Jika seri kosong, gunakan $qty bawaan dari Excel.
+                                // Jika ada serinya, gunakan rumus pengurangan seri.
+                                if (is_null($u['awal']) && is_null($u['akhir'])) {
+                                    $qtySisa = $qty;
+                                } else {
+                                    $qtySisa = $u['akhir'] - $u['awal'] + 1;
+                                }
+
                                 Stock::create([
                                     'no_surat_masuk' => $sppm->sppm_no,
                                     'tgl_masuk'      => $tglPenerimaan,

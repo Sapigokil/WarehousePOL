@@ -39,7 +39,7 @@ class DistribusiController extends Controller
             ->selectRaw('out_sppms.destination_id, materials.material_category_id, SUM(out_details.target_qty) as total_qty')
             ->where('out_sppms.status', 'completed')
             ->whereYear('out_sppms.sppm_date', $year1)
-            ->where('materials.ismain', 1) // HANYA material utama
+            ->where('materials.ismain', 1) // HANYA material utama (DIKEMBALIKAN)
             ->groupBy('out_sppms.destination_id', 'materials.material_category_id')
             ->get();
 
@@ -60,7 +60,7 @@ class DistribusiController extends Controller
             ->where('out_sppms.status', 'completed')
             ->whereYear('out_sppms.sppm_date', $year2)
             ->where('materials.material_category_id', $category2)
-            ->where('materials.ismain', 1) // HANYA material utama
+            ->where('materials.ismain', 1) // HANYA material utama (DIKEMBALIKAN)
             ->groupBy('out_sppms.destination_id', DB::raw('MONTH(out_sppms.sppm_date)'))
             ->get();
 

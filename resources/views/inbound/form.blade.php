@@ -56,6 +56,19 @@
     </div>
 @endif
 
+@if($errors->any())
+    <div class="alert alert-danger shadow-sm border-0 py-2 d-flex align-items-center" role="alert">
+        <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
+        <div>
+            <ul class="mb-0 ps-3 text-danger fw-bold">
+                @foreach($errors->all() as $error) 
+                    <li>{{ $error }}</li> 
+                @endforeach
+            </ul>
+        </div>
+    </div>
+@endif
+
 <form action="{{ isset($inbound) ? route('inbound.update', $inbound->id) : route('inbound.store') }}" method="POST" id="formMainInbound" enctype="multipart/form-data">
     @csrf
     @if(isset($inbound)) @method('PUT') @endif
@@ -217,7 +230,7 @@
                                                     @endif
                                                 </small>
                                                 <div class="d-flex gap-1 mt-1">
-                                                    <input type="text" name="items[{{ $index }}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px; max-width:40px;" value="{{ $detail->sppm_serial_prefix }}" placeholder="PFX">
+                                                    <input type="text" name="items[{{ $index }}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px; max-width:40px;" value="{{ $detail->sppm_serial_prefix }}" placeholder="Code">
                                                     
                                                     <input type="text" name="items[{{ $index }}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="{{ $index }}" style="font-size:0.7rem; padding:2px;" value="{{ $detail->sppm_serial_start ? str_pad($detail->sppm_serial_start, 9, '0', STR_PAD_LEFT) : '' }}" placeholder="Awal">
                                                     
@@ -287,7 +300,7 @@
                                                     
                                                     @if($detail->material->pakai_seri == 1)
                                                         <div class="d-flex gap-1 mt-1">
-                                                            <input type="text" name="items[{{ $index }}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="PFX">
+                                                            <input type="text" name="items[{{ $index }}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="Code">
                                                             <input type="text" name="items[{{ $index }}][serial_start]" class="form-control form-control-sm real-serial-start-input format-seri" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
                                                             <input type="text" name="items[{{ $index }}][serial_end]" class="form-control form-control-sm real-serial-end-input format-seri" data-index="{{ $index }}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
                                                         </div>
@@ -515,7 +528,6 @@
         if (targetInput) {
             const qty = parseInt(targetInput.value) || 0;
             
-            // Hitung harga hanya jika input harga ada (bukan hidden dengan value 0)
             if(priceInput && priceInput.type !== 'hidden') {
                 const price = parseFloat(priceInput.value) || 0;
                 const total = qty * price;
@@ -622,6 +634,7 @@
     });
 
     itemsContainer.addEventListener('click', function(e) {
+        // Hapus Baris
         if (e.target.classList.contains('btn-remove-row') || e.target.closest('.btn-remove-row')) {
             e.preventDefault();
             const row = e.target.closest('tr');
@@ -631,9 +644,9 @@
             }
         }
 
+        // Copy Serial
         if (e.target.classList.contains('btn-copy-serial') || e.target.closest('.btn-copy-serial')) {
             e.preventDefault();
-            
             const firstPrefix = itemsContainer.querySelector('.sppm-serial-prefix-input');
             const firstStartInput = itemsContainer.querySelector('.sppm-serial-start-input');
             const firstEndInput = itemsContainer.querySelector('.sppm-serial-end-input');
@@ -650,6 +663,34 @@
                 allPrefixes.forEach(input => { input.value = pVal; });
                 allStarts.forEach(input => { input.value = sVal; });
                 allEnds.forEach(input => { input.value = eVal; });
+            }
+        }
+
+        // UNLINK QTY (Pelepas Kuncian)
+        if (e.target.classList.contains('btn-unlink-qty') || e.target.closest('.btn-unlink-qty')) {
+            e.preventDefault();
+            const btn = e.target.classList.contains('btn-unlink-qty') ? e.target : e.target.closest('.btn-unlink-qty');
+            const targetId = btn.dataset.target;
+            const inputEl = document.getElementById(targetId);
+            
+            if (inputEl) {
+                // Hapus atribut kuncian
+                inputEl.removeAttribute('readonly');
+                inputEl.removeAttribute('tabindex');
+                
+                // Matikan sinkronisasi dari induk
+                inputEl.dataset.jmlxinduk = "0";
+                
+                // Indikator visual sukses dilepas
+                inputEl.classList.add('border-success', 'text-success');
+                inputEl.classList.remove('text-primary');
+                
+                // Hapus tombol agar tidak menumpuk
+                btn.remove();
+
+                // Fokuskan agar admin bisa langsung mengetik
+                inputEl.focus();
+                inputEl.select();
             }
         }
     });
@@ -690,7 +731,7 @@
                                         <i class="fa-solid fa-tags"></i> Seri SPPM: ${copyBtnHtml}
                                     </small>
                                     <div class="d-flex gap-1 mt-1">
-                                        <input type="text" name="items[${gIndex}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="${gIndex}" style="font-size:0.7rem; padding:2px; max-width:40px;" placeholder="PFX">
+                                        <input type="text" name="items[${gIndex}][sppm_serial_prefix]" class="form-control form-control-sm text-center sppm-serial-prefix-input fw-bold" data-index="${gIndex}" style="font-size:0.7rem; padding:2px; max-width:40px;" placeholder="Code">
                                         <input type="text" name="items[${gIndex}][sppm_serial_start]" class="form-control form-control-sm sppm-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Awal">
                                         <input type="text" name="items[${gIndex}][sppm_serial_end]" class="form-control form-control-sm sppm-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.7rem; padding:2px;" placeholder="Akhir">
                                     </div>
@@ -698,7 +739,7 @@
 
                                 realSerialHtml = `
                                 <div class="d-flex gap-1 mt-1">
-                                    <input type="text" name="items[${gIndex}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="${gIndex}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="PFX">
+                                    <input type="text" name="items[${gIndex}][serial_prefix]" class="form-control form-control-sm text-center fw-bold" data-index="${gIndex}" style="font-size:0.65rem; padding:2px; max-width:35px;" placeholder="Code">
                                     <input type="text" name="items[${gIndex}][serial_start]" class="form-control form-control-sm real-serial-start-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Awal">
                                     <input type="text" name="items[${gIndex}][serial_end]" class="form-control form-control-sm real-serial-end-input format-seri" data-index="${gIndex}" style="font-size:0.65rem; padding:2px;" placeholder="Akhir">
                                 </div>`;
@@ -725,10 +766,22 @@
                             const isMainVal = mat.ismain || 0;
                             const isJmlxVal = mat.jmlxinduk || 0;
                             const readonlyAttr = (isJmlxVal == 1) ? 'readonly tabindex="-1"' : '';
+                            
+                            // TAMPILKAN TOMBOL UNLINK JIKA DIKUNCI
+                            let unlinkBtnHtml = '';
+                            if (isJmlxVal == 1) {
+                                unlinkBtnHtml = `
+                                <button type="button" class="btn btn-sm btn-link text-warning p-0 ms-1 btn-unlink-qty" title="Lepas Kuncian Induk" data-target="target_${gIndex}">
+                                    <i class="fa-solid fa-link-slash"></i>
+                                </button>`;
+                            }
 
                             html += `
                             <td>
-                                <input type="number" name="items[${gIndex}][target_qty]" id="target_${gIndex}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
+                                <div class="d-flex justify-content-center align-items-center">
+                                    <input type="number" name="items[${gIndex}][target_qty]" id="target_${gIndex}" class="form-control form-control-sm text-center fw-bold text-primary data-qty-input" style="max-width: 80px;" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
+                                    ${unlinkBtnHtml}
+                                </div>
                             </td>
                             <td>
                                 <span id="letter-span-${gIndex}" class="text-letter-span">-</span>
@@ -760,7 +813,10 @@
                             for(let b=1; b<=maxBatches; b++) {
                                 if(b == currentBatch) {
                                     html += `<td class="td-real-batch col-tahap-${b} d-none">
-                                        <input type="number" name="items[${gIndex}][qty_received]" id="received_${gIndex}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
+                                        <div class="d-flex justify-content-center align-items-center">
+                                            <input type="number" name="items[${gIndex}][qty_received]" id="received_${gIndex}" class="form-control form-control-sm text-center fw-bold border-warning text-warning data-real-input" style="max-width: 80px;" data-index="${gIndex}" data-ismain="${isMainVal}" data-jmlxinduk="${isJmlxVal}" value="" min="0" ${readonlyAttr}>
+                                            ${unlinkBtnHtml.replace(`target_${gIndex}`, `received_${gIndex}`)}
+                                        </div>
                                         ${realSerialHtml}
                                     </td>`;
                                 } else {
@@ -956,6 +1012,5 @@
             }
         });
     }
-
 </script>
 @endpush

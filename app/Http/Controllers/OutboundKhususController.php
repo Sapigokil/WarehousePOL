@@ -298,7 +298,8 @@ class OutboundKhususController extends Controller
 
         // --- ATURAN RENTANG SERI (MENYAMAKAN EXPORT) ---
         $isSTNK = stripos($category->name, 'STNK') !== false;
-        $maxSeriCount = $isSTNK ? 20 : 1;
+        // $maxSeriCount = $isSTNK ? 20 : 1;
+        $maxSeriCount = 1;
 
         // =================================================================
         // PEMETAAN INDEX KOLOM DINAMIS (0-BASED INDEX)
