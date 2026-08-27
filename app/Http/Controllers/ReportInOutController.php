@@ -11,14 +11,17 @@ use Illuminate\Support\Facades\DB;
 class ReportInOutController extends Controller
 {
     // =========================================================================
-    // FUNGSI PRIVATE: ENGINE PENGAMBIL DATA (AGAR TIDAK DUPLIKAT DI INDEX & EXPORT)
+    // FUNGSI PRIVATE: ENGINE PENGAMBIL DATA (DENGAN BATAS CUT-OFF DATE)
     // =========================================================================
-    private function getReportData($year)
+    private function getReportData($year, $ttdMonth, $ttdDate)
     {
         $signatureKeys = ['Jabatan_tnkb_ttd', 'Nama_tnkb_ttd', 'pangkatnrp_tnkb_ttd'];
         $signatureSettings = Setting::whereIn('key', $signatureKeys)->pluck('value', 'key')->toArray();
 
-        // 1. Matriks Kosong TNKB & TCKB
+        // 1. Buat Batas Waktu Cut-Off (YYYY-MM-DD)
+        $cutoffDate = sprintf('%04d-%02d-%02d', $year, $ttdMonth, $ttdDate);
+
+        // 2. Matriks Kosong TNKB & TCKB
         $reportData = [
             'tnkb_non_ev' => ['R2' => ['sisa_awal_tahun' => 0, 'months' => []], 'R4' => ['sisa_awal_tahun' => 0, 'months' => []]],
             'tnkb_ev'     => ['R2' => ['sisa_awal_tahun' => 0, 'months' => []], 'R4' => ['sisa_awal_tahun' => 0, 'months' => []]],
@@ -40,12 +43,13 @@ class ReportInOutController extends Controller
             return null;
         };
 
-        // Query Inbound TNKB
+        // Query Inbound TNKB (Dibatasi Cut-Off)
         $inboundQuery = DB::table('in_details')
             ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
             ->join('materials', 'in_details.material_id', '=', 'materials.id')
             ->whereNotNull('materials.tnkb_rpt')
             ->where('materials.tnkb_rpt', '>', 0)
+            ->whereDate('in_sppms.sppm_date', '<=', $cutoffDate)
             ->selectRaw('
                 materials.tnkb_rpt, materials.tnkb_r, materials.tnkb_ev, 
                 YEAR(in_sppms.sppm_date) as year, MONTH(in_sppms.sppm_date) as month, 
@@ -65,12 +69,13 @@ class ReportInOutController extends Controller
             }
         }
 
-        // Query Outbound TNKB
+        // Query Outbound TNKB (Dibatasi Cut-Off)
         $outboundQuery = DB::table('out_details')
             ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
             ->join('materials', 'out_details.material_id', '=', 'materials.id')
             ->whereNotNull('materials.tnkb_rpt')
             ->where('materials.tnkb_rpt', '>', 0)
+            ->whereDate('out_sppms.sppm_date', '<=', $cutoffDate)
             ->selectRaw('
                 materials.tnkb_rpt, materials.tnkb_r, materials.tnkb_ev, 
                 YEAR(out_sppms.sppm_date) as year, MONTH(out_sppms.sppm_date) as month, 
@@ -106,7 +111,7 @@ class ReportInOutController extends Controller
             }
         }
 
-        // 2. Matriks Data SBST
+        // 3. Matriks Data SBST
         $sbstMaterials = Material::whereNotNull('sbst_judul')->where('sbst_judul', '!=', '')->get();
         $sbstMaterialIds = $sbstMaterials->pluck('id')->toArray();
 
@@ -123,9 +128,11 @@ class ReportInOutController extends Controller
         }
 
         if (!empty($sbstMaterialIds)) {
+            // Query Inbound SBST (Dibatasi Cut-Off)
             $sbstInQuery = DB::table('in_details')
                 ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
                 ->whereIn('in_details.material_id', $sbstMaterialIds)
+                ->whereDate('in_sppms.sppm_date', '<=', $cutoffDate)
                 ->selectRaw('in_details.material_id, YEAR(in_sppms.sppm_date) as year, MONTH(in_sppms.sppm_date) as month, SUM(in_details.target_qty) as total_qty')
                 ->groupBy('in_details.material_id', 'year', 'month')
                 ->get();
@@ -138,9 +145,11 @@ class ReportInOutController extends Controller
                 }
             }
 
+            // Query Outbound SBST (Dibatasi Cut-Off)
             $sbstOutQuery = DB::table('out_details')
                 ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
                 ->whereIn('out_details.material_id', $sbstMaterialIds)
+                ->whereDate('out_sppms.sppm_date', '<=', $cutoffDate)
                 ->selectRaw('out_details.material_id, YEAR(out_sppms.sppm_date) as year, MONTH(out_sppms.sppm_date) as month, SUM(out_details.target_qty) as total_qty')
                 ->groupBy('out_details.material_id', 'year', 'month')
                 ->get();
@@ -177,7 +186,7 @@ class ReportInOutController extends Controller
             9 => 'SEPTEMBER', 10 => 'OKTOBER', 11 => 'NOVEMBER', 12 => 'DESEMBER'
         ];
 
-        return compact('reportData', 'sbstData', 'signatureSettings', 'monthsName', 'year');
+        return compact('reportData', 'sbstData', 'signatureSettings', 'monthsName', 'year', 'ttdMonth', 'ttdDate');
     }
 
     // =========================================================================
@@ -192,7 +201,10 @@ class ReportInOutController extends Controller
         if (empty($years)) $years = [date('Y')];
 
         $year = $request->input('year', $years[0]);
-        $data = $this->getReportData($year);
+        $ttdMonth = $request->input('ttd_month', date('n'));
+        $ttdDate = $request->input('ttd_date', date('j'));
+        
+        $data = $this->getReportData($year, $ttdMonth, $ttdDate);
         $data['years'] = $years;
 
         return view('reports.inout', $data);
@@ -204,20 +216,22 @@ class ReportInOutController extends Controller
     public function export(Request $request, $type)
     {
         $year = $request->input('year', date('Y'));
-        $data = $this->getReportData($year);
+        $ttdMonth = $request->input('ttd_month', date('n'));
+        $ttdDate = $request->input('ttd_date', date('j'));
+        
+        $data = $this->getReportData($year, $ttdMonth, $ttdDate);
 
-        // Ekspor ke format Excel (Menggunakan teknik HTML to XLS native)
+        // Ekspor ke format Excel
         if ($type == 'excel') {
             return response((string) view('reports.inout_export', $data))
                 ->header('Content-Type', 'application/vnd.ms-excel')
                 ->header('Content-Disposition', 'attachment; filename="Laporan_Terima_Keluar_'.$year.'.xls"');
         }
 
-        // Ekspor ke format PDF (Menggunakan paket DOMPDF)
+        // Ekspor ke format PDF
         if ($type == 'pdf') {
-            // Validasi apakah library DOMPDF sudah terpasang di VPS/Local
             if (!class_exists('\Barryvdh\DomPDF\Facade\Pdf')) {
-                return back()->with('error', 'Fitur cetak PDF membutuhkan library DOMPDF. Silakan jalankan perintah ini di terminal server Anda: composer require barryvdh/laravel-dompdf');
+                return back()->with('error', 'Fitur cetak PDF membutuhkan library DOMPDF.');
             }
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('reports.inout_export', $data)->setPaper('a4', 'landscape');
             return $pdf->download('Laporan_Terima_Keluar_'.$year.'.pdf');

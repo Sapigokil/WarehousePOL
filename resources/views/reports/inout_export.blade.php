@@ -8,7 +8,7 @@
         @page { size: A4 landscape; margin: 10mm; }
         body { font-family: 'Arial', Helvetica, sans-serif; font-size: 9pt; color: #000; margin: 0; padding: 0; }
         
-        .report-kop { text-transform: uppercase; font-weight: bold; font-size: 9pt; line-height: 1.2; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 3px; width: max-content; }
+        .report-kop { text-transform: uppercase; font-weight: bold; font-size: 9pt; line-height: 1.2; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 3px; width: max-content; text-align: center; }
         .report-title { text-align: center; font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 15px; }
         
         table.table-data { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
@@ -141,7 +141,7 @@
                     <tr>
                         <td colspan="7" style="border: none;"></td>
                         <td colspan="3" style="border: none; text-align: center; vertical-align: top;">
-                            Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                            Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                             {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                             <br><br><br>
                             <span style="text-decoration: underline; font-weight: bold;">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</span><br>
@@ -154,7 +154,7 @@
                     <tr>
                         <td style="border: none; width: 65%;"></td>
                         <td style="border: none; width: 35%; text-align: center; vertical-align: top;">
-                            Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                            Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                             {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                             <br><br><br>
                             <span style="text-decoration: underline; font-weight: bold;">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</span><br>
@@ -248,7 +248,7 @@
                     <tr>
                         <td colspan="5" style="border: none;"></td>
                         <td colspan="3" style="border: none; text-align: center; vertical-align: top;">
-                            Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                            Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                             {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                             <br><br><br>
                             <span style="text-decoration: underline; font-weight: bold;">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</span><br>
@@ -261,7 +261,7 @@
                     <tr>
                         <td style="border: none; width: 65%;"></td>
                         <td style="border: none; width: 35%; text-align: center; vertical-align: top;">
-                            Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                            Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                             {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                             <br><br><br>
                             <span style="text-decoration: underline; font-weight: bold;">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</span><br>

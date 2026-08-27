@@ -14,7 +14,7 @@
     
     /* Report Table Styling (Excel Like) */
     .report-table-wrapper { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-    .report-kop { text-transform: uppercase; font-weight: bold; font-size: 0.8rem; line-height: 1.2; margin-bottom: 20px; color: #000; border-bottom: 2px solid #000; padding-bottom: 5px; width: max-content; }
+    .report-kop { text-transform: uppercase; font-weight: bold; font-size: 0.8rem; line-height: 1.2; margin-bottom: 20px; color: #000; border-bottom: 2px solid #000; padding-bottom: 5px; width: max-content; text-align: center; }
     .report-title { text-align: center; font-weight: bold; font-size: 1.1rem; text-transform: uppercase; color: #000; margin-bottom: 20px; }
     
     .table-excel { width: 100%; border-collapse: collapse; font-family: 'Arial', sans-serif; font-size: 0.8rem; color: #000; }
@@ -70,22 +70,32 @@
         </ul>
         
         <div class="d-flex align-items-center gap-3 mb-2">
-            <!-- Form Pilih Tahun -->
-            <form method="GET" action="{{ route('report.inout.index') }}" class="d-flex align-items-center gap-2 m-0">
+            <!-- Form Filter Custom (Tanggal & Bulan sebagai Cut-off Boundary) -->
+            <form method="GET" action="{{ route('report.inout.index') }}" class="d-flex align-items-center gap-2 m-0" id="filterForm">
                 <label class="fw-bold text-secondary mb-0 small">Tahun:</label>
-                <select name="year" class="form-select form-select-sm border-secondary" onchange="this.form.submit()" style="width: 100px;">
+                <select name="year" class="form-select form-select-sm border-secondary" onchange="document.getElementById('filterForm').submit()" style="width: 80px;">
                     @foreach($years as $yr)
                         <option value="{{ $yr }}" {{ $year == $yr ? 'selected' : '' }}>{{ $yr }}</option>
                     @endforeach
                 </select>
+
+                <label class="fw-bold text-secondary mb-0 small ms-2">Bulan TTD:</label>
+                <select name="ttd_month" class="form-select form-select-sm border-secondary" onchange="document.getElementById('filterForm').submit()" style="width: 130px;">
+                    @foreach($monthsName as $m => $mName)
+                        <option value="{{ $m }}" {{ $ttdMonth == $m ? 'selected' : '' }}>{{ $mName }}</option>
+                    @endforeach
+                </select>
+
+                <label class="fw-bold text-secondary mb-0 small ms-2">Tgl TTD:</label>
+                <input type="number" name="ttd_date" class="form-control form-control-sm border-secondary" value="{{ $ttdDate }}" min="1" max="31" onchange="document.getElementById('filterForm').submit()" style="width: 70px;">
             </form>
             
             <!-- Tombol Export -->
             <div class="border-start ps-3 d-flex gap-2">
-                <a href="{{ route('report.inout.export', ['type' => 'pdf', 'year' => $year]) }}" class="btn btn-danger btn-sm fw-bold shadow-sm px-3">
+                <a href="{{ route('report.inout.export', ['type' => 'pdf', 'year' => $year, 'ttd_month' => $ttdMonth, 'ttd_date' => $ttdDate]) }}" class="btn btn-danger btn-sm fw-bold shadow-sm px-3">
                     <i class="fa-solid fa-file-pdf me-1"></i> Cetak PDF
                 </a>
-                <a href="{{ route('report.inout.export', ['type' => 'excel', 'year' => $year]) }}" class="btn btn-success btn-sm fw-bold shadow-sm px-3">
+                <a href="{{ route('report.inout.export', ['type' => 'excel', 'year' => $year, 'ttd_month' => $ttdMonth, 'ttd_date' => $ttdDate]) }}" class="btn btn-success btn-sm fw-bold shadow-sm px-3">
                     <i class="fa-solid fa-file-excel me-1"></i> Export Excel
                 </a>
             </div>
@@ -166,27 +176,42 @@
                                     @endphp
 
                                     @foreach($monthsName as $m => $monthName)
-                                        @php
-                                            $totalInR2 += $dataMatrix['R2']['months'][$m]['in'];
-                                            $totalInR4 += $dataMatrix['R4']['months'][$m]['in'];
-                                            $totalOutR2 += $dataMatrix['R2']['months'][$m]['out'];
-                                            $totalOutR4 += $dataMatrix['R4']['months'][$m]['out'];
-                                        @endphp
-                                        <tr>
-                                            <td class="text-center">{{ $m }}</td>
-                                            <td>{{ $monthName }}</td>
-                                            <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['sisa_awal'], 0, ',', '.') }}</td>
-                                            <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['sisa_awal'], 0, ',', '.') }}</td>
-                                            
-                                            <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['in'], 0, ',', '.') }}</td>
-                                            <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['in'], 0, ',', '.') }}</td>
-                                            
-                                            <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['out'], 0, ',', '.') }}</td>
-                                            <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['out'], 0, ',', '.') }}</td>
-                                            
-                                            <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['sisa_gudang'], 0, ',', '.') }}</td>
-                                            <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['sisa_gudang'], 0, ',', '.') }}</td>
-                                        </tr>
+                                        @if($m > $ttdMonth)
+                                            <tr>
+                                                <td class="text-center">{{ $m }}</td>
+                                                <td>{{ $monthName }}</td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                                <td class="text-end bg-light"></td>
+                                            </tr>
+                                        @else
+                                            @php
+                                                $totalInR2 += $dataMatrix['R2']['months'][$m]['in'];
+                                                $totalInR4 += $dataMatrix['R4']['months'][$m]['in'];
+                                                $totalOutR2 += $dataMatrix['R2']['months'][$m]['out'];
+                                                $totalOutR4 += $dataMatrix['R4']['months'][$m]['out'];
+                                            @endphp
+                                            <tr>
+                                                <td class="text-center">{{ $m }}</td>
+                                                <td>{{ $monthName }}</td>
+                                                <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['sisa_awal'], 0, ',', '.') }}</td>
+                                                <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['sisa_awal'], 0, ',', '.') }}</td>
+                                                
+                                                <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['in'], 0, ',', '.') }}</td>
+                                                <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['in'], 0, ',', '.') }}</td>
+                                                
+                                                <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['out'], 0, ',', '.') }}</td>
+                                                <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['out'], 0, ',', '.') }}</td>
+                                                
+                                                <td class="text-end">{{ number_format($dataMatrix['R2']['months'][$m]['sisa_gudang'], 0, ',', '.') }}</td>
+                                                <td class="text-end">{{ number_format($dataMatrix['R4']['months'][$m]['sisa_gudang'], 0, ',', '.') }}</td>
+                                            </tr>
+                                        @endif
                                     @endforeach
 
                                     <tr class="row-total">
@@ -206,7 +231,7 @@
                         
                         <div class="signature-area">
                             <div class="signature-box">
-                                Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                                Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                                 {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                                 <div class="signature-name">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</div>
                                 {{ $signatureSettings['pangkatnrp_tnkb_ttd'] ?? 'PANGKAT / NRP' }}
@@ -269,20 +294,33 @@
                                         @endphp
 
                                         @foreach($monthsName as $m => $monthName)
-                                            @php
-                                                $totalIn += $dataMat['months'][$m]['in'];
-                                                $totalOut += $dataMat['months'][$m]['out'];
-                                            @endphp
-                                            <tr>
-                                                <td class="text-center">{{ $m }}</td>
-                                                <td>{{ $monthName }}</td>
-                                                <td class="text-end">{{ number_format($dataMat['months'][$m]['sisa_lalu'], 0, ',', '.') }}</td>
-                                                <td class="text-end">{{ number_format($dataMat['months'][$m]['in'], 0, ',', '.') }}</td>
-                                                <td class="text-end">{{ number_format($dataMat['months'][$m]['jumlah'], 0, ',', '.') }}</td>
-                                                <td class="text-end">{{ number_format($dataMat['months'][$m]['out'], 0, ',', '.') }}</td>
-                                                <td class="text-end">{{ number_format($dataMat['months'][$m]['sisa'], 0, ',', '.') }}</td>
-                                                <td></td>
-                                            </tr>
+                                            @if($m > $ttdMonth)
+                                                <tr>
+                                                    <td class="text-center">{{ $m }}</td>
+                                                    <td>{{ $monthName }}</td>
+                                                    <td class="text-end bg-light"></td>
+                                                    <td class="text-end bg-light"></td>
+                                                    <td class="text-end bg-light"></td>
+                                                    <td class="text-end bg-light"></td>
+                                                    <td class="text-end bg-light"></td>
+                                                    <td class="bg-light"></td>
+                                                </tr>
+                                            @else
+                                                @php
+                                                    $totalIn += $dataMat['months'][$m]['in'];
+                                                    $totalOut += $dataMat['months'][$m]['out'];
+                                                @endphp
+                                                <tr>
+                                                    <td class="text-center">{{ $m }}</td>
+                                                    <td>{{ $monthName }}</td>
+                                                    <td class="text-end">{{ number_format($dataMat['months'][$m]['sisa_lalu'], 0, ',', '.') }}</td>
+                                                    <td class="text-end">{{ number_format($dataMat['months'][$m]['in'], 0, ',', '.') }}</td>
+                                                    <td class="text-end">{{ number_format($dataMat['months'][$m]['jumlah'], 0, ',', '.') }}</td>
+                                                    <td class="text-end">{{ number_format($dataMat['months'][$m]['out'], 0, ',', '.') }}</td>
+                                                    <td class="text-end">{{ number_format($dataMat['months'][$m]['sisa'], 0, ',', '.') }}</td>
+                                                    <td></td>
+                                                </tr>
+                                            @endif
                                         @endforeach
 
                                         <tr class="row-total">
@@ -300,7 +338,7 @@
                             
                             <div class="signature-area">
                                 <div class="signature-box">
-                                    Semarang, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ $monthsName[date('n')] }} {{ date('Y') }}<br>
+                                    Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
                                     {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                                     <div class="signature-name">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</div>
                                     {{ $signatureSettings['pangkatnrp_tnkb_ttd'] ?? 'PANGKAT / NRP' }}
