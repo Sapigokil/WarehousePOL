@@ -30,7 +30,12 @@ class ReportInOutController extends Controller
         for ($m = 1; $m <= 12; $m++) {
             foreach (['tnkb_non_ev', 'tnkb_ev', 'tckb'] as $type) {
                 foreach (['R2', 'R4'] as $r) {
-                    $reportData[$type][$r]['months'][$m] = ['in' => 0, 'out' => 0];
+                    $reportData[$type][$r]['months'][$m] = [
+                        'in' => 0, 
+                        'out' => 0, 
+                        'adj_sisa_awal' => 0, 
+                        'adj_sisa_gudang' => 0
+                    ];
                 }
             }
         }
@@ -102,27 +107,41 @@ class ReportInOutController extends Controller
             $type = implode('_', $parts);
             
             if (isset($reportData[$type][$r]['months'][$adj->month])) {
-                $reportData[$type][$r]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+                // Spesial: Jika penyesuaian sisa awal ditaruh di bulan Januari, maka ubah sisa awal tahunnya agar header tabel ikut berubah
+                if ($adj->transaction_type == 'sisa_awal' && $adj->month == 1) {
+                    $reportData[$type][$r]['sisa_awal_tahun'] += $adj->qty_adjustment;
+                } elseif (in_array($adj->transaction_type, ['in', 'out'])) {
+                    $reportData[$type][$r]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+                } else {
+                    $reportData[$type][$r]['months'][$adj->month]['adj_' . $adj->transaction_type] += $adj->qty_adjustment;
+                }
             }
         }
 
-        // Kalkulasi Sisa TNKB
+        // Kalkulasi Sisa TNKB (Running Balance)
         foreach ($reportData as $type => $rTypes) {
             foreach (['R2', 'R4'] as $r) {
                 $runningBalance = $reportData[$type][$r]['sisa_awal_tahun'];
                 for ($m = 1; $m <= 12; $m++) {
                     $in = $reportData[$type][$r]['months'][$m]['in'];
                     $out = $reportData[$type][$r]['months'][$m]['out'];
-                    $sisa_awal = $runningBalance;
-                    $sisa_gudang = $sisa_awal + $in - $out;
+                    
+                    // Sisa awal dipengaruhi oleh keranjang adj_sisa_awal
+                    $sisa_awal = $runningBalance + $reportData[$type][$r]['months'][$m]['adj_sisa_awal'];
+                    
+                    // Sisa gudang dipengaruhi oleh rumus awal + in - out, ditambah keranjang adj_sisa_gudang
+                    $sisa_gudang = $sisa_awal + $in - $out + $reportData[$type][$r]['months'][$m]['adj_sisa_gudang'];
+                    
                     $reportData[$type][$r]['months'][$m]['sisa_awal'] = $sisa_awal;
                     $reportData[$type][$r]['months'][$m]['sisa_gudang'] = $sisa_gudang;
+                    
+                    // Bawa sisa gudang bulan ini menjadi modal sisa awal bulan depannya
                     $runningBalance = $sisa_gudang;
                 }
             }
         }
 
-        // 3. Matriks Data SBST (Diurutkan berdasarkan nomor urut kategori)
+        // 3. Matriks Data SBST
         $sbstMaterials = Material::select('materials.*')
             ->join('material_categories', 'materials.material_category_id', '=', 'material_categories.id')
             ->whereNotNull('materials.sbst_judul')
@@ -140,7 +159,12 @@ class ReportInOutController extends Controller
                 'months' => []
             ];
             for ($m = 1; $m <= 12; $m++) {
-                $sbstData[$mat->id]['months'][$m] = ['in' => 0, 'out' => 0];
+                $sbstData[$mat->id]['months'][$m] = [
+                    'in' => 0, 
+                    'out' => 0,
+                    'adj_sisa_awal' => 0,
+                    'adj_sisa_gudang' => 0
+                ];
             }
         }
 
@@ -185,22 +209,32 @@ class ReportInOutController extends Controller
         foreach ($sbstAdjustments as $adj) {
             $matId = str_replace('sbst_', '', $adj->bucket_key);
             if (isset($sbstData[$matId]['months'][$adj->month])) {
-                $sbstData[$matId]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+                // Spesial: Jika penyesuaian sisa awal ditaruh di bulan Januari
+                if ($adj->transaction_type == 'sisa_awal' && $adj->month == 1) {
+                    $sbstData[$matId]['sisa_awal_tahun'] += $adj->qty_adjustment;
+                } elseif (in_array($adj->transaction_type, ['in', 'out'])) {
+                    $sbstData[$matId]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+                } else {
+                    $sbstData[$matId]['months'][$adj->month]['adj_' . $adj->transaction_type] += $adj->qty_adjustment;
+                }
             }
         }
 
-        // Kalkulasi Sisa SBST
+        // Kalkulasi Sisa SBST (Running Balance)
         foreach ($sbstData as $matId => &$data) {
             $runningBalance = $data['sisa_awal_tahun'];
             for ($m = 1; $m <= 12; $m++) {
                 $in = $data['months'][$m]['in'];
                 $out = $data['months'][$m]['out'];
-                $sisa_lalu = $runningBalance;
+                
+                $sisa_lalu = $runningBalance + $data['months'][$m]['adj_sisa_awal'];
                 $jumlah = $sisa_lalu + $in;
-                $sisa = $jumlah - $out;
+                $sisa = $jumlah - $out + $data['months'][$m]['adj_sisa_gudang'];
+                
                 $data['months'][$m]['sisa_lalu'] = $sisa_lalu;
                 $data['months'][$m]['jumlah'] = $jumlah;
                 $data['months'][$m]['sisa'] = $sisa;
+                
                 $runningBalance = $sisa;
             }
         }
@@ -225,7 +259,7 @@ class ReportInOutController extends Controller
         rsort($years);
         if (empty($years)) $years = [date('Y')];
 
-        $year = $request->input('year', $years[0]);
+        $year = $request->input('year', $years[0] ?? date('Y'));
         $ttdMonth = $request->input('ttd_month', date('n'));
         $ttdDate = $request->input('ttd_date', date('j'));
         
@@ -260,10 +294,6 @@ class ReportInOutController extends Controller
         return redirect()->back();
     }
 
-
-    // =========================================================================
-    // MENU A: HALAMAN SETTINGS / MAPPING
-    // =========================================================================
     public function settings(Request $request)
     {
         $categoryId = $request->input('category_id');
@@ -364,13 +394,11 @@ class ReportInOutController extends Controller
         return redirect()->route('report.inout.settings')->with('success', 'Konfigurasi Mapping Laporan berhasil diperbarui!');
     }
 
-    // FUNGSI BARU UNTUK AUTO-SAVE REORDER (AJAX)
     public function reorderCategories(Request $request)
     {
         $order = $request->input('order');
         if ($order && is_array($order)) {
             foreach ($order as $index => $id) {
-                // Update nomor_urut kategori (dimulai dari 1)
                 MaterialCategory::where('id', $id)->update(['nomor_urut' => $index + 1]);
             }
             return response()->json(['success' => true, 'message' => 'Urutan Kategori SBST berhasil diperbarui!']);

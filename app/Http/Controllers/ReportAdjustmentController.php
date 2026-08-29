@@ -11,7 +11,6 @@ class ReportAdjustmentController extends Controller
 {
     public function index(Request $request)
     {
-        // 1. Ambil daftar tahun dinamis (dari laporan in/out dan dari tabel adjustments)
         $yearsIn = DB::table('in_sppms')->selectRaw('YEAR(sppm_date) as year')->distinct()->pluck('year')->toArray();
         $yearsOut = DB::table('out_sppms')->selectRaw('YEAR(sppm_date) as year')->distinct()->pluck('year')->toArray();
         $yearsAdj = ReportAdjustment::select('year')->distinct()->pluck('year')->toArray();
@@ -22,23 +21,19 @@ class ReportAdjustmentController extends Controller
 
         $year = $request->input('year', date('Y'));
 
-        // 2. Ambil semua penyesuaian khusus tahun terpilih
         $adjustments = ReportAdjustment::where('year', $year)
             ->orderBy('month', 'asc')
             ->orderBy('tab_type', 'asc')
             ->get();
 
-        // 3. Ambil data Master SBST untuk dropdown
         $sbstMaterials = Material::whereNotNull('sbst_judul')->where('sbst_judul', '!=', '')->get();
 
-        // 4. Referensi Bulan
         $monthsName = [
             1 => 'JANUARI', 2 => 'FEBRUARI', 3 => 'MARET', 4 => 'APRIL', 
             5 => 'MEI', 6 => 'JUNI', 7 => 'JULI', 8 => 'AGUSTUS', 
             9 => 'SEPTEMBER', 10 => 'OKTOBER', 11 => 'NOVEMBER', 12 => 'DESEMBER'
         ];
 
-        // 5. Daftar Target Keranjang TNKB statis untuk Panduan UI
         $tnkbTargets = [
             'tnkb_non_ev_R2' => 'TNKB R.2 NON LISTRIK',
             'tnkb_non_ev_R4' => 'TNKB R.4 NON LISTRIK',
@@ -58,7 +53,7 @@ class ReportAdjustmentController extends Controller
             'month'            => 'required|integer|min:1|max:12',
             'tab_type'         => 'required|in:tnkb,sbst',
             'bucket_key'       => 'required|string',
-            'transaction_type' => 'required|in:in,out',
+            'transaction_type' => 'required|in:in,out,sisa_awal,sisa_gudang', // <--- Update validasi
             'qty_adjustment'   => 'required|integer',
         ]);
 
@@ -76,14 +71,13 @@ class ReportAdjustmentController extends Controller
                          ->with('success', 'Data penyesuaian berhasil ditambahkan.');
     }
 
-    // FUNGSI BARU UNTUK PROSES EDIT DATA
     public function update(Request $request, $id)
     {
         $request->validate([
             'month'            => 'required|integer|min:1|max:12',
             'tab_type'         => 'required|in:tnkb,sbst',
             'bucket_key'       => 'required|string',
-            'transaction_type' => 'required|in:in,out',
+            'transaction_type' => 'required|in:in,out,sisa_awal,sisa_gudang', // <--- Update validasi
             'qty_adjustment'   => 'required|integer',
         ]);
 

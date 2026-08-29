@@ -85,10 +85,12 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Kolom Transaksi</label>
+                        <label class="form-label">Kolom Transaksi / Target Penyesuaian</label>
                         <select name="transaction_type" class="form-select border-secondary" required>
                             <option value="in">Kolom PENERIMAAN (IN)</option>
                             <option value="out">Kolom PENDISTRIBUSIAN (OUT)</option>
+                            <option value="sisa_awal">Kolom SISA AWAL (Bulan Lalu)</option>
+                            <option value="sisa_gudang">Kolom SISA GUDANG (Bulan Ini)</option>
                         </select>
                     </div>
 
@@ -135,7 +137,7 @@
                                 <th class="ps-4">BULAN</th>
                                 <th>TAB MODUL</th>
                                 <th>TARGET KOLOM</th>
-                                <th>TRANSAKSI</th>
+                                <th>TRANSAKSI / TARGET</th>
                                 <th class="text-center">NILAI (+/-)</th>
                                 <th>KETERANGAN</th>
                                 <th class="pe-4 text-center">AKSI</th>
@@ -166,8 +168,12 @@
                                     <td>
                                         @if($adj->transaction_type == 'in')
                                             <span class="text-success fw-bold"><i class="fa-solid fa-arrow-down me-1"></i>PENERIMAAN</span>
-                                        @else
+                                        @elseif($adj->transaction_type == 'out')
                                             <span class="text-danger fw-bold"><i class="fa-solid fa-arrow-up me-1"></i>PENDISTRIBUSIAN</span>
+                                        @elseif($adj->transaction_type == 'sisa_awal')
+                                            <span class="text-primary fw-bold"><i class="fa-solid fa-hourglass-start me-1"></i>SISA AWAL</span>
+                                        @elseif($adj->transaction_type == 'sisa_gudang')
+                                            <span class="text-info fw-bold text-dark"><i class="fa-solid fa-hourglass-end me-1"></i>SISA GUDANG</span>
                                         @endif
                                     </td>
                                     <td class="text-center">
@@ -278,10 +284,12 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Kolom Transaksi</label>
+                        <label class="form-label">Kolom Transaksi / Target Penyesuaian</label>
                         <select name="transaction_type" id="edit_transaction_type" class="form-select border-secondary" required>
                             <option value="in">Kolom PENERIMAAN (IN)</option>
                             <option value="out">Kolom PENDISTRIBUSIAN (OUT)</option>
+                            <option value="sisa_awal">Kolom SISA AWAL (Bulan Lalu)</option>
+                            <option value="sisa_gudang">Kolom SISA GUDANG (Bulan Ini)</option>
                         </select>
                     </div>
 
@@ -307,7 +315,6 @@
 
 @push('scripts')
 <script>
-    // Fungsi untuk mengubah opsi dropdown Target berdasarkan pilihan Tab Modul
     function toggleTargets(mode) {
         var prefix = mode === 'edit' ? 'edit_' : '';
         var type = document.getElementById(prefix + 'tab_type').value;
@@ -330,7 +337,6 @@
         }
     }
 
-    // Fungsi untuk memasukkan nilai dari dropdown yang sedang aktif ke input hidden sebelum disubmit
     function setFinalBucketKey(mode) {
         var prefix = mode === 'edit' ? 'edit_' : '';
         var type = document.getElementById(prefix + 'tab_type').value;
@@ -343,29 +349,23 @@
         }
     }
 
-    // Fungsi untuk membuka Modal Edit dan mengisi data otomatis ke dalam input form
     function openEditModal(actionUrl, month, tab_type, bucket_key, transaction_type, qty, keterangan) {
-        // Atur URL form action
         document.getElementById('editForm').action = actionUrl;
         
-        // Isi nilai input dasar
         document.getElementById('edit_month').value = month;
         document.getElementById('edit_tab_type').value = tab_type;
         document.getElementById('edit_transaction_type').value = transaction_type;
         document.getElementById('edit_qty_adjustment').value = qty;
         document.getElementById('edit_keterangan').value = keterangan;
 
-        // Triger perubahan tampilan dropdown target
         toggleTargets('edit');
 
-        // Isi nilai dropdown target sesuai dengan tipe tab yang terpilih
         if (tab_type === 'tnkb') {
             document.getElementById('edit_target_tnkb').value = bucket_key;
         } else {
             document.getElementById('edit_target_sbst').value = bucket_key;
         }
 
-        // Tampilkan modal menggunakan Bootstrap API
         var editModal = new bootstrap.Modal(document.getElementById('editModal'));
         editModal.show();
     }
