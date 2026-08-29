@@ -19,10 +19,8 @@ class ReportInOutController extends Controller
         $signatureKeys = ['Jabatan_tnkb_ttd', 'Nama_tnkb_ttd', 'pangkatnrp_tnkb_ttd'];
         $signatureSettings = Setting::whereIn('key', $signatureKeys)->pluck('value', 'key')->toArray();
 
-        // 1. Buat Batas Waktu Cut-Off (YYYY-MM-DD)
         $cutoffDate = sprintf('%04d-%02d-%02d', $year, $ttdMonth, $ttdDate);
 
-        // 2. Matriks Kosong TNKB & TCKB
         $reportData = [
             'tnkb_non_ev' => ['R2' => ['sisa_awal_tahun' => 0, 'months' => []], 'R4' => ['sisa_awal_tahun' => 0, 'months' => []]],
             'tnkb_ev'     => ['R2' => ['sisa_awal_tahun' => 0, 'months' => []], 'R4' => ['sisa_awal_tahun' => 0, 'months' => []]],
@@ -44,7 +42,7 @@ class ReportInOutController extends Controller
             return null;
         };
 
-        // Query Inbound TNKB (Dibatasi Cut-Off)
+        // Query Inbound TNKB
         $inboundQuery = DB::table('in_details')
             ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
             ->join('materials', 'in_details.material_id', '=', 'materials.id')
@@ -70,7 +68,7 @@ class ReportInOutController extends Controller
             }
         }
 
-        // Query Outbound TNKB (Dibatasi Cut-Off)
+        // Query Outbound TNKB
         $outboundQuery = DB::table('out_details')
             ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
             ->join('materials', 'out_details.material_id', '=', 'materials.id')
@@ -96,15 +94,12 @@ class ReportInOutController extends Controller
             }
         }
 
-        // --- INJEKSI PENYESUAIAN TNKB (SEBELUM KALKULASI SISA) ---
-        $tnkbAdjustments = ReportAdjustment::where('year', $year)
-            ->where('tab_type', 'tnkb')
-            ->get();
-
+        // --- INJEKSI PENYESUAIAN TNKB ---
+        $tnkbAdjustments = ReportAdjustment::where('year', $year)->where('tab_type', 'tnkb')->get();
         foreach ($tnkbAdjustments as $adj) {
             $parts = explode('_', $adj->bucket_key);
-            $r = array_pop($parts); // R2 atau R4
-            $type = implode('_', $parts); // tnkb_non_ev, tnkb_ev, tckb
+            $r = array_pop($parts);
+            $type = implode('_', $parts);
             
             if (isset($reportData[$type][$r]['months'][$adj->month])) {
                 $reportData[$type][$r]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
@@ -127,7 +122,7 @@ class ReportInOutController extends Controller
             }
         }
 
-        // 3. Matriks Data SBST (Diurutkan berdasarkan nomor urut kategori material)
+        // 3. Matriks Data SBST (Diurutkan berdasarkan nomor urut kategori)
         $sbstMaterials = Material::select('materials.*')
             ->join('material_categories', 'materials.material_category_id', '=', 'material_categories.id')
             ->whereNotNull('materials.sbst_judul')
@@ -150,7 +145,7 @@ class ReportInOutController extends Controller
         }
 
         if (!empty($sbstMaterialIds)) {
-            // Query Inbound SBST (Dibatasi Cut-Off)
+            // Query Inbound SBST
             $sbstInQuery = DB::table('in_details')
                 ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
                 ->whereIn('in_details.material_id', $sbstMaterialIds)
@@ -167,7 +162,7 @@ class ReportInOutController extends Controller
                 }
             }
 
-            // Query Outbound SBST (Dibatasi Cut-Off)
+            // Query Outbound SBST
             $sbstOutQuery = DB::table('out_details')
                 ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
                 ->whereIn('out_details.material_id', $sbstMaterialIds)
@@ -185,14 +180,10 @@ class ReportInOutController extends Controller
             }
         }
 
-        // --- INJEKSI PENYESUAIAN SBST (SEBELUM KALKULASI SISA) ---
-        $sbstAdjustments = ReportAdjustment::where('year', $year)
-            ->where('tab_type', 'sbst')
-            ->get();
-
+        // --- INJEKSI PENYESUAIAN SBST ---
+        $sbstAdjustments = ReportAdjustment::where('year', $year)->where('tab_type', 'sbst')->get();
         foreach ($sbstAdjustments as $adj) {
             $matId = str_replace('sbst_', '', $adj->bucket_key);
-            
             if (isset($sbstData[$matId]['months'][$adj->month])) {
                 $sbstData[$matId]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
             }
@@ -224,9 +215,6 @@ class ReportInOutController extends Controller
         return compact('reportData', 'sbstData', 'signatureSettings', 'monthsName', 'year', 'ttdMonth', 'ttdDate');
     }
 
-    // =========================================================================
-    // MENU B: HALAMAN LAPORAN (INDEX)
-    // =========================================================================
     public function index(Request $request)
     {
         $yearsIn = DB::table('in_sppms')->selectRaw('YEAR(sppm_date) as year')->distinct()->pluck('year')->toArray();
@@ -247,9 +235,6 @@ class ReportInOutController extends Controller
         return view('reports.inout', $data);
     }
 
-    // =========================================================================
-    // FUNGSI BARU: EKSPOR PDF DAN EXCEL
-    // =========================================================================
     public function export(Request $request, $type)
     {
         $year = $request->input('year', date('Y'));
@@ -258,14 +243,12 @@ class ReportInOutController extends Controller
         
         $data = $this->getReportData($year, $ttdMonth, $ttdDate);
 
-        // Ekspor ke format Excel
         if ($type == 'excel') {
             return response((string) view('reports.inout_export', $data))
                 ->header('Content-Type', 'application/vnd.ms-excel')
                 ->header('Content-Disposition', 'attachment; filename="Laporan_Terima_Keluar_'.$year.'.xls"');
         }
 
-        // Ekspor ke format PDF
         if ($type == 'pdf') {
             if (!class_exists('\Barryvdh\DomPDF\Facade\Pdf')) {
                 return back()->with('error', 'Fitur cetak PDF membutuhkan library DOMPDF.');
@@ -307,14 +290,17 @@ class ReportInOutController extends Controller
             $catMaterials = $allMaterials->where('material_category_id', $cat->id);
             if ($catMaterials->isEmpty()) continue;
 
-            $structuredData[$cat->name] = [];
+            $structuredData[$cat->name] = [
+                'cat_id' => $cat->id,
+                'items' => []
+            ];
 
             $parents = $catMaterials->filter(function($item) {
                 return empty($item->parent_id);
             });
 
             foreach ($parents as $parent) {
-                $structuredData[$cat->name][] = [
+                $structuredData[$cat->name]['items'][] = [
                     'item' => $parent,
                     'is_child' => false
                 ];
@@ -324,17 +310,17 @@ class ReportInOutController extends Controller
                 });
 
                 foreach ($children as $child) {
-                    $structuredData[$cat->name][] = [
+                    $structuredData[$cat->name]['items'][] = [
                         'item' => $child,
                         'is_child' => true
                     ];
                 }
             }
 
-            $caughtIds = collect($structuredData[$cat->name])->pluck('item.id')->toArray();
+            $caughtIds = collect($structuredData[$cat->name]['items'])->pluck('item.id')->toArray();
             $orphans = $catMaterials->whereNotIn('id', $caughtIds);
             foreach ($orphans as $orphan) {
-                $structuredData[$cat->name][] = [
+                $structuredData[$cat->name]['items'][] = [
                     'item' => $orphan,
                     'is_child' => !empty($orphan->parent_id)
                 ];
@@ -364,13 +350,31 @@ class ReportInOutController extends Controller
         $mappings = $request->input('mappings', []);
 
         foreach ($mappings as $id => $data) {
-            Material::where('id', $id)->update([
-                'tnkb_rpt'   => $data['tnkb_rpt'] ?? 0,
-                'tnkb_r'     => $data['tnkb_r'] ?? null,
-                'tnkb_ev'    => $data['tnkb_ev'] ?? 0,
-                'sbst_judul' => $data['sbst_judul'] ?? null,
-            ]);
+            $updateData = [];
+            
+            if (array_key_exists('tnkb_rpt', $data)) $updateData['tnkb_rpt'] = $data['tnkb_rpt'];
+            if (array_key_exists('tnkb_r', $data)) $updateData['tnkb_r'] = $data['tnkb_r'];
+            if (array_key_exists('tnkb_ev', $data)) $updateData['tnkb_ev'] = $data['tnkb_ev'];
+            if (array_key_exists('sbst_judul', $data)) $updateData['sbst_judul'] = $data['sbst_judul'];
+
+            if (!empty($updateData)) {
+                Material::where('id', $id)->update($updateData);
+            }
         }
         return redirect()->route('report.inout.settings')->with('success', 'Konfigurasi Mapping Laporan berhasil diperbarui!');
+    }
+
+    // FUNGSI BARU UNTUK AUTO-SAVE REORDER (AJAX)
+    public function reorderCategories(Request $request)
+    {
+        $order = $request->input('order');
+        if ($order && is_array($order)) {
+            foreach ($order as $index => $id) {
+                // Update nomor_urut kategori (dimulai dari 1)
+                MaterialCategory::where('id', $id)->update(['nomor_urut' => $index + 1]);
+            }
+            return response()->json(['success' => true, 'message' => 'Urutan Kategori SBST berhasil diperbarui!']);
+        }
+        return response()->json(['success' => false], 400);
     }
 }

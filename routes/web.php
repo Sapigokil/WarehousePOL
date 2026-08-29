@@ -96,6 +96,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // Diubah dari 'outbound' menjadi 'outbound-history' agar lebih konsisten dan aman
         Route::get('reports.outbound', [ReportController::class, 'outbound'])->name('reports.outbound');
         Route::get('reports.outbound/export', [ReportController::class, 'exportOutbound'])->name('reports.outbound.export');
+        
         // Menu Tracking Seri
         Route::get('/tracking', [\App\Http\Controllers\TrackingController::class, 'index'])->name('tracking.index');
         Route::get('/tracking/search', [\App\Http\Controllers\TrackingController::class, 'search'])->name('tracking.search');
@@ -107,24 +108,26 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::get('/reports/inout', [\App\Http\Controllers\ReportInOutController::class, 'index'])->name('report.inout.index');
         Route::get('/reports/inout/export/{type}', [\App\Http\Controllers\ReportInOutController::class, 'export'])->name('report.inout.export'); // ROUTE BARU
 
-        // Settings
+        // Settings Laporan SIMAK
         Route::get('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'simakMapping'])->name('settings.reports.simak');
         Route::post('/settings/reports/simak', [\App\Http\Controllers\ReportSettingController::class, 'storeSimakMapping'])->name('settings.reports.simak.store');
 
+        // Settings Laporan IN/OUT
         Route::get('/reports/settings/inout', [\App\Http\Controllers\ReportInOutController::class, 'settings'])->name('report.inout.settings');
-        Route::post('/reports/settings/inout', [\App\Http\Controllers\ReportInOutController::class, 'updateSettings'])->name('report.inout.settings.update');
-        // Route::get('/reports/settings/inout', [\App\Http\Controllers\ReportInOutController::class, 'settings'])->name('report.inout.settings');
-        Route::post('/reports/settings/inout/signature', [\App\Http\Controllers\ReportInOutController::class, 'updateSignature'])->name('report.inout.settings.signature'); // Route Baru
+        Route::post('/reports/settings/inout/signature', [\App\Http\Controllers\ReportInOutController::class, 'updateSignature'])->name('report.inout.settings.signature'); 
         Route::post('/reports/settings/inout/mapping', [\App\Http\Controllers\ReportInOutController::class, 'updateSettings'])->name('report.inout.settings.update');
+        
+        // Rute Baru untuk Auto-Save Urutan SBST
+        Route::post('/reports/settings/inout/reorder-categories', [\App\Http\Controllers\ReportInOutController::class, 'reorderCategories'])->name('report.inout.settings.reorder'); 
 
 
         // Rute untuk Penyesuaian Laporan
         Route::prefix('report-adjustments')->name('report.adjustments.')->group(function () {
-            Route::get('/', [ReportAdjustmentController::class, 'index'])->name('index');
-            Route::post('/', [ReportAdjustmentController::class, 'store'])->name('store');
-            Route::put('/{id}', [ReportAdjustmentController::class, 'update'])->name('update'); // <--- RUTE BARU UNTUK EDIT
-            Route::delete('/{id}', [ReportAdjustmentController::class, 'destroy'])->name('destroy');
-            Route::delete('/reset/{year}', [ReportAdjustmentController::class, 'resetYear'])->name('reset');
+            Route::get('/', [\App\Http\Controllers\ReportAdjustmentController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\ReportAdjustmentController::class, 'store'])->name('store');
+            Route::put('/{id}', [\App\Http\Controllers\ReportAdjustmentController::class, 'update'])->name('update'); // RUTE UNTUK EDIT
+            Route::delete('/{id}', [\App\Http\Controllers\ReportAdjustmentController::class, 'destroy'])->name('destroy');
+            Route::delete('/reset/{year}', [\App\Http\Controllers\ReportAdjustmentController::class, 'resetYear'])->name('reset');
         });
     });
 
