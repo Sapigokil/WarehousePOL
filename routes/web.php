@@ -11,6 +11,7 @@ use App\Http\Controllers\StockController;
 use App\Http\Controllers\InboundController;
 USe App\Http\Controllers\DestinationController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ReportAdjustmentController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -116,6 +117,15 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::post('/reports/settings/inout/signature', [\App\Http\Controllers\ReportInOutController::class, 'updateSignature'])->name('report.inout.settings.signature'); // Route Baru
         Route::post('/reports/settings/inout/mapping', [\App\Http\Controllers\ReportInOutController::class, 'updateSettings'])->name('report.inout.settings.update');
 
+
+        // Rute untuk Penyesuaian Laporan
+        Route::prefix('report-adjustments')->name('report.adjustments.')->group(function () {
+            Route::get('/', [ReportAdjustmentController::class, 'index'])->name('index');
+            Route::post('/', [ReportAdjustmentController::class, 'store'])->name('store');
+            Route::put('/{id}', [ReportAdjustmentController::class, 'update'])->name('update'); // <--- RUTE BARU UNTUK EDIT
+            Route::delete('/{id}', [ReportAdjustmentController::class, 'destroy'])->name('destroy');
+            Route::delete('/reset/{year}', [ReportAdjustmentController::class, 'resetYear'])->name('reset');
+        });
     });
 
     /* ==============================================

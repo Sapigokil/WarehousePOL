@@ -6,12 +6,13 @@ use Illuminate\Http\Request;
 use App\Models\Material;
 use App\Models\MaterialCategory;
 use App\Models\Setting;
+use App\Models\ReportAdjustment;
 use Illuminate\Support\Facades\DB;
 
 class ReportInOutController extends Controller
 {
     // =========================================================================
-    // FUNGSI PRIVATE: ENGINE PENGAMBIL DATA (DENGAN BATAS CUT-OFF DATE)
+    // FUNGSI PRIVATE: ENGINE PENGAMBIL DATA (DENGAN BATAS CUT-OFF DATE & INJEKSI PENYESUAIAN)
     // =========================================================================
     private function getReportData($year, $ttdMonth, $ttdDate)
     {
@@ -95,6 +96,21 @@ class ReportInOutController extends Controller
             }
         }
 
+        // --- INJEKSI PENYESUAIAN TNKB (SEBELUM KALKULASI SISA) ---
+        $tnkbAdjustments = ReportAdjustment::where('year', $year)
+            ->where('tab_type', 'tnkb')
+            ->get();
+
+        foreach ($tnkbAdjustments as $adj) {
+            $parts = explode('_', $adj->bucket_key);
+            $r = array_pop($parts); // R2 atau R4
+            $type = implode('_', $parts); // tnkb_non_ev, tnkb_ev, tckb
+            
+            if (isset($reportData[$type][$r]['months'][$adj->month])) {
+                $reportData[$type][$r]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+            }
+        }
+
         // Kalkulasi Sisa TNKB
         foreach ($reportData as $type => $rTypes) {
             foreach (['R2', 'R4'] as $r) {
@@ -111,8 +127,14 @@ class ReportInOutController extends Controller
             }
         }
 
-        // 3. Matriks Data SBST
-        $sbstMaterials = Material::whereNotNull('sbst_judul')->where('sbst_judul', '!=', '')->get();
+        // 3. Matriks Data SBST (Diurutkan berdasarkan nomor urut kategori material)
+        $sbstMaterials = Material::select('materials.*')
+            ->join('material_categories', 'materials.material_category_id', '=', 'material_categories.id')
+            ->whereNotNull('materials.sbst_judul')
+            ->where('materials.sbst_judul', '!=', '')
+            ->orderBy('material_categories.nomor_urut', 'asc')
+            ->get();
+
         $sbstMaterialIds = $sbstMaterials->pluck('id')->toArray();
 
         $sbstData = [];
@@ -163,6 +185,19 @@ class ReportInOutController extends Controller
             }
         }
 
+        // --- INJEKSI PENYESUAIAN SBST (SEBELUM KALKULASI SISA) ---
+        $sbstAdjustments = ReportAdjustment::where('year', $year)
+            ->where('tab_type', 'sbst')
+            ->get();
+
+        foreach ($sbstAdjustments as $adj) {
+            $matId = str_replace('sbst_', '', $adj->bucket_key);
+            
+            if (isset($sbstData[$matId]['months'][$adj->month])) {
+                $sbstData[$matId]['months'][$adj->month][$adj->transaction_type] += $adj->qty_adjustment;
+            }
+        }
+
         // Kalkulasi Sisa SBST
         foreach ($sbstData as $matId => &$data) {
             $runningBalance = $data['sisa_awal_tahun'];
@@ -196,7 +231,9 @@ class ReportInOutController extends Controller
     {
         $yearsIn = DB::table('in_sppms')->selectRaw('YEAR(sppm_date) as year')->distinct()->pluck('year')->toArray();
         $yearsOut = DB::table('out_sppms')->selectRaw('YEAR(sppm_date) as year')->distinct()->pluck('year')->toArray();
-        $years = array_unique(array_merge($yearsIn, $yearsOut));
+        $yearsAdj = ReportAdjustment::select('year')->distinct()->pluck('year')->toArray();
+        
+        $years = array_unique(array_merge($yearsIn, $yearsOut, $yearsAdj));
         rsort($years);
         if (empty($years)) $years = [date('Y')];
 

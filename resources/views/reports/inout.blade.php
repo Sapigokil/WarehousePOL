@@ -90,8 +90,11 @@
                 <input type="number" name="ttd_date" class="form-control form-control-sm border-secondary" value="{{ $ttdDate }}" min="1" max="31" onchange="document.getElementById('filterForm').submit()" style="width: 70px;">
             </form>
             
-            <!-- Tombol Export -->
+            <!-- Tombol Export & Penyesuaian -->
             <div class="border-start ps-3 d-flex gap-2">
+                <a href="{{ route('report.adjustments.index', ['year' => $year]) }}" target="_blank" class="btn btn-warning btn-sm fw-bold shadow-sm px-3">
+                    <i class="fa-solid fa-sliders me-1"></i> Penyesuaian
+                </a>
                 <a href="{{ route('report.inout.export', ['type' => 'pdf', 'year' => $year, 'ttd_month' => $ttdMonth, 'ttd_date' => $ttdDate]) }}" class="btn btn-danger btn-sm fw-bold shadow-sm px-3">
                     <i class="fa-solid fa-file-pdf me-1"></i> Cetak PDF
                 </a>
