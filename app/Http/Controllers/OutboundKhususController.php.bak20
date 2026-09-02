@@ -52,8 +52,10 @@ class OutboundKhususController extends Controller
             }
         }
 
-        // --- ATURAN RENTANG SERI (SERAGAM UNTUK SEMUA KATEGORI) ---
-        $maxSeriCount = 1;
+        // --- ATURAN RENTANG SERI SEMENTARA DIBUKA (20 SERI UNTUK STNK) ---
+        $isSTNK = stripos($category->name, 'STNK') !== false;
+        $maxSeriCount = $isSTNK ? 20 : 1; 
+        // $maxSeriCount = 1; // SEMENTARA DIMATIKAN
 
         // Inisiasi PhpSpreadsheet
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -296,10 +298,10 @@ class OutboundKhususController extends Controller
             }
         }
 
-        // --- ATURAN RENTANG SERI (MENYAMAKAN EXPORT) ---
+        // --- ATURAN RENTANG SERI SEMENTARA DIBUKA (20 SERI UNTUK STNK) ---
         $isSTNK = stripos($category->name, 'STNK') !== false;
-        // $maxSeriCount = $isSTNK ? 20 : 1;
-        $maxSeriCount = 1;
+        $maxSeriCount = $isSTNK ? 20 : 1;
+        // $maxSeriCount = 1; // SEMENTARA DIMATIKAN
 
         // =================================================================
         // PEMETAAN INDEX KOLOM DINAMIS (0-BASED INDEX)
