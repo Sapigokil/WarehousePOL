@@ -19,7 +19,20 @@ class ReportInOutController extends Controller
         $signatureKeys = ['Jabatan_tnkb_ttd', 'Nama_tnkb_ttd', 'pangkatnrp_tnkb_ttd'];
         $signatureSettings = Setting::whereIn('key', $signatureKeys)->pluck('value', 'key')->toArray();
 
-        $cutoffDate = sprintf('%04d-%02d-%02d', $year, $ttdMonth, $ttdDate);
+        // --- LOGIKA CUT-OFF CERDAS UNTUK TAHUN LAMPAU ---
+        $currentYear = date('Y');
+        
+        if ($year < $currentYear) {
+            // Jika mereview data tahun lampau, paksa tampil full 1 tahun (sampai 31 Desember)
+            $effectiveMonth = 12;
+            $effectiveDate = 31;
+        } else {
+            // Jika tahun berjalan, gunakan input dari filter user
+            $effectiveMonth = $ttdMonth;
+            $effectiveDate = $ttdDate;
+        }
+
+        $cutoffDate = sprintf('%04d-%02d-%02d', $year, $effectiveMonth, $effectiveDate);
 
         $reportData = [
             'tnkb_non_ev' => ['R2' => ['sisa_awal_tahun' => 0, 'months' => []], 'R4' => ['sisa_awal_tahun' => 0, 'months' => []]],
