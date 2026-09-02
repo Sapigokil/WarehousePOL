@@ -80,14 +80,14 @@
                 </select>
 
                 <label class="fw-bold text-secondary mb-0 small ms-2">Bulan TTD:</label>
-                <select name="ttd_month" class="form-select form-select-sm border-secondary" onchange="document.getElementById('filterForm').submit()" style="width: 130px;">
+                <select name="ttd_month" class="form-select form-select-sm border-secondary" onchange="document.getElementById('filterForm').submit()" style="width: 130px;" {{ $year < date('Y') ? 'disabled' : '' }}>
                     @foreach($monthsName as $m => $mName)
-                        <option value="{{ $m }}" {{ $ttdMonth == $m ? 'selected' : '' }}>{{ $mName }}</option>
+                        <option value="{{ $m }}" {{ ($year < date('Y') && $m == 12) || ($year >= date('Y') && $ttdMonth == $m) ? 'selected' : '' }}>{{ $mName }}</option>
                     @endforeach
                 </select>
 
                 <label class="fw-bold text-secondary mb-0 small ms-2">Tgl TTD:</label>
-                <input type="number" name="ttd_date" class="form-control form-control-sm border-secondary" value="{{ $ttdDate }}" min="1" max="31" onchange="document.getElementById('filterForm').submit()" style="width: 70px;">
+                <input type="number" name="ttd_date" class="form-control form-control-sm border-secondary" value="{{ $year < date('Y') ? 31 : $ttdDate }}" min="1" max="31" onchange="document.getElementById('filterForm').submit()" style="width: 70px;" {{ $year < date('Y') ? 'readonly' : '' }}>
             </form>
             
             <!-- Tombol Export & Penyesuaian -->
@@ -125,6 +125,9 @@
                             'title' => 'DATA PENERIMAAN DAN PENDISTRIBUSIAN TCKB R.2 & R.4<br>GUDANG DIT LANTAS POLDA JATENG TAHUN ' . $year
                         ]
                     ];
+                    
+                    // PENENTUAN BATAS BULAN EFEKTIF UNTUK RENDER
+                    $effectiveMonthLimit = ($year < date('Y')) ? 12 : $ttdMonth;
                 @endphp
 
                 @foreach($tables as $tbl)
@@ -179,7 +182,7 @@
                                     @endphp
 
                                     @foreach($monthsName as $m => $monthName)
-                                        @if($m > $ttdMonth)
+                                        @if($m > $effectiveMonthLimit)
                                             <tr>
                                                 <td class="text-center">{{ $m }}</td>
                                                 <td>{{ $monthName }}</td>
@@ -234,7 +237,7 @@
                         
                         <div class="signature-area">
                             <div class="signature-box">
-                                Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
+                                Semarang, {{ str_pad($year < date('Y') ? 31 : $ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$year < date('Y') ? 12 : $ttdMonth] }} {{ $year }}<br>
                                 {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                                 <div class="signature-name">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</div>
                                 {{ $signatureSettings['pangkatnrp_tnkb_ttd'] ?? 'PANGKAT / NRP' }}
@@ -297,7 +300,7 @@
                                         @endphp
 
                                         @foreach($monthsName as $m => $monthName)
-                                            @if($m > $ttdMonth)
+                                            @if($m > $effectiveMonthLimit)
                                                 <tr>
                                                     <td class="text-center">{{ $m }}</td>
                                                     <td>{{ $monthName }}</td>
@@ -341,7 +344,7 @@
                             
                             <div class="signature-area">
                                 <div class="signature-box">
-                                    Semarang, {{ str_pad($ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$ttdMonth] }} {{ $year }}<br>
+                                    Semarang, {{ str_pad($year < date('Y') ? 31 : $ttdDate, 2, '0', STR_PAD_LEFT) }} {{ $monthsName[$year < date('Y') ? 12 : $ttdMonth] }} {{ $year }}<br>
                                     {{ $signatureSettings['Jabatan_tnkb_ttd'] ?? 'KASI FASMAT SBST' }}
                                     <div class="signature-name">{{ $signatureSettings['Nama_tnkb_ttd'] ?? 'NAMA PENANDATANGAN' }}</div>
                                     {{ $signatureSettings['pangkatnrp_tnkb_ttd'] ?? 'PANGKAT / NRP' }}
