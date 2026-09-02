@@ -60,6 +60,10 @@ class ReportInOutController extends Controller
             return null;
         };
 
+        // =========================================================
+        // 1. PENGOLAHAN DATA TNKB & TCKB
+        // =========================================================
+
         // Query Inbound TNKB
         $inboundQuery = DB::table('in_details')
             ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
@@ -112,7 +116,23 @@ class ReportInOutController extends Controller
             }
         }
 
-        // --- INJEKSI PENYESUAIAN TNKB ---
+        // --- INJEKSI PENYESUAIAN TNKB (TAHUN-TAHUN SEBELUMNYA) CARRY OVER ---
+        $pastTnkbAdjustments = ReportAdjustment::where('year', '<', $year)->where('tab_type', 'tnkb')->get();
+        foreach ($pastTnkbAdjustments as $adj) {
+            $parts = explode('_', $adj->bucket_key);
+            $r = array_pop($parts);
+            $type = implode('_', $parts);
+            
+            if (isset($reportData[$type][$r])) {
+                if ($adj->transaction_type === 'out') {
+                    $reportData[$type][$r]['sisa_awal_tahun'] -= $adj->qty_adjustment;
+                } else {
+                    $reportData[$type][$r]['sisa_awal_tahun'] += $adj->qty_adjustment;
+                }
+            }
+        }
+
+        // --- INJEKSI PENYESUAIAN TNKB (TAHUN BERJALAN SAAT INI) ---
         $tnkbAdjustments = ReportAdjustment::where('year', $year)->where('tab_type', 'tnkb')->get();
         foreach ($tnkbAdjustments as $adj) {
             $parts = explode('_', $adj->bucket_key);
@@ -154,7 +174,9 @@ class ReportInOutController extends Controller
             }
         }
 
-        // 3. Matriks Data SBST
+        // =========================================================
+        // 2. PENGOLAHAN DATA SBST
+        // =========================================================
         $sbstMaterials = Material::select('materials.*')
             ->join('material_categories', 'materials.material_category_id', '=', 'material_categories.id')
             ->whereNotNull('materials.sbst_judul')
@@ -217,7 +239,20 @@ class ReportInOutController extends Controller
             }
         }
 
-        // --- INJEKSI PENYESUAIAN SBST ---
+        // --- INJEKSI PENYESUAIAN SBST (TAHUN-TAHUN SEBELUMNYA) CARRY OVER ---
+        $pastSbstAdjustments = ReportAdjustment::where('year', '<', $year)->where('tab_type', 'sbst')->get();
+        foreach ($pastSbstAdjustments as $adj) {
+            $matId = str_replace('sbst_', '', $adj->bucket_key);
+            if (isset($sbstData[$matId])) {
+                if ($adj->transaction_type === 'out') {
+                    $sbstData[$matId]['sisa_awal_tahun'] -= $adj->qty_adjustment;
+                } else {
+                    $sbstData[$matId]['sisa_awal_tahun'] += $adj->qty_adjustment;
+                }
+            }
+        }
+
+        // --- INJEKSI PENYESUAIAN SBST (TAHUN BERJALAN SAAT INI) ---
         $sbstAdjustments = ReportAdjustment::where('year', $year)->where('tab_type', 'sbst')->get();
         foreach ($sbstAdjustments as $adj) {
             $matId = str_replace('sbst_', '', $adj->bucket_key);
