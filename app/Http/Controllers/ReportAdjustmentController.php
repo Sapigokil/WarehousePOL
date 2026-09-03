@@ -21,10 +21,27 @@ class ReportAdjustmentController extends Controller
 
         $year = $request->input('year', date('Y'));
 
-        $adjustments = ReportAdjustment::where('year', $year)
-            ->orderBy('month', 'asc')
-            ->orderBy('tab_type', 'asc')
-            ->get();
+        // --- TANGKAP INPUT FILTER LANGSUNG DARI NAMA FIELD FORM KIRI ---
+        $filterTab = $request->input('tab_type');
+        $filterMonth = $request->input('month');
+        $filterBucketKey = $request->input('bucket_key');
+
+        // --- TERAPKAN FILTER KE QUERY TABEL KANAN ---
+        $query = ReportAdjustment::where('year', $year);
+        
+        if (!empty($filterTab)) {
+            $query->where('tab_type', $filterTab);
+        }
+        if (!empty($filterMonth)) {
+            $query->where('month', $filterMonth);
+        }
+        if (!empty($filterBucketKey)) {
+            $query->where('bucket_key', $filterBucketKey);
+        }
+
+        $adjustments = $query->orderBy('month', 'asc')
+                             ->orderBy('tab_type', 'asc')
+                             ->get();
 
         $sbstMaterials = Material::whereNotNull('sbst_judul')->where('sbst_judul', '!=', '')->get();
 
@@ -43,7 +60,10 @@ class ReportAdjustmentController extends Controller
             'tckb_R4'        => 'TCKB R.4',
         ];
 
-        return view('reports.adjustments.index', compact('year', 'years', 'adjustments', 'sbstMaterials', 'monthsName', 'tnkbTargets'));
+        return view('reports.adjustments.index', compact(
+            'year', 'years', 'adjustments', 'sbstMaterials', 'monthsName', 'tnkbTargets',
+            'filterTab', 'filterMonth', 'filterBucketKey'
+        ));
     }
 
     public function store(Request $request)

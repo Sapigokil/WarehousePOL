@@ -33,31 +33,37 @@
 @endif
 
 <div class="row">
-    <!-- KOLOM KIRI: FORM INPUT -->
+    <!-- KOLOM KIRI: FORM INPUT YANG SEKALIGUS MENJADI FILTER -->
     <div class="col-md-4">
         <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-header bg-white border-bottom pt-3 pb-2 px-4">
-                <h6 class="fw-bold text-primary mb-0"><i class="fa-solid fa-plus me-2"></i>Tambah Penyesuaian Baru</h6>
+            <div class="card-header bg-white border-bottom pt-3 pb-2 px-4 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold text-primary mb-0"><i class="fa-solid fa-plus me-2"></i>Penyesuaian Baru</h6>
+                @if($filterTab || $filterMonth || $filterBucketKey)
+                    <a href="{{ route('report.adjustments.index', ['year' => $year]) }}" class="badge bg-danger text-decoration-none">
+                        <i class="fa-solid fa-xmark me-1"></i> Hapus Filter
+                    </a>
+                @endif
             </div>
             <div class="card-body p-4 bg-light">
                 <form action="{{ route('report.adjustments.store') }}" method="POST" id="createForm">
                     @csrf
-                    <input type="hidden" name="year" value="{{ $year }}">
+                    <input type="hidden" name="year" id="current_year" value="{{ $year }}">
 
                     <div class="mb-3">
                         <label class="form-label">Tipe Modul Laporan</label>
-                        <select name="tab_type" id="tab_type" class="form-select border-secondary" required onchange="toggleTargets('create')">
+                        <select name="tab_type" id="tab_type" class="form-select border-secondary" required onchange="toggleTargets('create'); applyFilter();">
                             <option value="">-- Pilih Tipe --</option>
-                            <option value="tnkb">Tab 1: TNKB & TCKB</option>
-                            <option value="sbst">Tab 2: SBST</option>
+                            <option value="tnkb" {{ $filterTab == 'tnkb' ? 'selected' : '' }}>Tab 1: TNKB & TCKB</option>
+                            <option value="sbst" {{ $filterTab == 'sbst' ? 'selected' : '' }}>Tab 2: SBST</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Bulan Target</label>
-                        <select name="month" class="form-select border-secondary" required>
+                        <select name="month" id="month" class="form-select border-secondary" required onchange="applyFilter()">
+                            <option value="">-- Pilih Bulan --</option>
                             @foreach($monthsName as $num => $name)
-                                <option value="{{ $num }}">{{ $name }}</option>
+                                <option value="{{ $num }}" {{ $filterMonth == $num ? 'selected' : '' }}>{{ $name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -66,18 +72,18 @@
                         <label class="form-label">Target Area (Tabel / Kategori)</label>
                         
                         <!-- Pilihan TNKB -->
-                        <select name="bucket_key_tnkb" id="target_tnkb" class="form-select border-secondary d-none">
+                        <select name="bucket_key_tnkb" id="target_tnkb" class="form-select border-secondary {{ $filterTab == 'tnkb' ? '' : 'd-none' }}" onchange="applyFilter()">
                             <option value="">-- Pilih Kolom TNKB --</option>
                             @foreach($tnkbTargets as $key => $label)
-                                <option value="{{ $key }}">{{ $label }}</option>
+                                <option value="{{ $key }}" {{ $filterBucketKey == $key ? 'selected' : '' }}>{{ $label }}</option>
                             @endforeach
                         </select>
 
                         <!-- Pilihan SBST -->
-                        <select name="bucket_key_sbst" id="target_sbst" class="form-select border-secondary d-none">
+                        <select name="bucket_key_sbst" id="target_sbst" class="form-select border-secondary {{ $filterTab == 'sbst' ? '' : 'd-none' }}" onchange="applyFilter()">
                             <option value="">-- Pilih Kategori SBST --</option>
                             @foreach($sbstMaterials as $sbst)
-                                <option value="sbst_{{ $sbst->id }}">{{ strtoupper($sbst->sbst_judul) }}</option>
+                                <option value="sbst_{{ $sbst->id }}" {{ $filterBucketKey == 'sbst_'.$sbst->id ? 'selected' : '' }}>{{ strtoupper($sbst->sbst_judul) }}</option>
                             @endforeach
                         </select>
 
@@ -116,17 +122,28 @@
     <!-- KOLOM KANAN: DAFTAR DATA & RESET -->
     <div class="col-md-8">
         <div class="card border-0 shadow-sm rounded-3">
-            <div class="card-header bg-white border-bottom pt-3 pb-2 px-4 d-flex justify-content-between align-items-center">
-                <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-list me-2"></i>Daftar Penyesuaian Tahun {{ $year }}</h6>
-                
-                <form method="GET" action="{{ route('report.adjustments.index') }}" class="d-flex align-items-center gap-2 m-0">
-                    <label class="fw-bold text-secondary mb-0 small">Filter Tahun:</label>
-                    <select name="year" class="form-select form-select-sm border-secondary" onchange="this.form.submit()" style="width: 100px;">
-                        @foreach($years as $yr)
-                            <option value="{{ $yr }}" {{ $year == $yr ? 'selected' : '' }}>{{ $yr }}</option>
-                        @endforeach
-                    </select>
-                </form>
+            <div class="card-header bg-white border-bottom pt-3 pb-3 px-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="fa-solid fa-list me-2"></i>Daftar Penyesuaian 
+                        @if($filterMonth) Bulan {{ $monthsName[$filterMonth] }} @endif 
+                    </h6>
+                    
+                    <div class="d-flex align-items-center gap-2">
+                        <form method="GET" action="{{ route('report.adjustments.index') }}" class="m-0" id="yearFilterForm">
+                            <!-- Pertahankan filter kiri saat user mengganti tahun -->
+                            @if($filterTab) <input type="hidden" name="tab_type" value="{{ $filterTab }}"> @endif
+                            @if($filterMonth) <input type="hidden" name="month" value="{{ $filterMonth }}"> @endif
+                            @if($filterBucketKey) <input type="hidden" name="bucket_key" value="{{ $filterBucketKey }}"> @endif
+                            
+                            <select name="year" class="form-select form-select-sm border-secondary fw-bold" onchange="document.getElementById('yearFilterForm').submit()" style="width: 100px;">
+                                @foreach($years as $yr)
+                                    <option value="{{ $yr }}" {{ $year == $yr ? 'selected' : '' }}>{{ $yr }}</option>
+                                @endforeach
+                            </select>
+                        </form>
+                    </div>
+                </div>
             </div>
             
             <div class="card-body p-0">
@@ -204,8 +221,8 @@
                             @empty
                                 <tr>
                                     <td colspan="7" class="text-center py-5 text-muted">
-                                        <i class="fa-solid fa-box-open fs-2 mb-3 opacity-25 d-block"></i>
-                                        Belum ada data penyesuaian untuk tahun {{ $year }}.
+                                        <i class="fa-solid fa-filter-circle-xmark fs-2 mb-3 opacity-25 d-block"></i>
+                                        Belum ada data penyesuaian yang sesuai dengan kriteria filter.
                                     </td>
                                 </tr>
                             @endforelse
@@ -214,7 +231,7 @@
                 </div>
             </div>
             
-            @if($adjustments->count() > 0)
+            @if($adjustments->count() > 0 && empty($filterTab) && empty($filterMonth) && empty($filterBucketKey))
             <div class="card-footer bg-white border-top p-4 d-flex justify-content-end">
                 <form action="{{ route('report.adjustments.reset', $year) }}" method="POST" onsubmit="return confirm('PERHATIAN! Apakah Anda yakin ingin MENGHAPUS SEMUA data penyesuaian di Tahun {{ $year }}? Data yang terhapus tidak bisa dikembalikan.');">
                     @csrf
@@ -315,6 +332,7 @@
 
 @push('scripts')
 <script>
+    // MENGATUR TAMPILAN AREA TARGET (Create & Edit)
     function toggleTargets(mode) {
         var prefix = mode === 'edit' ? 'edit_' : '';
         var type = document.getElementById(prefix + 'tab_type').value;
@@ -337,6 +355,7 @@
         }
     }
 
+    // MENGISI INPUT HIDDEN SAAT FORM DISUBMIT
     function setFinalBucketKey(mode) {
         var prefix = mode === 'edit' ? 'edit_' : '';
         var type = document.getElementById(prefix + 'tab_type').value;
@@ -349,6 +368,7 @@
         }
     }
 
+    // MENGIRIM VARIABEL KE MODAL EDIT
     function openEditModal(actionUrl, month, tab_type, bucket_key, transaction_type, qty, keterangan) {
         document.getElementById('editForm').action = actionUrl;
         
@@ -368,6 +388,31 @@
 
         var editModal = new bootstrap.Modal(document.getElementById('editModal'));
         editModal.show();
+    }
+
+    // ========================================================
+    // AUTO FILTER & RELOAD SAAT DROPDOWN FORM KIRI DIGANTI
+    // ========================================================
+    function applyFilter() {
+        var year = document.getElementById('current_year').value;
+        var tab_type = document.getElementById('tab_type').value;
+        var month = document.getElementById('month').value;
+        
+        var bucket_key = '';
+        if (tab_type === 'tnkb') {
+            bucket_key = document.getElementById('target_tnkb').value;
+        } else if (tab_type === 'sbst') {
+            bucket_key = document.getElementById('target_sbst').value;
+        }
+
+        var url = "{{ route('report.adjustments.index') }}?year=" + year;
+        
+        if (tab_type) url += "&tab_type=" + tab_type;
+        if (month) url += "&month=" + month;
+        if (bucket_key) url += "&bucket_key=" + bucket_key;
+
+        // Redirect instan untuk memfilter tabel kanan
+        window.location.href = url;
     }
 </script>
 @endpush
