@@ -846,6 +846,66 @@ class OutboundController extends Controller
         }
     }
 
+    public function massDestroy(Request $request)
+    {
+        $ids = $request->input('ids');
+
+        if (empty($ids) || !is_array($ids)) {
+            return redirect()->back()->with('error', 'Tidak ada data SPPM yang dipilih untuk dihapus.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $deletedCount = 0;
+            $deletedDocs = [];
+
+            foreach ($ids as $id) {
+                $sppm = OutSppm::with('logs.outStocks')->find($id);
+                
+                if (!$sppm) continue;
+
+                $deletedSppmNo = $sppm->sppm_no;
+                $deletedSppmDate = $sppm->sppm_date;
+                $deletedDocs[] = $deletedSppmNo;
+
+                // Logika Pengembalian Stok (Sama dengan Destroy Tunggal)
+                foreach ($sppm->logs()->orderBy('id', 'desc')->get() as $log) {
+                    foreach ($log->outStocks()->orderBy('id', 'desc')->get() as $outStock) {
+                        $stock = Stock::find($outStock->stock_id);
+                        if ($stock) {
+                            $stock->qty += $outStock->qty_keluar;
+                            if ($outStock->seri_awal !== null) {
+                                $stock->seri_awal = $outStock->seri_awal;
+                                if ($stock->seri_akhir === null) {
+                                    $stock->seri_akhir = $outStock->seri_akhir;
+                                }
+                            }
+                            $stock->save();
+                        }
+                    }
+                }
+                
+                // Catat Log Sistem per Dokumen yang Dihapus
+                if (method_exists($this, 'recordLog')) {
+                    $this->recordLog('DELETED_MASS', 'DOKUMEN SPPM KELUAR', $sppm->id, [
+                        'Nomor SPPM Dihapus' => $deletedSppmNo,
+                        'Tanggal SPPM'       => $deletedSppmDate
+                    ], null);
+                }
+
+                $sppm->delete(); 
+                $deletedCount++;
+            }
+
+            DB::commit();
+            return redirect()->route('outbounds.index')->with('success', "Sebanyak $deletedCount Dokumen SPPM Keluar berhasil dihapus massal. Stok fisik & nomor seri telah dikembalikan utuh.");
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors('Gagal melakukan penghapusan massal: ' . $e->getMessage());
+        }
+    }
+
     public function getMaterialsByCategory($category_id)
     {
         $materials = Material::with(['children' => function($q) {

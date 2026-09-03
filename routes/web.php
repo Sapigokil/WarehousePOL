@@ -9,6 +9,7 @@ use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\InboundController;
+use App\Http\Controllers\OutboundController;
 USe App\Http\Controllers\DestinationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReportAdjustmentController;
@@ -78,6 +79,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // Rute untuk Import Khusus Migrasi Data Lama
         Route::get('/outbound/template-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'downloadTemplate'])->name('outbound.template.khusus');
         Route::post('/outbound/import-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'import'])->name('outbound.import.khusus');
+        Route::delete('/outbounds/mass-destroy', [OutboundController::class, 'massDestroy'])->name('outbounds.mass_destroy');
 
         Route::get('/distribusi', [\App\Http\Controllers\DistribusiController::class, 'index'])->name('distribusi.index');
     });
