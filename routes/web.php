@@ -59,29 +59,39 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
     });
 
     Route::middleware(['can:Outbound Menu'])->group(function () {
-        // AJAX Route untuk memanggil material berdasarkan kategori beserta sisa stoknya
+        
+        // =========================================================
+        // 1. RUTE KUSTOM OUTBOUND (Wajib di atas rute Resource)
+        // =========================================================
+        Route::delete('outbounds/mass-destroy', [\App\Http\Controllers\OutboundController::class, 'massDestroy'])->name('outbounds.mass_destroy');
         Route::get('outbounds/materials-by-category/{category_id}', [\App\Http\Controllers\OutboundController::class, 'getMaterialsByCategory']);
-
         Route::get('outbounds/template-import', [\App\Http\Controllers\OutboundController::class, 'downloadTemplate'])->name('outbounds.template');
         Route::post('outbounds/import-excel', [\App\Http\Controllers\OutboundController::class, 'importExcel'])->name('outbounds.import');
-
-        Route::get('/outbounds/fix-old-data', [App\Http\Controllers\OutboundController::class, 'fixOldDataOutbound'])->name('outbounds.fix_old_data');
-        Route::get('/outbounds/mass-update-keterangan', function () {
+        Route::get('outbounds/fix-old-data', [\App\Http\Controllers\OutboundController::class, 'fixOldDataOutbound'])->name('outbounds.fix_old_data');
+        Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');
+        
+        Route::get('outbounds/mass-update-keterangan', function () {
             $text = "T.A. 2026\nSetelah materiel diterima agar dibuatkan Berita Acara Pengujian Materiel (BAPPM) dan dikirim ke Ditlantas Polda Jateng, Email : gudang_sbstpoldajtg@yahoo.com selambat-lambatnya 3 hari setelah menerima SPPM";
-            
             $count = \App\Models\OutSppm::query()->update(['keterangan' => $text]);
-            
             return "Berhasil mengupdate {$count} dokumen SPPM Keluar.";
         });
 
-        Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
-        Route::get('outbounds/{id}/print', [\App\Http\Controllers\OutboundController::class, 'print'])->name('outbounds.print');
-        // Rute untuk Import Khusus Migrasi Data Lama
-        Route::get('/outbound/template-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'downloadTemplate'])->name('outbound.template.khusus');
-        Route::post('/outbound/import-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'import'])->name('outbound.import.khusus');
-        Route::delete('/outbounds/mass-destroy', [OutboundController::class, 'massDestroy'])->name('outbounds.mass_destroy');
+        // =========================================================
+        // 2. RUTE IMPORT KHUSUS MIGRASI DATA LAMA
+        // =========================================================
+        Route::get('outbound/template-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'downloadTemplate'])->name('outbound.template.khusus');
+        Route::post('outbound/import-khusus', [\App\Http\Controllers\OutboundKhususController::class, 'import'])->name('outbound.import.khusus');
 
-        Route::get('/distribusi', [\App\Http\Controllers\DistribusiController::class, 'index'])->name('distribusi.index');
+        // =========================================================
+        // 3. RUTE RESOURCE UTAMA (Wajib di bawah rute kustom)
+        // =========================================================
+        Route::resource('outbounds', \App\Http\Controllers\OutboundController::class);
+
+        // =========================================================
+        // 4. RUTE DISTRIBUSI LAINNYA
+        // =========================================================
+        Route::get('distribusi', [\App\Http\Controllers\DistribusiController::class, 'index'])->name('distribusi.index');
+
     });
 
     /* ==============================================
