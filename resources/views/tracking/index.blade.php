@@ -189,7 +189,7 @@
                                                         <span>No. SPPM Masuk</span>
                                                         <strong>
                                                             @if(isset($result['inStock']->log->sppm->id))
-                                                                <a href="{{ url('inbounds/' . $result['inStock']->log->sppm->id . '/edit') }}" target="_blank" class="text-decoration-none text-success fw-bold sppm-link">
+                                                                <a href="{{ url('inbound/' . $result['inStock']->log->sppm->id) }}" target="_blank" class="text-decoration-none text-success fw-bold sppm-link">
                                                                     {{ $result['inStock']->log->sppm->sppm_no }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
                                                                 </a>
                                                             @else
