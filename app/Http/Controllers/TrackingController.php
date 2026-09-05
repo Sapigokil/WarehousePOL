@@ -45,7 +45,7 @@ class TrackingController extends Controller
         $singleResults = [];
         $rangeResults = [];
 
-        // Deteksi SoftDeletes
+        // Deteksi SoftDeletes HANYA untuk menelusuri riwayat gudang asal pada barang keluar
         $applyWithTrashed = function($q) {
             if (in_array(SoftDeletes::class, class_uses_recursive($q->getModel()))) {
                 $q->withTrashed();
@@ -59,7 +59,7 @@ class TrackingController extends Controller
             }
         };
 
-        // REVISI: Aturan Pencarian Filter Material (Kategori + IsMain + Pakai Seri)
+        // Aturan Pencarian Filter Material (Kategori + IsMain + Pakai Seri)
         $applyMaterialFilters = function($q) use ($categoryId) {
             $q->whereHas('material', function($mQ) use ($categoryId) {
                 if ($categoryId) {
@@ -80,10 +80,10 @@ class TrackingController extends Controller
             // ==========================================
             // TAHAP 1: CARI DI GUDANG (STOCK - AVAILABLE)
             // ==========================================
-            $stockQuery = Stock::with(['material', 'warehouse']);
-            $applyWithTrashed($stockQuery);
+            // PERBAIKAN: Hanya cari stok yang jumlahnya > 0 dan BUKAN yang terhapus
+            $stockQuery = Stock::with(['material', 'warehouse'])->where('qty', '>', 0);
             $applyPrefixFilter($stockQuery);
-            $applyMaterialFilters($stockQuery); // Gunakan filter material baru
+            $applyMaterialFilters($stockQuery); 
             
             $stocks = $stockQuery->where('seri_awal', '<=', $serialStart)
                                  ->where('seri_akhir', '>=', $serialStart)
@@ -111,6 +111,7 @@ class TrackingController extends Controller
             // TAHAP 2: CARI DI LINI OUTBOUND (DISTRIBUTED)
             // ==========================================
             $outStockQuery = OutStock::with(['outLog.outSppm.destination', 'stock' => function($q) use ($applyWithTrashed) {
+                // Biarkan withTrashed di sini agar tetap tahu gudang asalnya meskipun stok aslinya sudah habis/dihapus
                 $applyWithTrashed($q);
                 $q->with(['material', 'warehouse']);
             }]);
@@ -118,7 +119,7 @@ class TrackingController extends Controller
             $outStockQuery->whereHas('stock', function($q) use ($applyPrefixFilter, $applyWithTrashed, $applyMaterialFilters) {
                 $applyWithTrashed($q);
                 $applyPrefixFilter($q);
-                $applyMaterialFilters($q); // Gunakan filter material baru
+                $applyMaterialFilters($q); 
             });
 
             $outStocks = $outStockQuery->where('seri_awal', '<=', $serialStart)
@@ -162,7 +163,7 @@ class TrackingController extends Controller
             $outStockQuery->whereHas('stock', function($q) use ($applyPrefixFilter, $applyWithTrashed, $applyMaterialFilters) {
                 $applyWithTrashed($q);
                 $applyPrefixFilter($q);
-                $applyMaterialFilters($q); // Gunakan filter material baru
+                $applyMaterialFilters($q); 
             });
 
             $outStocks = $outStockQuery->where('seri_awal', '<=', $serialEnd)
@@ -187,10 +188,10 @@ class TrackingController extends Controller
             }
 
             // B. Ambil data Stock
-            $stockQuery = Stock::with(['warehouse']);
-            $applyWithTrashed($stockQuery);
+            // PERBAIKAN: Hanya cari stok yang jumlahnya > 0 dan BUKAN yang terhapus
+            $stockQuery = Stock::with(['warehouse'])->where('qty', '>', 0);
             $applyPrefixFilter($stockQuery);
-            $applyMaterialFilters($stockQuery); // Gunakan filter material baru
+            $applyMaterialFilters($stockQuery); 
             
             $stocks = $stockQuery->where('seri_awal', '<=', $serialEnd)
                                  ->where('seri_akhir', '>=', $serialStart)
