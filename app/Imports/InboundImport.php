@@ -237,26 +237,40 @@ class InboundImport implements ToCollection
                                     $overlapAkhir = min($negStock->seri_akhir, $inc['akhir']);
 
                                     if ($overlapAwal <= $overlapAkhir) {
-                                        // Ditemukan kecocokan
+                                        // Ditemukan kecocokan irisan
                                         if ($overlapAwal == $negStock->seri_awal && $overlapAkhir == $negStock->seri_akhir) {
-                                            // Jika lunas seluruhnya secara pas, HAPUS baris minus
-                                            $negStock->delete();
+                                            // Lunas seluruhnya
+                                            $negStock->qty = 0;
+                                            $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                            $negStock->status = 'Lunas';
+                                            $negStock->keterangan = 'Utang stok telah lunas dari SPPM: ' . $sppm->sppm_no;
+                                            $negStock->save();
                                         } else {
-                                            // Jika lunas sebagian (tersplit)
+                                            // Lunas sebagian (Tersplit)
+                                            // 1. Buat sisa minus KIRI (jika ada)
                                             if ($negStock->seri_awal < $overlapAwal) {
                                                 $leftNeg = $negStock->replicate();
                                                 $leftNeg->qty = -( ($overlapAwal - 1) - $negStock->seri_awal + 1 );
                                                 $leftNeg->seri_akhir = $overlapAwal - 1;
                                                 $leftNeg->save();
                                             }
+                                            // 2. Buat sisa minus KANAN (jika ada)
                                             if ($negStock->seri_akhir > $overlapAkhir) {
                                                 $rightNeg = $negStock->replicate();
                                                 $rightNeg->qty = -( $negStock->seri_akhir - ($overlapAkhir + 1) + 1 );
                                                 $rightNeg->seri_awal = $overlapAkhir + 1;
                                                 $rightNeg->save();
                                             }
-                                            // Hapus baris sumber yang sudah dipecah dan terlunasi di tengah-tengahnya
-                                            $negStock->delete();
+                                            
+                                            // 3. Ubah ID original menjadi porsi yang terbayar (Lunas) agar relasi tetap aman
+                                            $negStock->qty = 0;
+                                            $negStock->seri_awal = $overlapAwal;
+                                            $negStock->seri_akhir = $overlapAkhir;
+                                            $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                            $negStock->status = 'Lunas';
+                                            $negStock->total_harga = ($overlapAkhir - $overlapAwal + 1) * $price;
+                                            $negStock->keterangan = 'Utang stok sebagian lunas dari SPPM: ' . $sppm->sppm_no;
+                                            $negStock->save();
                                         }
 
                                         if ($inc['awal'] < $overlapAwal) {
@@ -272,7 +286,7 @@ class InboundImport implements ToCollection
                                 $unfulfilled = $new_unfulfilled;
                             }
 
-                            // Sisa positif
+                            // Sisa Inbound positif yang benar-benar jadi stok baru di gudang
                             foreach ($unfulfilled as $u) {
                                 if (is_null($u['awal']) && is_null($u['akhir'])) {
                                     $qtySisa = $qty;
@@ -312,16 +326,22 @@ class InboundImport implements ToCollection
                                 $bayar = min($utang, $qty_incoming);
 
                                 if ($bayar == $utang) {
-                                    // Jika terbayar lunas seluruhnya, langsung HAPUS dari database
-                                    $negStock->delete();
+                                    // Terbayar lunas seluruhnya
+                                    $negStock->qty = 0;
+                                    $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
+                                    $negStock->status = 'Lunas';
+                                    $negStock->keterangan = 'Utang stok telah lunas dari SPPM: ' . $sppm->sppm_no;
+                                    $negStock->save();
                                 } else {
-                                    // Jika hanya terbayar sebagian, kurangi utangnya tanpa membuat baris 0
+                                    // Terbayar sebagian (kurangi utang)
                                     $negStock->qty += $bayar; 
+                                    $negStock->keterangan = 'Utang berkurang dari SPPM: ' . $sppm->sppm_no;
                                     $negStock->save();
                                 }
                                 $qty_incoming -= $bayar;
                             }
 
+                            // Sisa barang non-seri menjadi stok riil
                             if ($qty_incoming > 0) {
                                 Stock::create([
                                     'no_surat_masuk' => $sppm->sppm_no,
