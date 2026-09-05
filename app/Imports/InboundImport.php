@@ -193,7 +193,7 @@ class InboundImport implements ToCollection
                     $finalStart  = $isSerialized ? $serialParsed['start'] : null;
                     $finalEnd    = $isSerialized ? $serialParsed['end'] : null;
 
-                    // --- PERBAIKAN: Selalu Rekam InDetail (Termasuk saat QTY 0) ---
+                    // Selalu Rekam InDetail (Termasuk saat QTY 0)
                     InDetail::create([
                         'in_sppm_id'        => $sppm->id,
                         'material_id'       => $material->id,
@@ -206,7 +206,7 @@ class InboundImport implements ToCollection
                         'sppm_serial_end'   => $finalEnd,
                     ]);
 
-                    // --- PERBAIKAN: Proses fisik stok dan rekonsiliasi HANYA berjalan jika QTY > 0 ---
+                    // Proses fisik stok dan rekonsiliasi HANYA berjalan jika QTY > 0
                     if ($qty > 0) {
                         InStock::create([
                             'in_log_id'    => $log->id,
@@ -239,23 +239,10 @@ class InboundImport implements ToCollection
                                     if ($overlapAwal <= $overlapAkhir) {
                                         // Ditemukan kecocokan
                                         if ($overlapAwal == $negStock->seri_awal && $overlapAkhir == $negStock->seri_akhir) {
-                                            $negStock->qty = 0;
-                                            $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                            $negStock->status = '-';
-                                            $negStock->harga_satuan = $price;
-                                            $negStock->total_harga = $qty * $price;
-                                            $negStock->save();
+                                            // Jika lunas seluruhnya secara pas, HAPUS baris minus
+                                            $negStock->delete();
                                         } else {
-                                            $paidStock = $negStock->replicate();
-                                            $paidStock->qty = 0;
-                                            $paidStock->seri_awal = $overlapAwal;
-                                            $paidStock->seri_akhir = $overlapAkhir;
-                                            $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                            $paidStock->status = '-';
-                                            $paidStock->harga_satuan = $price;
-                                            $paidStock->total_harga = ($overlapAkhir - $overlapAwal + 1) * $price;
-                                            $paidStock->save();
-
+                                            // Jika lunas sebagian (tersplit)
                                             if ($negStock->seri_awal < $overlapAwal) {
                                                 $leftNeg = $negStock->replicate();
                                                 $leftNeg->qty = -( ($overlapAwal - 1) - $negStock->seri_awal + 1 );
@@ -268,6 +255,7 @@ class InboundImport implements ToCollection
                                                 $rightNeg->seri_awal = $overlapAkhir + 1;
                                                 $rightNeg->save();
                                             }
+                                            // Hapus baris sumber yang sudah dipecah dan terlunasi di tengah-tengahnya
                                             $negStock->delete();
                                         }
 
@@ -286,8 +274,6 @@ class InboundImport implements ToCollection
 
                             // Sisa positif
                             foreach ($unfulfilled as $u) {
-                                // Pengecekan Opsi A: Jika seri kosong, gunakan $qty bawaan dari Excel.
-                                // Jika ada serinya, gunakan rumus pengurangan seri.
                                 if (is_null($u['awal']) && is_null($u['akhir'])) {
                                     $qtySisa = $qty;
                                 } else {
@@ -326,21 +312,10 @@ class InboundImport implements ToCollection
                                 $bayar = min($utang, $qty_incoming);
 
                                 if ($bayar == $utang) {
-                                    $negStock->qty = 0;
-                                    $negStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                    $negStock->status = '-';
-                                    $negStock->harga_satuan = $price;
-                                    $negStock->total_harga = $bayar * $price;
-                                    $negStock->save();
+                                    // Jika terbayar lunas seluruhnya, langsung HAPUS dari database
+                                    $negStock->delete();
                                 } else {
-                                    $paidStock = $negStock->replicate();
-                                    $paidStock->qty = 0;
-                                    $paidStock->no_surat_masuk = preg_replace('/^MINUS-/', '', $negStock->no_surat_masuk);
-                                    $paidStock->status = '-';
-                                    $paidStock->harga_satuan = $price;
-                                    $paidStock->total_harga = $bayar * $price;
-                                    $paidStock->save();
-
+                                    // Jika hanya terbayar sebagian, kurangi utangnya tanpa membuat baris 0
                                     $negStock->qty += $bayar; 
                                     $negStock->save();
                                 }
