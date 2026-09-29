@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Stock;
+use App\Models\InStock;
+use App\Models\OutStock;
+use App\Models\InDetail;
 use App\Models\Material;
 use App\Models\Warehouse;
 use App\Models\MaterialCategory;
@@ -20,24 +23,26 @@ class StockController extends Controller
             $q->whereNull('parent_id')
               ->when($search, function($query) use ($search) {
                   
+                  // PERBAIKAN LEDGER: Pencarian dialihkan ke tabel InStock dan InSppm
                   $stockSearchQuery = function($sub) use ($search) {
                       $cleanNum = preg_replace('/[^0-9]/', '', $search);
                       $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
-                      
                       $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
 
-                      $sub->select('material_id')
-                          ->from('stocks')
-                          ->where('no_surat_masuk', 'like', "%{$search}%")
-                          ->orWhere('prefix', 'like', "%{$search}%");
+                      $sub->select('in_stocks.material_id')
+                          ->from('in_stocks')
+                          ->join('in_logs', 'in_stocks.in_log_id', '=', 'in_logs.id')
+                          ->join('in_sppms', 'in_logs.in_sppm_id', '=', 'in_sppms.id')
+                          ->where('in_sppms.sppm_no', 'like', "%{$search}%")
+                          ->orWhere('in_stocks.serial_prefix', 'like', "%{$search}%");
 
                       if ($cleanNum !== null) {
                           $sub->orWhere(function($q) use ($cleanNum, $prefixStr) {
-                              $q->where('seri_awal', '<=', $cleanNum)
-                                ->where('seri_akhir', '>=', $cleanNum);
+                              $q->where('in_stocks.serial_start', '<=', $cleanNum)
+                                ->where('in_stocks.serial_end', '>=', $cleanNum);
                               
                               if (!empty($prefixStr)) {
-                                  $q->where('prefix', 'like', "%{$prefixStr}%");
+                                  $q->where('in_stocks.serial_prefix', 'like', "%{$prefixStr}%");
                               }
                           });
                       }
@@ -64,11 +69,19 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        $stockTotals = Stock::join('materials', 'stocks.material_id', '=', 'materials.id')
-            ->selectRaw('stocks.material_id, SUM(CASE WHEN materials.pakai_seri = 1 AND stocks.qty < 0 THEN 0 ELSE stocks.qty END) as total_qty')
-            ->groupBy('stocks.material_id')
-            ->pluck('total_qty', 'stocks.material_id')
-            ->toArray();
+        // PERBAIKAN LEDGER: Kalkulasi Global Total Stok (Inbound - Outbound)
+        $inTotals = InStock::selectRaw('material_id, SUM(qty_received) as total')
+                           ->groupBy('material_id')->pluck('total', 'material_id');
+        
+        $outTotals = OutStock::selectRaw('material_id, SUM(qty_keluar) as total')
+                             ->groupBy('material_id')->pluck('total', 'material_id');
+
+        $stockTotals = [];
+        foreach (Material::pluck('id') as $mId) {
+            $in = $inTotals[$mId] ?? 0;
+            $out = $outTotals[$mId] ?? 0;
+            $stockTotals[$mId] = $in - $out; 
+        }
 
         $allCategories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
 
@@ -80,135 +93,139 @@ class StockController extends Controller
         $material = Material::with('category')->findOrFail($id);
         
         $search = $request->input('search');
-        $sortBy = $request->input('sort', 'tgl_masuk'); // default sort
-        $sortOrder = $request->input('order', 'desc'); // default order
+        $sortBy = $request->input('sort', 'tgl_masuk'); 
+        $sortOrder = $request->input('order', 'desc'); 
 
-        $query = Stock::with('warehouse')
-            ->where('material_id', $id)
-            ->where('qty', '!=', 0);
+        // 1. Tarik Data Mentah Ledger
+        $inStocks = InStock::with(['log.sppm.warehouse'])
+                           ->where('material_id', $id)
+                           ->orderBy('created_at', 'asc')
+                           ->get();
+        
+        // Tarik harga satuan dari InDetail untuk referensi
+        $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
+        $outStocks = OutStock::where('material_id', $id)->get();
 
-        // Filter Pencarian
-        if (!empty($search) && $material->pakai_seri == 1) {
-            $query->where(function($q) use ($search) {
-                $cleanNum = preg_replace('/[^0-9]/', '', $search);
-                $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
-                $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
+        $normalStocks = collect();
+        $mergedMinusRanges = [];
+        $totalMinusQty = 0;
 
-                $q->where('no_surat_masuk', 'like', "%{$search}%")
-                  ->orWhere('prefix', 'like', "%{$search}%");
-
-                if ($cleanNum !== null) {
-                    $q->orWhere(function($q2) use ($cleanNum, $prefixStr) {
-                        $q2->where('seri_awal', '<=', $cleanNum)
-                           ->where('seri_akhir', '>=', $cleanNum);
-                        
-                        if (!empty($prefixStr)) {
-                            $q2->where('prefix', 'like', "%{$prefixStr}%");
-                        }
-                    });
+        // 2. Kalkulasi Himpunan (Set Difference)
+        if ($material->pakai_seri == 1) {
+            $prefixes = $inStocks->pluck('serial_prefix')->merge($outStocks->pluck('prefix'))->unique()->filter();
+            
+            foreach ($prefixes as $prefix) {
+                $inForPrefix = $inStocks->where('serial_prefix', $prefix);
+                $outForPrefix = $outStocks->where('prefix', $prefix)->map(function($o) {
+                    return ['start' => $o->seri_awal, 'end' => $o->seri_akhir];
+                })->toArray();
+                
+                // A. Cari Stok Tersedia (Sisa Inbound setelah dikurangi Outbound)
+                foreach ($inForPrefix as $in) {
+                    $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
+                    
+                    foreach ($outForPrefix as $out) {
+                        $availRanges = $this->subtractRanges($availRanges, $out);
+                    }
+                    
+                    $price = $inDetails->get($in->log->sppm_id)->harga_satuan ?? 0;
+                    
+                    foreach ($availRanges as $r) {
+                        $normalStocks->push((object)[
+                            'id'             => $in->id,
+                            'no_surat_masuk' => $in->log->sppm->sppm_no ?? 'UNKNOWN',
+                            'tgl_masuk'      => $in->log->receive_date ?? $in->created_at,
+                            'warehouse'      => $in->log->sppm->warehouse,
+                            'warehouse_id'   => $in->log->sppm->warehouse_id ?? 1,
+                            'prefix'         => $prefix,
+                            'seri_awal'      => $r['start'],
+                            'seri_akhir'     => $r['end'],
+                            'qty'            => $r['end'] - $r['start'] + 1,
+                            'harga_satuan'   => $price,
+                            'keterangan'     => 'Sisa Inbound ' . ($in->log->sppm->sppm_no ?? ''),
+                        ]);
+                    }
                 }
-            });
+                
+                // B. Cari Hutang / Stok Minus (Sisa Outbound setelah dikurangi Inbound)
+                $hutangRanges = $outForPrefix;
+                foreach ($inForPrefix as $in) {
+                    $hutangRanges = $this->subtractRanges($hutangRanges, ['start' => $in->serial_start, 'end' => $in->serial_end]);
+                }
+                
+                foreach ($hutangRanges as $h) {
+                    $qty = $h['end'] - $h['start'] + 1;
+                    $totalMinusQty -= $qty;
+                    $mergedMinusRanges[] = [
+                        'prefix' => $prefix,
+                        'awal'   => $h['start'],
+                        'akhir'  => $h['end']
+                    ];
+                }
+            }
+        } else {
+            // Logika Barang Bulk (Non-Seri)
+            $totalIn = $inStocks->sum('qty_received');
+            $totalOut = $outStocks->sum('qty_keluar');
+            $available = $totalIn - $totalOut;
+            
+            if ($available > 0) {
+                $firstIn = $inStocks->last(); // Ambil referensi dari yang terakhir masuk
+                $price = $firstIn ? ($inDetails->get($firstIn->log->sppm_id)->harga_satuan ?? 0) : 0;
+
+                $normalStocks->push((object)[
+                    'id'             => $firstIn->id ?? 1,
+                    'no_surat_masuk' => 'AKUMULASI GLOBAL',
+                    'tgl_masuk'      => date('Y-m-d'),
+                    'warehouse'      => (object)['name' => $firstIn->log->sppm->warehouse->name ?? 'GUDANG UTAMA'],
+                    'warehouse_id'   => $firstIn->log->sppm->warehouse_id ?? 1,
+                    'prefix'         => null,
+                    'seri_awal'      => null,
+                    'seri_akhir'     => null,
+                    'qty'            => $available,
+                    'harga_satuan'   => $price,
+                    'keterangan'     => 'Akumulasi Tersedia',
+                ]);
+            } elseif ($available < 0) {
+                $totalMinusQty = $available;
+            }
         }
 
-        // Sorting Logika
+        // 3. Filter Pencarian pada Collection di Memori
+        if (!empty($search)) {
+            $cleanNum = preg_replace('/[^0-9]/', '', $search);
+            $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
+            $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
+
+            $normalStocks = $normalStocks->filter(function($item) use ($search, $cleanNum, $prefixStr) {
+                if (stripos($item->no_surat_masuk, $search) !== false) return true;
+                if (stripos($item->prefix, $search) !== false) return true;
+                if ($cleanNum !== null && $item->seri_awal <= $cleanNum && $item->seri_akhir >= $cleanNum) {
+                    if (empty($prefixStr) || stripos($item->prefix, $prefixStr) !== false) return true;
+                }
+                return false;
+            })->values();
+        }
+
+        // 4. Sorting
         $allowedSorts = ['no_surat_masuk', 'tgl_masuk', 'warehouse_id', 'seri_awal', 'qty'];
         if (in_array($sortBy, $allowedSorts)) {
-            $query->orderBy($sortBy, $sortOrder);
+            $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy($sortBy) : $normalStocks->sortByDesc($sortBy);
         } else {
-            $query->orderBy('tgl_masuk', 'desc')->orderBy('created_at', 'desc');
+            $normalStocks = $normalStocks->sortByDesc('tgl_masuk');
         }
 
-        $allStockDetails = $query->get();
-
-        $normalStocks = $allStockDetails->where('qty', '>', 0)->values();
-        $minusStocks  = $allStockDetails->where('qty', '<', 0)->values();
-
-        if ($material->pakai_seri == 1) {
-            $totalStock = $normalStocks->sum('qty');
-            
-            if ($normalStocks->isNotEmpty()) {
-                $normalStocks = $normalStocks->groupBy(function($item) {
-                    $prefix = $item->prefix ?: 'TANPA PREFIX';
-                    $tahun = date('Y', strtotime($item->tgl_masuk));
-                    return $prefix . ' - TAHUN ' . $tahun;
-                });
-            } else {
-                $normalStocks = collect();
-            }
-
-        } else {
-            $totalStock = $allStockDetails->sum('qty');
-            
-            if ($normalStocks->isNotEmpty()) {
-                $groupedNormal = collect();
-                foreach ($normalStocks->groupBy('warehouse_id') as $wId => $stocks) {
-                    $firstStock = $stocks->first();
-                    $mergedStock = new \stdClass();
-                    $mergedStock->no_surat_masuk = strtoupper($firstStock->warehouse->name ?? 'GUDANG UTAMA');
-                    $mergedStock->tgl_masuk = $stocks->max('tgl_masuk');
-                    $mergedStock->warehouse = (object)['name' => $firstStock->warehouse->name ?? '-'];
-                    $mergedStock->warehouse_id = $wId; // Injection for Mass Edit
-                    $mergedStock->harga_satuan = $firstStock->harga_satuan; // Injection for Mass Edit
-                    $mergedStock->prefix = null;
-                    $mergedStock->seri_awal = null;
-                    $mergedStock->seri_akhir = null;
-                    $mergedStock->qty = $stocks->sum('qty');
-                    $mergedStock->keterangan = 'Akumulasi Total Fisik di Gudang';
-                    
-                    $groupedNormal->push($mergedStock);
-                }
-                $normalStocks = $groupedNormal;
-                
-                // Urutkan ulang array virtual
-                if ($sortBy == 'qty') {
-                    $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy('qty') : $normalStocks->sortByDesc('qty');
-                } elseif ($sortBy == 'no_surat_masuk') {
-                    $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy('no_surat_masuk') : $normalStocks->sortByDesc('no_surat_masuk');
-                }
-            }
-        }
-
-        // Penggabungan Stok Minus (Merge Contiguous)
-        $totalMinusQty = 0;
-        $mergedMinusRanges = [];
-
-        if ($minusStocks->isNotEmpty()) {
-            $totalMinusQty = $minusStocks->sum('qty');
-
-            if ($material->pakai_seri == 1) {
-                $groupedByPrefix = $minusStocks->groupBy('prefix');
-
-                foreach ($groupedByPrefix as $prefix => $stocks) {
-                    $ranges = $stocks->map(function($item) {
-                        return [
-                            'awal'  => $item->seri_awal,
-                            'akhir' => $item->seri_akhir,
-                        ];
-                    })->sortBy('awal')->values()->toArray();
-
-                    $merged = [];
-                    foreach ($ranges as $range) {
-                        if (empty($merged)) {
-                            $merged[] = $range;
-                        } else {
-                            $lastIndex = count($merged) - 1;
-                            if ($range['awal'] <= $merged[$lastIndex]['akhir'] + 1) {
-                                $merged[$lastIndex]['akhir'] = max($merged[$lastIndex]['akhir'], $range['akhir']);
-                            } else {
-                                $merged[] = $range;
-                            }
-                        }
-                    }
-
-                    foreach ($merged as $m) {
-                        $mergedMinusRanges[] = [
-                            'prefix' => $prefix,
-                            'awal'   => $m['awal'],
-                            'akhir'  => $m['akhir']
-                        ];
-                    }
-                }
-            }
+        // 5. Finalisasi Grouping untuk Tampilan View
+        $totalStock = $normalStocks->sum('qty');
+        
+        if ($material->pakai_seri == 1 && $normalStocks->isNotEmpty()) {
+            $normalStocks = $normalStocks->groupBy(function($item) {
+                $prefix = $item->prefix ?: 'TANPA PREFIX';
+                $tahun = date('Y', strtotime($item->tgl_masuk));
+                return $prefix . ' - TAHUN ' . $tahun;
+            });
+        } elseif ($material->pakai_seri == 0 && $normalStocks->isNotEmpty()) {
+            $normalStocks = $normalStocks->groupBy('warehouse_id');
         }
 
         return view('stocks.stock_detail', compact(
@@ -217,11 +234,42 @@ class StockController extends Controller
     }
 
     /**
-     * FUNGSI BARU: Update Harga Satuan Secara Massal
+     * FUNGSI BANTUAN (PRIVATE): Melakukan irisan/pengurangan rentang seri
+     */
+    private function subtractRanges($ranges, $subtract)
+    {
+        $result = [];
+        foreach ($ranges as $r) {
+            // A. Tidak beririsan
+            if ($subtract['end'] < $r['start'] || $subtract['start'] > $r['end']) {
+                $result[] = $r;
+            } 
+            // B. Terpotong habis
+            else if ($subtract['start'] <= $r['start'] && $subtract['end'] >= $r['end']) {
+                continue;
+            } 
+            // C. Terbelah di tengah
+            else if ($subtract['start'] > $r['start'] && $subtract['end'] < $r['end']) {
+                $result[] = ['start' => $r['start'], 'end' => $subtract['start'] - 1];
+                $result[] = ['start' => $subtract['end'] + 1, 'end' => $r['end']];
+            } 
+            // D. Terpotong kiri
+            else if ($subtract['start'] <= $r['start'] && $subtract['end'] >= $r['start']) {
+                $result[] = ['start' => $subtract['end'] + 1, 'end' => $r['end']];
+            } 
+            // E. Terpotong kanan
+            else if ($subtract['start'] <= $r['end'] && $subtract['end'] >= $r['end']) {
+                $result[] = ['start' => $r['start'], 'end' => $subtract['start'] - 1];
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * PERBAIKAN LEDGER: Update Harga Satuan langsung ke Tabel InDetail
      */
     public function bulkUpdatePrice(Request $request, $material_id)
     {
-        // Proteksi Lapis Kedua (Selain Middleware)
         if (!auth()->user()->can('Setting Menu')) {
             abort(403, 'Anda tidak memiliki otorisasi untuk mengubah harga satuan.');
         }
@@ -234,98 +282,61 @@ class StockController extends Controller
 
         DB::beginTransaction();
         try {
-            // Mode 1: Edit Berdasarkan Rentang Seri (pakai_seri = 1)
             if ($request->has('prices.seri')) {
-                foreach ($request->input('prices.seri') as $stockId => $price) {
-                    $stock = Stock::where('material_id', $material_id)->find($stockId);
-                    if ($stock && $stock->harga_satuan != $price) {
-                        $stock->harga_satuan = $price;
-                        $stock->total_harga  = $stock->qty * $price;
-                        $stock->save();
+                foreach ($request->input('prices.seri') as $inStockId => $price) {
+                    $inStock = InStock::find($inStockId);
+                    if ($inStock && $inStock->log) {
+                        $inDetail = InDetail::where('in_sppm_id', $inStock->log->in_sppm_id)
+                                            ->where('material_id', $material_id)
+                                            ->first();
+                        
+                        if ($inDetail && $inDetail->harga_satuan != $price) {
+                            $inDetail->harga_satuan = $price;
+                            $inDetail->harga_total  = $inDetail->target_qty * $price;
+                            $inDetail->save();
+                        }
                     }
                 }
             }
 
-            // Mode 2: Edit Berdasarkan Gudang (pakai_seri = 0)
             if ($request->has('prices.bulk')) {
+                // Untuk non-seri, update semua detail inbound untuk barang tersebut
                 foreach ($request->input('prices.bulk') as $warehouseId => $price) {
-                    $stocksInWarehouse = Stock::where('material_id', $material_id)
-                                              ->where('warehouse_id', $warehouseId)
-                                              ->get();
-                                              
-                    foreach ($stocksInWarehouse as $stock) {
-                        if ($stock->harga_satuan != $price) {
-                            $stock->harga_satuan = $price;
-                            $stock->total_harga  = $stock->qty * $price;
-                            $stock->save();
+                    $inDetails = InDetail::where('material_id', $material_id)->get();
+                    foreach ($inDetails as $inDetail) {
+                        if ($inDetail->harga_satuan != $price) {
+                            $inDetail->harga_satuan = $price;
+                            $inDetail->harga_total  = $inDetail->target_qty * $price;
+                            $inDetail->save();
                         }
                     }
                 }
             }
 
             DB::commit();
-            return redirect()->back()->with('success', 'Harga Satuan untuk stok tersebut berhasil diperbarui secara massal.');
+            return redirect()->back()->with('success', 'Harga Satuan berhasil diperbarui ke dokumen asalnya.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Terjadi kesalahan saat memperbarui harga: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
     }
 
+    /**
+     * NOTE: Fungsi Manual Create/Update/Delete dinonaktifkan dalam Arsitektur Ledger
+     * Karena stok tidak lagi berupa baris berdiri sendiri, melainkan hasil kalkulasi riwayat transaksi.
+     */
     public function store(Request $request)
     {
-        $request->validate([
-            'no_surat_masuk' => 'required|string|max:100',
-            'tgl_masuk'      => 'required|date',
-            'material_id'    => 'required|integer',
-            'warehouse_id'   => 'required|integer',
-            'qty'            => 'required|numeric|min:1',
-            'harga_satuan'   => 'nullable|numeric|min:0',
-            'seri_awal'      => 'nullable|string',
-            'seri_akhir'     => 'nullable|string',
-            'keterangan'     => 'nullable|string',
-        ]);
-
-        $data = $request->all();
-        $hargaSatuan = $request->input('harga_satuan', 0);
-        $data['total_harga'] = $request->qty * $hargaSatuan;
-        $data['status'] = 'Tersedia';
-
-        Stock::create($data);
-
-        return redirect()->route('stocks.index')->with('success', 'Penyesuaian stok manual berhasil ditambahkan.');
+        return redirect()->back()->with('error', 'Sistem Buku Besar aktif. Penyesuaian stok harus dilakukan melalui menu Inbound / Outbound.');
     }
 
     public function update(Request $request, $id)
     {
-        $stock = Stock::findOrFail($id);
-
-        $request->validate([
-            'no_surat_masuk' => 'required|string|max:100',
-            'tgl_masuk'      => 'required|date',
-            'material_id'    => 'required|integer',
-            'warehouse_id'   => 'required|integer',
-            'qty'            => 'required|numeric|min:0',
-            'harga_satuan'   => 'nullable|numeric|min:0',
-            'seri_awal'      => 'nullable|string',
-            'seri_akhir'     => 'nullable|string',
-            'status'         => 'required|string',
-            'keterangan'     => 'nullable|string',
-        ]);
-
-        $data = $request->all();
-        $hargaSatuan = $request->input('harga_satuan', 0);
-        $data['total_harga'] = $request->qty * $hargaSatuan;
-
-        $stock->update($data);
-
-        return redirect()->route('stocks.index')->with('success', 'Data stok berhasil diubah/dikoreksi.');
+        return redirect()->back()->with('error', 'Sistem Buku Besar aktif. Penyesuaian stok harus dilakukan melalui menu Inbound / Outbound.');
     }
 
     public function destroy($id)
     {
-        $stock = Stock::findOrFail($id);
-        $stock->delete();
-
-        return redirect()->route('stocks.index')->with('success', 'Data stok berhasil dihapus.');
+        return redirect()->back()->with('error', 'Sistem Buku Besar aktif. Penyesuaian stok harus dilakukan melalui menu Inbound / Outbound.');
     }
 }
