@@ -51,15 +51,6 @@
     </form>
 </div>
 
-{{-- <div class="d-flex justify-content-between align-items-center mb-3">
-    <form method="GET" action="{{ route('stocks.index') }}" class="d-flex align-items-center w-100">
-        <div class="input-group input-group-sm shadow-sm" style="max-width: 400px; border-radius: 6px; overflow: hidden;">
-            <input type="text" name="search" class="form-control border-0 px-3 py-2" placeholder="Cari Nama Barang atau Kode..." value="{{ $search }}">
-            <button class="btn btn-white border-0 bg-white px-3" type="submit"><i class="fa-solid fa-magnifying-glass text-muted"></i></button>
-        </div>
-    </form>
-</div> --}}
-
 <div class="table-responsive shadow-sm" style="border-radius: 8px;">
     <table class="table-dense">
         <thead>

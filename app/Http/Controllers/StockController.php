@@ -9,6 +9,7 @@ use App\Models\InDetail;
 use App\Models\Material;
 use App\Models\Warehouse;
 use App\Models\MaterialCategory;
+use App\Models\ReportAdjustment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +24,7 @@ class StockController extends Controller
             $q->whereNull('parent_id')
               ->when($search, function($query) use ($search) {
                   
-                  // PERBAIKAN LEDGER: Pencarian dialihkan ke tabel InStock dan InSppm
+                  // Pencarian dialihkan ke tabel InStock dan InSppm
                   $stockSearchQuery = function($sub) use ($search) {
                       $cleanNum = preg_replace('/[^0-9]/', '', $search);
                       $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
@@ -69,18 +70,66 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // PERBAIKAN LEDGER: Kalkulasi Global Total Stok (Inbound - Outbound)
-        $inTotals = InStock::selectRaw('material_id, SUM(qty_received) as total')
-                           ->groupBy('material_id')->pluck('total', 'material_id');
-        
-        $outTotals = OutStock::selectRaw('material_id, SUM(qty_keluar) as total')
-                             ->groupBy('material_id')->pluck('total', 'material_id');
+        // PERBAIKAN LEDGER + SINKRONISASI REPORT IN-OUT: 
+        // 1. Menggunakan in_details dan out_details (sama persis dengan logic report)
+        $inTotals = DB::table('in_details')
+            ->join('in_sppms', 'in_details.in_sppm_id', '=', 'in_sppms.id')
+            ->selectRaw('in_details.material_id, SUM(in_details.target_qty) as total')
+            ->groupBy('in_details.material_id')
+            ->pluck('total', 'material_id')
+            ->toArray();
+            
+        $outTotals = DB::table('out_details')
+            ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
+            ->selectRaw('out_details.material_id, SUM(out_details.target_qty) as total')
+            ->groupBy('out_details.material_id')
+            ->pluck('total', 'material_id')
+            ->toArray();
 
+        // 2. Kalkulasi Data Report Adjustments agar masuk ke total stok gudang
+        $adjustments = DB::table('report_adjustments')->get();
+        $materialsList = DB::table('materials')->get();
+        
+        $adjTotals = []; 
+        foreach ($adjustments as $adj) {
+            $qty = (int) $adj->qty_adjustment;
+            // Jika out maka minus, selain out (in, sisa_awal, sisa_gudang) berarti menambah stok
+            $net = ($adj->transaction_type === 'out') ? -$qty : $qty;
+
+            if (str_starts_with($adj->bucket_key, 'sbst_')) {
+                // Mapping Adjustment SBST
+                $matId = (int) str_replace('sbst_', '', $adj->bucket_key);
+                $adjTotals[$matId] = ($adjTotals[$matId] ?? 0) + $net;
+            } else {
+                // Mapping Adjustment TNKB / TCKB
+                $parts = explode('_', $adj->bucket_key);
+                $r = array_pop($parts); // R2 / R4
+                $tnkbType = implode('_', $parts); // tnkb_ev, tnkb_non_ev, tckb
+
+                foreach ($materialsList as $mat) {
+                    if (!$mat->tnkb_rpt || $mat->tnkb_rpt <= 0) continue;
+                    if ($mat->tnkb_r !== $r) continue;
+
+                    $matType = '';
+                    if ($mat->tnkb_rpt == 2) $matType = 'tckb';
+                    elseif ($mat->tnkb_rpt == 1 && $mat->tnkb_ev == 1) $matType = 'tnkb_ev';
+                    elseif ($mat->tnkb_rpt == 1 && $mat->tnkb_ev == 0) $matType = 'tnkb_non_ev';
+
+                    if ($matType === $tnkbType) {
+                        $adjTotals[$mat->id] = ($adjTotals[$mat->id] ?? 0) + $net;
+                    }
+                }
+            }
+        }
+
+        // 3. Gabungkan semuanya: (In - Out) + Penyesuaian
         $stockTotals = [];
-        foreach (Material::pluck('id') as $mId) {
-            $in = $inTotals[$mId] ?? 0;
-            $out = $outTotals[$mId] ?? 0;
-            $stockTotals[$mId] = $in - $out; 
+        foreach ($materialsList as $mat) {
+            $in = $inTotals[$mat->id] ?? 0;
+            $out = $outTotals[$mat->id] ?? 0;
+            $adj = $adjTotals[$mat->id] ?? 0;
+            
+            $stockTotals[$mat->id] = $in - $out + $adj; 
         }
 
         $allCategories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
@@ -96,15 +145,42 @@ class StockController extends Controller
         $sortBy = $request->input('sort', 'tgl_masuk'); 
         $sortOrder = $request->input('order', 'desc'); 
 
-        // 1. Tarik Data Mentah Ledger
+        // 1. Tarik Data Mentah Ledger untuk rincian detail baris per baris
         $inStocks = InStock::with(['log.sppm.warehouse'])
                            ->where('material_id', $id)
                            ->orderBy('created_at', 'asc')
                            ->get();
         
-        // Tarik harga satuan dari InDetail untuk referensi
         $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
         $outStocks = OutStock::where('material_id', $id)->get();
+
+        // SINKRONISASI REPORT IN-OUT: Hitung Net Adjustment khusus untuk Material Detail ini
+        $adjustments = DB::table('report_adjustments')->get();
+        $netAdj = 0;
+        foreach ($adjustments as $adj) {
+            $qty = (int) $adj->qty_adjustment;
+            $net = ($adj->transaction_type === 'out') ? -$qty : $qty;
+
+            if (str_starts_with($adj->bucket_key, 'sbst_')) {
+                $matId = (int) str_replace('sbst_', '', $adj->bucket_key);
+                if ($matId == $material->id) $netAdj += $net;
+            } else {
+                $parts = explode('_', $adj->bucket_key);
+                $r = array_pop($parts);
+                $tnkbType = implode('_', $parts);
+                
+                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r) {
+                    $matType = '';
+                    if ($material->tnkb_rpt == 2) $matType = 'tckb';
+                    elseif ($material->tnkb_rpt == 1 && $material->tnkb_ev == 1) $matType = 'tnkb_ev';
+                    elseif ($material->tnkb_rpt == 1 && $material->tnkb_ev == 0) $matType = 'tnkb_non_ev';
+                    
+                    if ($matType === $tnkbType) {
+                        $netAdj += $net;
+                    }
+                }
+            }
+        }
 
         $normalStocks = collect();
         $mergedMinusRanges = [];
@@ -163,11 +239,31 @@ class StockController extends Controller
                     ];
                 }
             }
+
+            // Injeksi Baris Khusus untuk Hasil Report Adjustment (Karena nomor seri tidak diketahui pastinya)
+            if ($netAdj != 0) {
+                $normalStocks->push((object)[
+                    'id'             => 'adj',
+                    'no_surat_masuk' => 'PENYESUAIAN LAPORAN',
+                    'tgl_masuk'      => date('Y-m-d'),
+                    'warehouse'      => (object)['name' => 'SISTEM INJEKSI'],
+                    'warehouse_id'   => 999,
+                    'prefix'         => 'ADJ',
+                    'seri_awal'      => null,
+                    'seri_akhir'     => null,
+                    'qty'            => $netAdj,
+                    'harga_satuan'   => 0,
+                    'keterangan'     => 'Injeksi Sinkronisasi Report Adjustment',
+                ]);
+            }
+
         } else {
-            // Logika Barang Bulk (Non-Seri)
-            $totalIn = $inStocks->sum('qty_received');
-            $totalOut = $outStocks->sum('qty_keluar');
-            $available = $totalIn - $totalOut;
+            // Logika Barang Bulk (Non-Seri) -> Langsung tembak berdasarkan detail + adjustment
+            $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
+            $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
+            
+            // Total Bulk = In - Out + Adjustment
+            $available = $inTotalBulk - $outTotalBulk + $netAdj;
             
             if ($available > 0) {
                 $firstIn = $inStocks->last(); // Ambil referensi dari yang terakhir masuk
@@ -184,7 +280,7 @@ class StockController extends Controller
                     'seri_akhir'     => null,
                     'qty'            => $available,
                     'harga_satuan'   => $price,
-                    'keterangan'     => 'Akumulasi Tersedia',
+                    'keterangan'     => 'Akumulasi Tersedia + Injeksi Adjustment',
                 ]);
             } elseif ($available < 0) {
                 $totalMinusQty = $available;
@@ -321,10 +417,6 @@ class StockController extends Controller
         }
     }
 
-    /**
-     * NOTE: Fungsi Manual Create/Update/Delete dinonaktifkan dalam Arsitektur Ledger
-     * Karena stok tidak lagi berupa baris berdiri sendiri, melainkan hasil kalkulasi riwayat transaksi.
-     */
     public function store(Request $request)
     {
         return redirect()->back()->with('error', 'Sistem Buku Besar aktif. Penyesuaian stok harus dilakukan melalui menu Inbound / Outbound.');
