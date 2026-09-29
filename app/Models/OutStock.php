@@ -12,6 +12,7 @@ class OutStock extends Model
 
     protected $fillable = [
         'out_log_id',
+        'material_id',
         'stock_id',
         'qty_keluar',
         'prefix',
