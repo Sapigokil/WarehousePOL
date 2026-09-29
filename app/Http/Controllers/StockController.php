@@ -83,8 +83,7 @@ class StockController extends Controller
 
         // 2. Kalkulasi Data Report Adjustments (Injeksi Penyesuaian / Sisa Awal)
         $adjustments = DB::table('report_adjustments')->get();
-        // Ambil relasi children untuk mengecek apakah suatu material adalah parent header
-        $materialsList = Material::with('children')->get();
+        $materialsList = Material::all();
         
         $adjTotals = []; 
         foreach ($adjustments as $adj) {
@@ -96,16 +95,14 @@ class StockController extends Controller
                 $adjTotals[$matId] = ($adjTotals[$matId] ?? 0) + $net;
             } else {
                 $parts = explode('_', $adj->bucket_key);
-                $r = array_pop($parts);
-                $tnkbType = implode('_', $parts);
+                $r = array_pop($parts); // R2 atau R4
+                $tnkbType = implode('_', $parts); // tnkb_non_ev, dll
 
-                // PERBAIKAN: Pastikan target material BUKAN merupakan parent header (harus material riil/anak/standalone)
-                $targetMat = $materialsList->filter(function($mat) use ($r, $tnkbType) {
+                // Mapping presisi spesifik ke material ismain = 1 yang sesuai dengan tipe dan R-nya (R2/R4)
+                $targetMat = $materialsList->first(function($mat) use ($r, $tnkbType) {
                     if (!$mat->tnkb_rpt || $mat->tnkb_rpt <= 0) return false;
                     if ($mat->tnkb_r !== $r) return false;
-                    
-                    // ABAIKAN jika materiil ini adalah parent header yang punya anak
-                    if ($mat->children->count() > 0) return false;
+                    if ($mat->ismain != 1) return false;
 
                     $matType = '';
                     if ($mat->tnkb_rpt == 2) $matType = 'tckb';
@@ -113,7 +110,7 @@ class StockController extends Controller
                     elseif ($mat->tnkb_rpt == 1 && $mat->tnkb_ev == 0) $matType = 'tnkb_non_ev';
 
                     return $matType === $tnkbType;
-                })->sortByDesc('ismain')->first();
+                });
 
                 if ($targetMat) {
                     $adjTotals[$targetMat->id] = ($adjTotals[$targetMat->id] ?? 0) + $net;
@@ -153,7 +150,7 @@ class StockController extends Controller
         $outStocks = OutStock::where('material_id', $id)->get();
 
         $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = Material::with('children')->get();
+        $materialsList = Material::all();
         $netAdj = 0;
 
         foreach ($adjustments as $adj) {
@@ -168,11 +165,11 @@ class StockController extends Controller
                 $r = array_pop($parts);
                 $tnkbType = implode('_', $parts);
                 
-                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r) {
-                    $targetMat = $materialsList->filter(function($m) use ($r, $tnkbType) {
+                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r && $material->ismain == 1) {
+                    $targetMat = $materialsList->first(function($m) use ($r, $tnkbType) {
                         if (!$m->tnkb_rpt || $m->tnkb_rpt <= 0) return false;
                         if ($m->tnkb_r !== $r) return false;
-                        if ($m->children->count() > 0) return false;
+                        if ($m->ismain != 1) return false;
                         
                         $mType = '';
                         if ($m->tnkb_rpt == 2) $mType = 'tckb';
@@ -180,7 +177,7 @@ class StockController extends Controller
                         elseif ($m->tnkb_rpt == 1 && $m->tnkb_ev == 0) $mType = 'tnkb_non_ev';
                         
                         return $mType === $tnkbType;
-                    })->sortByDesc('ismain')->first();
+                    });
 
                     if ($targetMat && $targetMat->id == $material->id) {
                         $netAdj += $net;

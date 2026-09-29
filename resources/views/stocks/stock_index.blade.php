@@ -66,12 +66,8 @@
             @forelse($categories as $category)
                 @if($category->materials->count() > 0)
                     @php 
-                        // PERBAIKAN: Hitung total kategori dari akumulasi seluruh material leaf/varian (yang tidak punya anak)
-                        $mainQty = $category->materials->filter(function($m) {
-                            return $m->children->count() == 0;
-                        })->sum(function($m) use ($stockTotals) {
-                            return $stockTotals[$m->id] ?? 0;
-                        });
+                        // Ambil semua materiil di dalam kategori ini yang memiliki ismain = 1 (bisa lebih dari satu, misal R2 dan R4)
+                        $mainMats = $category->materials->where('ismain', 1);
                     @endphp
 
                     <!-- 1. BARIS HEADER KATEGORI (SEBAGAI TOMBOL ACCORDION) -->
@@ -82,9 +78,18 @@
                         </td>
                         <td class="text-center"></td>
                         <td class="text-end">
-                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="Total Akumulasi Stok Kategori">
-                                {{ number_format($mainQty, 0, ',', '.') }}
-                            </span>
+                            @if($mainMats->count() > 0)
+                                <div class="d-flex justify-content-end gap-1 flex-wrap">
+                                    @foreach($mainMats as $mMat)
+                                        @php $mQty = $stockTotals[$mMat->id] ?? 0; @endphp
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="{{ $mMat->name }}">
+                                            {{ number_format($mQty, 0, ',', '.') }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <span class="text-muted small">-</span>
+                            @endif
                         </td>
                         <td class="text-center">
                             <i class="fa-solid fa-chevron-down text-muted"></i>
