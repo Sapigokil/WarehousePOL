@@ -350,9 +350,7 @@
                                                                         @php
                                                                             $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
                                                                                 $q->where('out_sppm_id', $sppm->id);
-                                                                            })->whereHas('stock', function($q) use ($childDetail) {
-                                                                                $q->where('material_id', $childDetail->material_id);
-                                                                            })->get();
+                                                                            })->where('material_id', $childDetail->material_id)->get();
                                                                         @endphp
                                                                         @forelse($outStocks as $st)
                                                                             @if($st->seri_awal || $st->seri_akhir)
@@ -391,9 +389,7 @@
                                                                 @php
                                                                     $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
                                                                         $q->where('out_sppm_id', $sppm->id);
-                                                                    })->whereHas('stock', function($q) use ($parentDetail) {
-                                                                        $q->where('material_id', $parentDetail->material_id);
-                                                                    })->get();
+                                                                    })->where('material_id', $parentDetail->material_id)->get();
                                                                 @endphp
                                                                 @forelse($outStocks as $st)
                                                                     @if($st->seri_awal || $st->seri_akhir)
