@@ -66,9 +66,12 @@
             @forelse($categories as $category)
                 @if($category->materials->count() > 0)
                     @php 
-                        // Cari material utama (ismain = 1) untuk diambil QTY-nya ke Header Kategori
-                        $mainMat = $category->materials->firstWhere('ismain', 1);
-                        $mainQty = $mainMat ? ($stockTotals[$mainMat->id] ?? 0) : 0;
+                        // PERBAIKAN: Hitung total kategori dari akumulasi seluruh material leaf/varian (yang tidak punya anak)
+                        $mainQty = $category->materials->filter(function($m) {
+                            return $m->children->count() == 0;
+                        })->sum(function($m) use ($stockTotals) {
+                            return $stockTotals[$m->id] ?? 0;
+                        });
                     @endphp
 
                     <!-- 1. BARIS HEADER KATEGORI (SEBAGAI TOMBOL ACCORDION) -->
@@ -79,7 +82,7 @@
                         </td>
                         <td class="text-center"></td>
                         <td class="text-end">
-                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="Total Stok Material Utama (ismain = 1)">
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="Total Akumulasi Stok Kategori">
                                 {{ number_format($mainQty, 0, ',', '.') }}
                             </span>
                         </td>
@@ -89,7 +92,6 @@
                     </tr>
                     
                     @php 
-                        // Saring hanya material Induk/Standalone (yang tidak punya parent_id)
                         $topLevelMats = $category->materials->filter(function($m) {
                             return is_null($m->parent_id);
                         })->sortBy(function($m) {

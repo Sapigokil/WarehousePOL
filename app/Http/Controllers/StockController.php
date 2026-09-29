@@ -68,7 +68,7 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. SINKRONISASI TOTAL (Menggunakan in_details & out_details persis seperti Laporan)
+        // 1. Ambil Total Inbound & Outbound dari detail dokumen
         $inTotals = DB::table('in_details')
             ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
@@ -81,9 +81,10 @@ class StockController extends Controller
             ->pluck('total', 'material_id')
             ->toArray();
 
-        // 2. SINKRONISASI PENYESUAIAN LAPORAN (Tanpa Duplikasi)
+        // 2. Kalkulasi Data Report Adjustments (Injeksi Penyesuaian / Sisa Awal)
         $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = DB::table('materials')->get();
+        // Ambil relasi children untuk mengecek apakah suatu material adalah parent header
+        $materialsList = Material::with('children')->get();
         
         $adjTotals = []; 
         foreach ($adjustments as $adj) {
@@ -91,19 +92,20 @@ class StockController extends Controller
             $net = ($adj->transaction_type === 'out') ? -$qty : $qty;
 
             if (str_starts_with($adj->bucket_key, 'sbst_')) {
-                // Untuk SBST, langsung tembak ke ID materialnya
                 $matId = (int) str_replace('sbst_', '', $adj->bucket_key);
                 $adjTotals[$matId] = ($adjTotals[$matId] ?? 0) + $net;
             } else {
-                // Untuk TNKB, cari tipe yang cocok
                 $parts = explode('_', $adj->bucket_key);
                 $r = array_pop($parts);
                 $tnkbType = implode('_', $parts);
 
-                // CEGAH DUPLIKASI: Cari SATU SAJA material Induk (ismain = 1) untuk menampung Sisa Awal
-                $targetMat = collect($materialsList)->filter(function($mat) use ($r, $tnkbType) {
+                // PERBAIKAN: Pastikan target material BUKAN merupakan parent header (harus material riil/anak/standalone)
+                $targetMat = $materialsList->filter(function($mat) use ($r, $tnkbType) {
                     if (!$mat->tnkb_rpt || $mat->tnkb_rpt <= 0) return false;
                     if ($mat->tnkb_r !== $r) return false;
+                    
+                    // ABAIKAN jika materiil ini adalah parent header yang punya anak
+                    if ($mat->children->count() > 0) return false;
 
                     $matType = '';
                     if ($mat->tnkb_rpt == 2) $matType = 'tckb';
@@ -119,7 +121,7 @@ class StockController extends Controller
             }
         }
 
-        // 3. KALKULASI FINAL (Masuk - Keluar + Penyesuaian)
+        // 3. Kalkulasi Final per Material ID
         $stockTotals = [];
         foreach ($materialsList as $mat) {
             $in = $inTotals[$mat->id] ?? 0;
@@ -142,7 +144,6 @@ class StockController extends Controller
         $sortBy = $request->input('sort', 'tgl_masuk'); 
         $sortOrder = $request->input('order', 'desc'); 
 
-        // 1. Tarik Data Mentah Fisik untuk Rincian Baris
         $inStocks = InStock::with(['log.sppm.warehouse'])
                            ->where('material_id', $id)
                            ->orderBy('created_at', 'asc')
@@ -151,9 +152,8 @@ class StockController extends Controller
         $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
         $outStocks = OutStock::where('material_id', $id)->get();
 
-        // 2. Tarik Injeksi Laporan Khusus untuk Material ini
         $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = DB::table('materials')->get();
+        $materialsList = Material::with('children')->get();
         $netAdj = 0;
 
         foreach ($adjustments as $adj) {
@@ -169,9 +169,10 @@ class StockController extends Controller
                 $tnkbType = implode('_', $parts);
                 
                 if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r) {
-                    $targetMat = collect($materialsList)->filter(function($m) use ($r, $tnkbType) {
+                    $targetMat = $materialsList->filter(function($m) use ($r, $tnkbType) {
                         if (!$m->tnkb_rpt || $m->tnkb_rpt <= 0) return false;
                         if ($m->tnkb_r !== $r) return false;
+                        if ($m->children->count() > 0) return false;
                         
                         $mType = '';
                         if ($m->tnkb_rpt == 2) $mType = 'tckb';
@@ -181,7 +182,6 @@ class StockController extends Controller
                         return $mType === $tnkbType;
                     })->sortByDesc('ismain')->first();
 
-                    // Pastikan Injeksi hanya divisualisasikan jika material ini adalah sang Induk
                     if ($targetMat && $targetMat->id == $material->id) {
                         $netAdj += $net;
                     }
@@ -193,7 +193,6 @@ class StockController extends Controller
         $mergedMinusRanges = [];
         $totalMinusQty = 0;
 
-        // 3. Kalkulasi Himpunan / Rincian
         if ($material->pakai_seri == 1) {
             $prefixes = $inStocks->pluck('serial_prefix')->merge($outStocks->pluck('prefix'))->unique()->filter();
             
@@ -245,7 +244,6 @@ class StockController extends Controller
                 }
             }
 
-            // Memunculkan baris Sisa Awal ke tampilan detail jika ada
             if ($netAdj != 0) {
                 $normalStocks->push((object)[
                     'id'             => 'adj',
@@ -263,7 +261,6 @@ class StockController extends Controller
             }
 
         } else {
-            // Gunakan basis in_details persis Laporan untuk barang Non-Seri
             $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
             $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
             
