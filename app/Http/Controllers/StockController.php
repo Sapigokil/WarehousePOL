@@ -67,23 +67,22 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. Ambil Total Inbound (Barang Masuk)
-        $inTotals = DB::table('in_details')
-            ->selectRaw('material_id, SUM(target_qty) as total')
+        // 1. PENGAMBILAN DATA MURNI DARI TABEL FISIK (in_stocks & out_stocks)
+        $inTotals = DB::table('in_stocks')
+            ->selectRaw('material_id, SUM(COALESCE(qty_received, 0)) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
             
-        // 2. Ambil Total Outbound (Barang Keluar)
-        $outTotals = DB::table('out_details')
-            ->selectRaw('material_id, SUM(target_qty) as total')
+        $outTotals = DB::table('out_stocks')
+            ->selectRaw('material_id, SUM(COALESCE(qty_keluar, 0)) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
 
         $materialsList = Material::with('children')->get();
 
-        // 3. Kalkulasi Murni: Barang Masuk - Barang Keluar (Tanpa Penyesuaian)
+        // 2. Kalkulasi Murni: Barang Masuk - Barang Keluar (Tanpa Penyesuaian)
         $stockTotals = [];
         foreach ($materialsList as $mat) {
             $in = $inTotals[$mat->id] ?? 0;
@@ -169,8 +168,8 @@ class StockController extends Controller
             }
 
         } else {
-            $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
-            $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
+            $inTotalBulk = DB::table('in_stocks')->where('material_id', $id)->sum('qty_received');
+            $outTotalBulk = DB::table('out_stocks')->where('material_id', $id)->sum('qty_keluar');
             
             $available = $inTotalBulk - $outTotalBulk;
             
