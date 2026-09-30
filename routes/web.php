@@ -41,6 +41,7 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
        OPERASIONAL
        ============================================== */
     Route::middleware(['can:Inbound Menu'])->group(function () {
+        Route::delete('inbound/mass-destroy', [InboundController::class, 'massDestroy'])->name('inbound.mass_destroy');
         Route::get('inbound/materials-by-category/{category_id}', [App\Http\Controllers\InboundController::class, 'getMaterialsByCategory'])->name('inbound.materials-by-category');
         Route::get('inbound/template-import', [\App\Http\Controllers\InboundController::class, 'downloadTemplate'])->name('inbound.template');
         Route::post('inbound/import-excel', [\App\Http\Controllers\InboundController::class, 'importExcel'])->name('inbound.import');

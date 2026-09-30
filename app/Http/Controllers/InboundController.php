@@ -588,6 +588,69 @@ class InboundController extends Controller
         return redirect()->route('inbound.index')->with('success', 'Dokumen dan Master Stock terkait berhasil dihapus.');
     }
 
+    /**
+     * FUNGSI UNTUK HAPUS MASSAL (MASS DESTROY)
+     */
+    public function massDestroy(Request $request)
+    {
+        $request->validate([
+            'ids'   => 'required|array',
+            'ids.*' => 'exists:in_sppms,id'
+        ]);
+
+        // Ambil semua data SPPM yang dipilih beserta relasinya
+        $sppms = InSppm::with('logs')->whereIn('id', $request->ids)->get();
+
+        // 1. Cek Validasi Outbound (Apakah ada SPPM yang sudah dipakai di Outbound)
+        $sppmNos = $sppms->pluck('sppm_no')->toArray();
+        $stockIds = Stock::whereIn('no_surat_masuk', $sppmNos)->pluck('id');
+        $isUsedInOutbound = OutStock::whereIn('stock_id', $stockIds)->exists();
+
+        if ($isUsedInOutbound) {
+            return redirect()->back()->with('error', 'GAGAL MENGHAPUS MASSAL! Salah satu atau beberapa dokumen Inbound yang Anda pilih tidak dapat dihapus karena barang di dalamnya sudah didistribusikan di menu Outbound. Silakan batalkan centang pada dokumen terkait atau hapus data Outbound-nya terlebih dahulu.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($sppms as $sppm) {
+                // Simpan data untuk kebutuhan log
+                $deletedSppmNo = $sppm->sppm_no;
+                $deletedSppmDate = $sppm->sppm_date;
+
+                // Hapus data berelasi
+                Stock::where('no_surat_masuk', $sppm->sppm_no)->delete();
+                foreach ($sppm->logs as $log) {
+                    InStock::where('in_log_id', $log->id)->delete();
+                }
+                $sppm->logs()->delete();
+                $sppm->details()->delete();
+                
+                // Hapus File Fisik
+                if ($sppm->file_lampiran && Storage::disk('public')->exists($sppm->file_lampiran)) {
+                    Storage::disk('public')->delete($sppm->file_lampiran);
+                }
+
+                // Catat Log Sistem
+                $this->recordLog('DELETED', 'DOKUMEN SPPM', $sppm->id, [
+                    'Nomor SPPM Dihapus' => $deletedSppmNo,
+                    'Tanggal SPPM'       => $deletedSppmDate,
+                    'Keterangan'         => 'Dihapus melalui aksi Hapus Massal'
+                ], null);
+
+                // Hapus record utama
+                $sppm->delete();
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', count($request->ids) . ' Dokumen Barang Masuk beserta riwayatnya berhasil dihapus secara permanen.');
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Gagal menghapus dokumen secara massal. Pesan Error: ' . $e->getMessage());
+        }
+    }
+
     public function getMaterialsByCategory($category_id)
     {
         $materials = Material::with(['children' => function($q) { $q->orderBy('nomor_urut', 'asc'); }])
