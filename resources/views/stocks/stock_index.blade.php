@@ -66,10 +66,7 @@
             @forelse($categories as $category)
                 @if($category->materials->count() > 0)
                     @php 
-                        // PERBAIKAN: Hanya ambil materiil ismain = 1 YANG BUKAN PARENT HEADER (children count == 0)
-                        $mainMats = $category->materials->filter(function($m) {
-                            return $m->ismain == 1 && $m->children->count() == 0;
-                        });
+                        $mainMats = $category->materials->where('ismain', 1);
                     @endphp
 
                     <!-- 1. BARIS HEADER KATEGORI (SEBAGAI TOMBOL ACCORDION) -->
@@ -83,7 +80,21 @@
                             @if($mainMats->count() > 0)
                                 <div class="d-flex justify-content-end gap-1 flex-wrap">
                                     @foreach($mainMats as $mMat)
-                                        @php $mQty = $stockTotals[$mMat->id] ?? 0; @endphp
+                                        @php 
+                                            $mQty = $stockTotals[$mMat->id] ?? 0; 
+                                            
+                                            // LOGIKA IF: Jika qty parent bernilai 0 / null dan punya anak, 
+                                            // ambilkan dari anak pertamanya yang memiliki nomor_urut terkecil (nomor_urut = 1)
+                                            if (($mQty == 0 || is_null($mQty)) && $mMat->children->count() > 0) {
+                                                $firstChild = $mMat->children->sortBy(function($c) {
+                                                    return $c->nomor_urut ?? 9999;
+                                                })->first();
+                                                
+                                                if ($firstChild) {
+                                                    $mQty = $stockTotals[$firstChild->id] ?? 0;
+                                                }
+                                            }
+                                        @endphp
                                         <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1" style="font-size: 0.8rem;" title="{{ $mMat->name }}">
                                             {{ number_format($mQty, 0, ',', '.') }}
                                         </span>
