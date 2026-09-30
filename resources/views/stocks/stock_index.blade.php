@@ -66,8 +66,10 @@
             @forelse($categories as $category)
                 @if($category->materials->count() > 0)
                     @php 
-                        // Ambil semua materiil di dalam kategori ini yang memiliki ismain = 1 (bisa lebih dari satu, misal R2 dan R4)
-                        $mainMats = $category->materials->where('ismain', 1);
+                        // PERBAIKAN: Hanya ambil materiil ismain = 1 YANG BUKAN PARENT HEADER (children count == 0)
+                        $mainMats = $category->materials->filter(function($m) {
+                            return $m->ismain == 1 && $m->children->count() == 0;
+                        });
                     @endphp
 
                     <!-- 1. BARIS HEADER KATEGORI (SEBAGAI TOMBOL ACCORDION) -->

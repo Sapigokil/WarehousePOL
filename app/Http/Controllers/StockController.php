@@ -83,7 +83,8 @@ class StockController extends Controller
 
         // 2. Kalkulasi Data Report Adjustments (Injeksi Penyesuaian / Sisa Awal)
         $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = Material::all();
+        // Gunakan eager load children agar kita bisa memfilter mana materiil yang merupakan anak (bukan parent header)
+        $materialsList = Material::with('children')->get();
         
         $adjTotals = []; 
         foreach ($adjustments as $adj) {
@@ -98,11 +99,13 @@ class StockController extends Controller
                 $r = array_pop($parts); // R2 atau R4
                 $tnkbType = implode('_', $parts); // tnkb_non_ev, dll
 
-                // Mapping presisi spesifik ke material ismain = 1 yang sesuai dengan tipe dan R-nya (R2/R4)
+                // PERBAIKAN: Cari materiil dengan ismain=1 TAPI HARUS BERUPA ANAK (children count == 0) 
+                // agar injeksi sisa awal masuk tepat ke baris "Warna Putih", bukan ke baris header induk.
                 $targetMat = $materialsList->first(function($mat) use ($r, $tnkbType) {
                     if (!$mat->tnkb_rpt || $mat->tnkb_rpt <= 0) return false;
                     if ($mat->tnkb_r !== $r) return false;
                     if ($mat->ismain != 1) return false;
+                    if ($mat->children->count() > 0) return false; // Pastikan ini baris rill/anak
 
                     $matType = '';
                     if ($mat->tnkb_rpt == 2) $matType = 'tckb';
@@ -150,7 +153,7 @@ class StockController extends Controller
         $outStocks = OutStock::where('material_id', $id)->get();
 
         $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = Material::all();
+        $materialsList = Material::with('children')->get();
         $netAdj = 0;
 
         foreach ($adjustments as $adj) {
@@ -165,11 +168,12 @@ class StockController extends Controller
                 $r = array_pop($parts);
                 $tnkbType = implode('_', $parts);
                 
-                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r && $material->ismain == 1) {
+                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r && $material->ismain == 1 && $material->children->count() == 0) {
                     $targetMat = $materialsList->first(function($m) use ($r, $tnkbType) {
                         if (!$m->tnkb_rpt || $m->tnkb_rpt <= 0) return false;
                         if ($m->tnkb_r !== $r) return false;
                         if ($m->ismain != 1) return false;
+                        if ($m->children->count() > 0) return false;
                         
                         $mType = '';
                         if ($m->tnkb_rpt == 2) $mType = 'tckb';
