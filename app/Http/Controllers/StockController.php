@@ -9,7 +9,6 @@ use App\Models\InDetail;
 use App\Models\Material;
 use App\Models\Warehouse;
 use App\Models\MaterialCategory;
-use App\Models\ReportAdjustment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -68,63 +67,29 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. Ambil Total Inbound & Outbound dari detail dokumen
+        // 1. Ambil Total Inbound (Barang Masuk)
         $inTotals = DB::table('in_details')
             ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
             
+        // 2. Ambil Total Outbound (Barang Keluar)
         $outTotals = DB::table('out_details')
             ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
 
-        // 2. Kalkulasi Data Report Adjustments (Injeksi Penyesuaian / Sisa Awal)
-        $adjustments = DB::table('report_adjustments')->get();
         $materialsList = Material::with('children')->get();
-        
-        $adjTotals = []; 
-        foreach ($adjustments as $adj) {
-            $qty = (int) $adj->qty_adjustment;
-            $net = ($adj->transaction_type === 'out') ? -$qty : $qty;
 
-            if (str_starts_with($adj->bucket_key, 'sbst_')) {
-                $matId = (int) str_replace('sbst_', '', $adj->bucket_key);
-                $adjTotals[$matId] = ($adjTotals[$matId] ?? 0) + $net;
-            } else {
-                $parts = explode('_', $adj->bucket_key);
-                $r = array_pop($parts);
-                $tnkbType = implode('_', $parts);
-
-                $targetMat = $materialsList->first(function($mat) use ($r, $tnkbType) {
-                    if (!$mat->tnkb_rpt || $mat->tnkb_rpt <= 0) return false;
-                    if ($mat->tnkb_r !== $r) return false;
-                    if ($mat->ismain != 1) return false;
-
-                    $matType = '';
-                    if ($mat->tnkb_rpt == 2) $matType = 'tckb';
-                    elseif ($mat->tnkb_rpt == 1 && $mat->tnkb_ev == 1) $matType = 'tnkb_ev';
-                    elseif ($mat->tnkb_rpt == 1 && $mat->tnkb_ev == 0) $matType = 'tnkb_non_ev';
-
-                    return $matType === $tnkbType;
-                });
-
-                if ($targetMat) {
-                    $adjTotals[$targetMat->id] = ($adjTotals[$targetMat->id] ?? 0) + $net;
-                }
-            }
-        }
-
-        // 3. Kalkulasi Final per Material ID
+        // 3. Kalkulasi Murni: Barang Masuk - Barang Keluar (Tanpa Penyesuaian)
         $stockTotals = [];
         foreach ($materialsList as $mat) {
             $in = $inTotals[$mat->id] ?? 0;
             $out = $outTotals[$mat->id] ?? 0;
-            $adj = $adjTotals[$mat->id] ?? 0;
             
-            $stockTotals[$mat->id] = $in - $out + $adj; 
+            $stockTotals[$mat->id] = $in - $out; 
         }
 
         $allCategories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
@@ -147,43 +112,6 @@ class StockController extends Controller
         
         $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
         $outStocks = OutStock::where('material_id', $id)->get();
-
-        $adjustments = DB::table('report_adjustments')->get();
-        $materialsList = Material::with('children')->get();
-        $netAdj = 0;
-
-        foreach ($adjustments as $adj) {
-            $qty = (int) $adj->qty_adjustment;
-            $net = ($adj->transaction_type === 'out') ? -$qty : $qty;
-
-            if (str_starts_with($adj->bucket_key, 'sbst_')) {
-                $matId = (int) str_replace('sbst_', '', $adj->bucket_key);
-                if ($matId == $material->id) $netAdj += $net;
-            } else {
-                $parts = explode('_', $adj->bucket_key);
-                $r = array_pop($parts);
-                $tnkbType = implode('_', $parts);
-                
-                if ($material->tnkb_rpt > 0 && $material->tnkb_r === $r && $material->ismain == 1) {
-                    $targetMat = $materialsList->first(function($m) use ($r, $tnkbType) {
-                        if (!$m->tnkb_rpt || $m->tnkb_rpt <= 0) return false;
-                        if ($m->tnkb_r !== $r) return false;
-                        if ($m->ismain != 1) return false;
-                        
-                        $mType = '';
-                        if ($m->tnkb_rpt == 2) $mType = 'tckb';
-                        elseif ($m->tnkb_rpt == 1 && $m->tnkb_ev == 1) $mType = 'tnkb_ev';
-                        elseif ($m->tnkb_rpt == 1 && $m->tnkb_ev == 0) $mType = 'tnkb_non_ev';
-                        
-                        return $mType === $tnkbType;
-                    });
-
-                    if ($targetMat && $targetMat->id == $material->id) {
-                        $netAdj += $net;
-                    }
-                }
-            }
-        }
 
         $normalStocks = collect();
         $mergedMinusRanges = [];
@@ -240,27 +168,11 @@ class StockController extends Controller
                 }
             }
 
-            if ($netAdj != 0) {
-                $normalStocks->push((object)[
-                    'id'             => 'adj',
-                    'no_surat_masuk' => 'PENYESUAIAN LAPORAN (CARRY OVER)',
-                    'tgl_masuk'      => date('Y-m-d'),
-                    'warehouse'      => (object)['name' => 'SISTEM INJEKSI'],
-                    'warehouse_id'   => 999,
-                    'prefix'         => 'ADJ',
-                    'seri_awal'      => null,
-                    'seri_akhir'     => null,
-                    'qty'            => $netAdj,
-                    'harga_satuan'   => 0,
-                    'keterangan'     => 'Injeksi Sinkronisasi Report Adjustment',
-                ]);
-            }
-
         } else {
             $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
             $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
             
-            $available = $inTotalBulk - $outTotalBulk + $netAdj;
+            $available = $inTotalBulk - $outTotalBulk;
             
             if ($available > 0) {
                 $firstIn = $inStocks->last(); 
@@ -277,7 +189,7 @@ class StockController extends Controller
                     'seri_akhir'     => null,
                     'qty'            => $available,
                     'harga_satuan'   => $price,
-                    'keterangan'     => 'Akumulasi Tersedia + Injeksi Adjustment',
+                    'keterangan'     => 'Akumulasi Tersedia',
                 ]);
             } elseif ($available < 0) {
                 $totalMinusQty = $available;
