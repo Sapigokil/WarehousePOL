@@ -81,9 +81,8 @@
                                 <div class="d-flex justify-content-end gap-1 flex-wrap">
                                     @foreach($mainMats as $mMat)
                                         @php 
-                                            // LOGIKA BARU SESUAI INSTRUKSI:
-                                            // Jika ismain = 1 DAN memiliki anak,
-                                            // maka ambil data stok dari anak dengan nomor_urut terkecil (biasanya 1)
+                                            // LOGIKA CUPLIKAN:
+                                            // Jika ismain = 1 DAN memiliki anak, ambil data stok dari anak pertamanya (nomor_urut = 1)
                                             if ($mMat->children->count() > 0) {
                                                 $firstChild = $mMat->children->sortBy(function($c) {
                                                     return $c->nomor_urut ?? 9999;
@@ -91,7 +90,6 @@
                                                 
                                                 $mQty = $firstChild ? ($stockTotals[$firstChild->id] ?? 0) : 0;
                                             } else {
-                                                // Jika tidak punya anak, ambil data stok miliknya sendiri
                                                 $mQty = $stockTotals[$mMat->id] ?? 0;
                                             }
                                         @endphp
