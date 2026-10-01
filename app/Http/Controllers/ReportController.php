@@ -35,41 +35,55 @@ class ReportController extends Controller
      */
     private function getMaterialMutationData($material, $isChild = false, $startDate = null, $endDate = null)
     {
-        $inQuery = InStock::where('material_id', $material->id);
-        
-        // PERBAIKAN: Langsung query ke material_id, tidak menggunakan di mana (whereHas) 'stock'
-        $outQuery = OutStock::where('material_id', $material->id);
+        $saldoAwal = 0;
+        $totalIn = 0;
+        $totalOut = 0;
 
         if ($startDate && $endDate) {
-            $inQuery->whereHas('log', function($q) use ($startDate, $endDate) {
-                $q->whereBetween('receive_date', [$startDate, $endDate]);
-            });
-            $outQuery->whereHas('outLog', function($q) use ($startDate, $endDate) {
-                $q->whereBetween('tgl_keluar', [$startDate, $endDate]);
-            });
-
-            $totalInUpToDate = InStock::where('material_id', $material->id)
-                ->whereHas('log', function($q) use ($endDate) {
-                    $q->where('receive_date', '<=', $endDate);
+            // 1. HITUNG SALDO AWAL (Dari awal waktu hingga H-1 start_date)
+            $inBeforeStart = InStock::where('material_id', $material->id)
+                ->whereHas('log', function($q) use ($startDate) {
+                    $q->where('receive_date', '<', $startDate);
                 })->sum('qty_received');
                 
-            // PERBAIKAN: Langsung query ke material_id 
-            $totalOutUpToDate = OutStock::where('material_id', $material->id)
-                ->whereHas('outLog', function($q) use ($endDate) {
-                    $q->where('tgl_keluar', '<=', $endDate);
+            $outBeforeStart = OutStock::where('material_id', $material->id)
+                ->whereHas('outLog', function($q) use ($startDate) {
+                    $q->where('tgl_keluar', '<', $startDate);
+                })->sum('qty_keluar');
+                
+            $saldoAwal = $inBeforeStart - $outBeforeStart;
+
+            // 2. HITUNG TOTAL MASUK (Hanya dalam rentang tanggal filter)
+            $totalIn = InStock::where('material_id', $material->id)
+                ->whereHas('log', function($q) use ($startDate, $endDate) {
+                    $q->whereBetween('receive_date', [$startDate, $endDate]);
+                })->sum('qty_received');
+
+            // 3. HITUNG TOTAL KELUAR (Hanya dalam rentang tanggal filter)
+            $totalOut = OutStock::where('material_id', $material->id)
+                ->whereHas('outLog', function($q) use ($startDate, $endDate) {
+                    $q->whereBetween('tgl_keluar', [$startDate, $endDate]);
                 })->sum('qty_keluar');
 
-            $currentStock = $totalInUpToDate - $totalOutUpToDate;
         } else {
-            $currentStock = Stock::where('material_id', $material->id)->sum('qty');
+            // Jika tidak ada filter tanggal, asumsikan penarikan data ALL TIME
+            // Saldo awal = 0 karena dihitung dari titik nol
+            $saldoAwal = 0; 
+            
+            $totalIn = InStock::where('material_id', $material->id)->sum('qty_received');
+            $totalOut = OutStock::where('material_id', $material->id)->sum('qty_keluar');
         }
+
+        // 4. RUMUS SALDO AKHIR
+        $saldoAkhir = $saldoAwal + $totalIn - $totalOut;
 
         return [
             'material_name' => $material->name,
             'is_child'      => $isChild,
-            'total_in'      => $inQuery->sum('qty_received'),
-            'total_out'     => $outQuery->sum('qty_keluar'),
-            'saldo_akhir'   => $currentStock,
+            'saldo_awal'    => $saldoAwal,
+            'total_in'      => $totalIn,
+            'total_out'     => $totalOut,
+            'saldo_akhir'   => $saldoAkhir,
         ];
     }
 
@@ -339,7 +353,8 @@ class ReportController extends Controller
             fputcsv($file, ["PERIODE LAPORAN:", $periode], "\t");
             fputcsv($file, [], "\t"); 
 
-            fputcsv($file, ['Kategori', 'Nama Materiil', 'Tipe', 'Total Masuk', 'Total Keluar', 'Saldo Akhir'], "\t");
+            // PERBAIKAN: Penambahan Kolom Saldo Awal pada Header Excel
+            fputcsv($file, ['Kategori', 'Nama Materiil', 'Tipe', 'Saldo Awal', 'Total Masuk', 'Total Keluar', 'Saldo Akhir'], "\t");
 
             foreach ($filteredCategories as $cat) {
                 $parents = Material::where('material_category_id', $cat->id)
@@ -353,10 +368,12 @@ class ReportController extends Controller
 
                     $pData = $this->getMaterialMutationData($parent, false, $startDate, $endDate);
                     
+                    // PERBAIKAN: Penyusunan baris data Parent
                     fputcsv($file, [
                         $cat->name,
                         strtoupper($pData['material_name']),
                         'Induk',
+                        $hasChildren ? '-' : $pData['saldo_awal'],
                         $hasChildren ? '-' : $pData['total_in'],
                         $hasChildren ? '-' : $pData['total_out'],
                         $hasChildren ? '-' : $pData['saldo_akhir']
@@ -364,10 +381,13 @@ class ReportController extends Controller
 
                     foreach ($children as $child) {
                         $cData = $this->getMaterialMutationData($child, true, $startDate, $endDate);
+                        
+                        // PERBAIKAN: Penyusunan baris data Child
                         fputcsv($file, [
                             $cat->name,
                             '   -> ' . strtoupper($cData['material_name']),
                             'Turunan',
+                            $cData['saldo_awal'],
                             $cData['total_in'],
                             $cData['total_out'],
                             $cData['saldo_akhir']
