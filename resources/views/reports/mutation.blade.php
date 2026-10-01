@@ -95,7 +95,7 @@
     <i class="fa-solid fa-chart-pie header-banner-icon"></i>
     <div class="header-content">
         <h4 class="fw-bold mb-1"><i class="fa-solid fa-chart-pie me-2"></i> Laporan Mutasi Stock</h4>
-        <p class="mb-0 text-white-50 small">Pantau rekapitulasi barang masuk, keluar, dan saldo akhir fisik gudang.</p>
+        <p class="mb-0 text-white-50 small">Pantau rekapitulasi saldo awal, barang masuk, keluar, dan saldo akhir fisik gudang.</p>
     </div>
     <div class="header-content">
         <a href="{{ route('reports.mutation.export', request()->all()) }}" class="btn btn-light fw-bold text-primary shadow-sm px-4 py-2" style="border-radius: 8px;">
@@ -109,12 +109,10 @@
     <form method="GET" action="{{ url()->current() }}" class="row g-3 align-items-end m-0">
         <div class="col-md-3">
             <label class="form-label fw-bold small text-muted mb-1"><i class="fa-regular fa-calendar me-1"></i> Tanggal Awal</label>
-            <!-- Ubah value menjadi $startDate -->
             <input type="date" name="start_date" class="form-control form-control-sm border-0 bg-light px-3 py-2" value="{{ $startDate }}" onchange="this.form.submit()" style="border-radius: 6px;">
         </div>
         <div class="col-md-3">
             <label class="form-label fw-bold small text-muted mb-1"><i class="fa-regular fa-calendar-check me-1"></i> Tanggal Akhir</label>
-            <!-- Ubah value menjadi $endDate -->
             <input type="date" name="end_date" class="form-control form-control-sm border-0 bg-light px-3 py-2" value="{{ $endDate }}" onchange="this.form.submit()" style="border-radius: 6px;">
         </div>
         <div class="col-md-4">
@@ -127,7 +125,6 @@
             </select>
         </div>
         <div class="col-md-2">
-            <!-- Tampilkan tombol reset hanya jika user sudah menekan filter / ada query string di URL -->
             @if(request()->hasAny(['start_date', 'end_date', 'category_id']))
                 <a href="{{ url()->current() }}" class="btn btn-sm btn-light border text-danger w-100 fw-bold py-2 shadow-sm" style="border-radius: 6px;">
                     <i class="fa-solid fa-rotate-left me-1"></i> Reset Filter
@@ -148,9 +145,10 @@
             <tr>
                 <th class="text-center" width="5%">NO</th>
                 <th>Nama Materiil / Komoditas</th>
+                <th class="text-center" width="15%">Saldo Awal</th>
                 <th class="text-center" width="15%">Total Masuk</th>
                 <th class="text-center" width="15%">Total Keluar</th>
-                <th class="text-center" width="20%">Saldo Akhir Fisik</th>
+                <th class="text-center" width="15%">Saldo Akhir Fisik</th>
             </tr>
         </thead>
         <tbody>
@@ -159,7 +157,7 @@
                 
                 <!-- BARIS HEADER KATEGORI -->
                 <tr>
-                    <td colspan="5" class="category-header">
+                    <td colspan="6" class="category-header">
                         <i class="fa-solid fa-tags me-2 text-primary opacity-75"></i> {{ $group['category_name'] }}
                     </td>
                 </tr>
@@ -177,6 +175,17 @@
                             {{ strtoupper($row['material_name']) }}
                         </td>
                         
+                        <!-- Saldo Awal -->
+                        <td class="text-center align-middle">
+                            @if(isset($row['has_children']) && $row['has_children'])
+                                <span class="text-muted">-</span>
+                            @else
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary fw-bold px-3 py-1">
+                                    {{ number_format($row['saldo_awal'], 0, ',', '.') }}
+                                </span>
+                            @endif
+                        </td>
+
                         <!-- Total Masuk -->
                         <td class="text-center align-middle">
                             @if(isset($row['has_children']) && $row['has_children'])
@@ -214,7 +223,7 @@
 
             @empty
                 <tr>
-                    <td colspan="5" class="text-center py-5 text-muted bg-white">
+                    <td colspan="6" class="text-center py-5 text-muted bg-white">
                         <i class="fa-solid fa-folder-open fs-2 mb-3 opacity-25 d-block"></i>
                         <span class="small fw-semibold">Belum ada data mutasi stock untuk kriteria yang dipilih.</span>
                     </td>
