@@ -206,7 +206,7 @@
                             @endif
                         </td>
                         
-                        <!-- Total Keluar -->
+                        <!-- Total Keluar (Diambil dari OutDetail -> total_out) -->
                         <td class="text-center align-middle">
                             @if($row['has_children'])
                                 <span class="text-muted">-</span>
@@ -253,14 +253,15 @@
                                             <tbody>
                                                 @foreach($row['transactions'] as $trx)
                                                     <tr>
+                                                        <!-- PENGGUNAAN NULLSAFE OPERATOR (?->) UNTUK MENCEGAH ERROR JIKA RELASI KOSONG -->
                                                         <td class="align-middle fw-semibold">
-                                                            {{ \Carbon\Carbon::parse($trx->outLog->tgl_keluar ?? $trx->created_at)->format('d M Y') }}
+                                                            {{ \Carbon\Carbon::parse($trx->outLog?->outSppm?->sppm_date ?? ($trx->outLog?->tgl_keluar ?? $trx->created_at))->format('d M Y') }}
                                                         </td>
                                                         <td class="align-middle fw-bold text-dark">
-                                                            {{ $trx->outLog->outSppm->sppm_no ?? 'No SPPM Tidak Diketahui' }}
+                                                            {{ $trx->outLog?->outSppm?->sppm_no ?? 'No SPPM Tidak Diketahui' }}
                                                         </td>
                                                         <td class="align-middle text-muted">
-                                                            <i class="fa-solid fa-map-location-dot me-1 opacity-50"></i> {{ $trx->outLog->outSppm->destination->name ?? 'Tujuan Tidak Diketahui' }}
+                                                            <i class="fa-solid fa-map-location-dot me-1 opacity-50"></i> {{ $trx->outLog?->outSppm?->destination?->name ?? 'Tujuan Tidak Diketahui' }}
                                                         </td>
                                                         <td class="align-middle">
                                                             @if($trx->seri_awal || $trx->seri_akhir)
