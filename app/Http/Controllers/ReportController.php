@@ -36,9 +36,9 @@ class ReportController extends Controller
     private function getMaterialMutationData($material, $isChild = false, $startDate = null, $endDate = null)
     {
         $inQuery = InStock::where('material_id', $material->id);
-        $outQuery = OutStock::whereHas('stock', function($q) use ($material) {
-            $q->where('material_id', $material->id);
-        });
+        
+        // PERBAIKAN: Langsung query ke material_id, tidak menggunakan di mana (whereHas) 'stock'
+        $outQuery = OutStock::where('material_id', $material->id);
 
         if ($startDate && $endDate) {
             $inQuery->whereHas('log', function($q) use ($startDate, $endDate) {
@@ -53,11 +53,11 @@ class ReportController extends Controller
                     $q->where('receive_date', '<=', $endDate);
                 })->sum('qty_received');
                 
-            $totalOutUpToDate = OutStock::whereHas('stock', function($q) use ($material) {
-                $q->where('material_id', $material->id);
-            })->whereHas('outLog', function($q) use ($endDate) {
-                $q->where('tgl_keluar', '<=', $endDate);
-            })->sum('qty_keluar');
+            // PERBAIKAN: Langsung query ke material_id 
+            $totalOutUpToDate = OutStock::where('material_id', $material->id)
+                ->whereHas('outLog', function($q) use ($endDate) {
+                    $q->where('tgl_keluar', '<=', $endDate);
+                })->sum('qty_keluar');
 
             $currentStock = $totalInUpToDate - $totalOutUpToDate;
         } else {
@@ -297,7 +297,6 @@ class ReportController extends Controller
     }
 
     // --- FUNGSI EXPORT (DILENGKAPI SYSTEM LOG) ---
-
     public function exportMutation(Request $request)
     {
         if (!$request->has('start_date') && !$request->has('end_date') && !$request->has('category_id')) {
