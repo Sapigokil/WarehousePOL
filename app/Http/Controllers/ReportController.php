@@ -123,10 +123,10 @@ class ReportController extends Controller
      */
     private function getMaterialOutboundData($material, $isChild = false, $hasChildren = false, $startDate = null, $endDate = null)
     {
-        $query = OutStock::with(['outLog.outSppm.destination', 'stock'])
-            ->whereHas('stock', function($q) use ($material) {
-                $q->where('material_id', $material->id);
-            });
+        // PERBAIKAN: Hapus 'stock' dari with() dan ganti whereHas('stock') 
+        // menjadi pencarian langsung ke kolom material_id di tabel out_stocks
+        $query = OutStock::with(['outLog.outSppm.destination'])
+            ->where('material_id', $material->id);
 
         if ($startDate && $endDate) {
             $query->whereHas('outLog', function($q) use ($startDate, $endDate) {
@@ -135,7 +135,7 @@ class ReportController extends Controller
         }
 
         $transactions = $query->get()->sortByDesc(function($outStock) {
-            return $outStock->outLog->tgl_keluar ?? '';
+            return $outStock->outLog->tgl_keluar ?? $outStock->created_at;
         })->values();
 
         return [
