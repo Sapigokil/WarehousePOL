@@ -123,19 +123,19 @@ class ReportController extends Controller
      */
     private function getMaterialOutboundData($material, $isChild = false, $hasChildren = false, $startDate = null, $endDate = null)
     {
-        // PERBAIKAN: Hapus 'stock' dari with() dan ganti whereHas('stock') 
-        // menjadi pencarian langsung ke kolom material_id di tabel out_stocks
-        $query = OutStock::with(['outLog.outSppm.destination'])
+        // Ubah sumber query menjadi OutDetail dan relasi outSppm
+        $query = \App\Models\OutDetail::with(['outSppm.destination'])
             ->where('material_id', $material->id);
 
         if ($startDate && $endDate) {
-            $query->whereHas('outLog', function($q) use ($startDate, $endDate) {
-                $q->whereBetween('tgl_keluar', [$startDate, $endDate]);
+            $query->whereHas('outSppm', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('sppm_date', [$startDate, $endDate]);
             });
         }
 
-        $transactions = $query->get()->sortByDesc(function($outStock) {
-            return $outStock->outLog->tgl_keluar ?? $outStock->created_at;
+        // Sorting berdasarkan tanggal SPPM
+        $transactions = $query->get()->sortByDesc(function($outDetail) {
+            return $outDetail->outSppm->sppm_date ?? $outDetail->created_at;
         })->values();
 
         return [
@@ -144,7 +144,7 @@ class ReportController extends Controller
             'satuan'        => $material->satuan,
             'is_child'      => $isChild,
             'has_children'  => $hasChildren,
-            'total_out'     => $transactions->sum('qty_keluar'),
+            'total_out'     => $transactions->sum('target_qty'), // Menggunakan target_qty dari OutDetail
             'transactions'  => $transactions,
         ];
     }
@@ -574,7 +574,7 @@ class ReportController extends Controller
 
             echo '<tr style="background-color: #f8fafc; font-weight: bold; text-align: center;">';
             echo '<th style="width: 250px; padding: 5px;">Nama Materiil / Komoditas</th>';
-            echo '<th style="width: 120px; padding: 5px;">Tanggal Keluar Fisik</th>';
+            echo '<th style="width: 120px; padding: 5px;">Tanggal SPPM</th>';
             echo '<th style="width: 180px; padding: 5px;">Nomor SPPM</th>';
             echo '<th style="width: 200px; padding: 5px;">Tujuan Pengiriman</th>';
             echo '<th style="width: 150px; padding: 5px;">Rentang Seri Awal</th>';
@@ -626,11 +626,12 @@ class ReportController extends Controller
                             
                             if ($row['total_out'] > 0 && count($row['transactions']) > 0) {
                                 foreach ($row['transactions'] as $trx) {
-                                    $seriAwal = $trx->seri_awal ? ($trx->prefix ?? '') . str_pad($trx->seri_awal, 9, '0', STR_PAD_LEFT) : '-';
-                                    $seriAkhir = $trx->seri_akhir ? ($trx->prefix ?? '') . str_pad($trx->seri_akhir, 9, '0', STR_PAD_LEFT) : '-';
-                                    $tgl = \Carbon\Carbon::parse($trx->outLog->tgl_keluar ?? $trx->created_at)->format('Y-m-d');
-                                    $sppmNo = $trx->outLog->outSppm->sppm_no ?? '-';
-                                    $tujuan = $trx->outLog->outSppm->destination->name ?? 'Tujuan Tidak Diketahui';
+                                    // Variabel disesuaikan dengan sumber data OutDetail
+                                    $seriAwal = '-';
+                                    $seriAkhir = '-';
+                                    $tgl = \Carbon\Carbon::parse($trx->outSppm->sppm_date ?? $trx->created_at)->format('Y-m-d');
+                                    $sppmNo = $trx->outSppm->sppm_no ?? '-';
+                                    $tujuan = $trx->outSppm->destination->name ?? 'Tujuan Tidak Diketahui';
 
                                     echo '<tr>';
                                     echo '<td></td>';
@@ -639,7 +640,7 @@ class ReportController extends Controller
                                     echo '<td style="padding: 3px;">' . $tujuan . '</td>';
                                     echo '<td style="text-align: center; padding: 3px;">' . $seriAwal . '</td>';
                                     echo '<td style="text-align: center; padding: 3px;">' . $seriAkhir . '</td>';
-                                    echo '<td style="text-align: center; color: #e11d48; padding: 3px;">-' . $trx->qty_keluar . '</td>';
+                                    echo '<td style="text-align: center; color: #e11d48; padding: 3px;">-' . $trx->target_qty . '</td>'; // Diubah dari qty_keluar ke target_qty
                                     echo '</tr>';
                                 }
                             }
