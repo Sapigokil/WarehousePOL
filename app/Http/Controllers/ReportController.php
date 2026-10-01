@@ -123,19 +123,31 @@ class ReportController extends Controller
      */
     private function getMaterialOutboundData($material, $isChild = false, $hasChildren = false, $startDate = null, $endDate = null)
     {
-        // Ubah sumber query menjadi OutDetail dan relasi outSppm
-        $query = \App\Models\OutDetail::with(['outSppm.destination'])
+        // 1. HITUNG TOTAL KELUAR (SINKRON DENGAN MUTASI - MENGGUNAKAN OUT_DETAILS)
+        $totalOutQuery = \App\Models\OutDetail::where('material_id', $material->id);
+        
+        if ($startDate && $endDate) {
+            $totalOutQuery->whereHas('outSppm', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('sppm_date', [$startDate, $endDate]);
+            });
+        }
+        $totalOut = $totalOutQuery->sum('target_qty');
+
+        // 2. AMBIL BARIS TRANSAKSI (MENGGUNAKAN OUT_STOCKS UNTUK MENDAPATKAN NOMOR SERI)
+        // Load berlapis dari OutStock -> OutLog -> OutSppm -> Destination
+        $transactionsQuery = \App\Models\OutStock::with(['outLog.outSppm.destination'])
             ->where('material_id', $material->id);
 
         if ($startDate && $endDate) {
-            $query->whereHas('outSppm', function($q) use ($startDate, $endDate) {
+            // Filter tanggal disamakan menggunakan sppm_date
+            $transactionsQuery->whereHas('outLog.outSppm', function($q) use ($startDate, $endDate) {
                 $q->whereBetween('sppm_date', [$startDate, $endDate]);
             });
         }
 
         // Sorting berdasarkan tanggal SPPM
-        $transactions = $query->get()->sortByDesc(function($outDetail) {
-            return $outDetail->outSppm->sppm_date ?? $outDetail->created_at;
+        $transactions = $transactionsQuery->get()->sortByDesc(function($outStock) {
+            return $outStock->outLog->outSppm->sppm_date ?? $outStock->created_at;
         })->values();
 
         return [
@@ -144,8 +156,8 @@ class ReportController extends Controller
             'satuan'        => $material->satuan,
             'is_child'      => $isChild,
             'has_children'  => $hasChildren,
-            'total_out'     => $transactions->sum('target_qty'), // Menggunakan target_qty dari OutDetail
-            'transactions'  => $transactions,
+            'total_out'     => $totalOut,       // Diambil dari OutDetail
+            'transactions'  => $transactions,   // Diambil dari OutStock
         ];
     }
 
@@ -626,12 +638,16 @@ class ReportController extends Controller
                             
                             if ($row['total_out'] > 0 && count($row['transactions']) > 0) {
                                 foreach ($row['transactions'] as $trx) {
-                                    // Variabel disesuaikan dengan sumber data OutDetail
-                                    $seriAwal = '-';
-                                    $seriAkhir = '-';
-                                    $tgl = \Carbon\Carbon::parse($trx->outSppm->sppm_date ?? $trx->created_at)->format('Y-m-d');
-                                    $sppmNo = $trx->outSppm->sppm_no ?? '-';
-                                    $tujuan = $trx->outSppm->destination->name ?? 'Tujuan Tidak Diketahui';
+                                    // PENGAMBILAN DATA YANG AMAN (Fail-Safe) DARI OUT_STOCKS
+                                    $sppm = $trx->outLog->outSppm ?? null;
+                                    
+                                    $tgl = $sppm ? \Carbon\Carbon::parse($sppm->sppm_date)->format('Y-m-d') : \Carbon\Carbon::parse($trx->created_at)->format('Y-m-d');
+                                    $sppmNo = $sppm->sppm_no ?? '-';
+                                    $tujuan = $sppm->destination->name ?? 'Tujuan Tidak Diketahui';
+                                    
+                                    $seriAwal = $trx->seri_awal ? ($trx->prefix ?? '') . str_pad($trx->seri_awal, 9, '0', STR_PAD_LEFT) : '-';
+                                    $seriAkhir = $trx->seri_akhir ? ($trx->prefix ?? '') . str_pad($trx->seri_akhir, 9, '0', STR_PAD_LEFT) : '-';
+                                    $qtyKeluar = $trx->qty_keluar ?? 0;
 
                                     echo '<tr>';
                                     echo '<td></td>';
@@ -640,7 +656,7 @@ class ReportController extends Controller
                                     echo '<td style="padding: 3px;">' . $tujuan . '</td>';
                                     echo '<td style="text-align: center; padding: 3px;">' . $seriAwal . '</td>';
                                     echo '<td style="text-align: center; padding: 3px;">' . $seriAkhir . '</td>';
-                                    echo '<td style="text-align: center; color: #e11d48; padding: 3px;">-' . $trx->target_qty . '</td>'; // Diubah dari qty_keluar ke target_qty
+                                    echo '<td style="text-align: center; color: #e11d48; padding: 3px;">-' . $qtyKeluar . '</td>';
                                     echo '</tr>';
                                 }
                             }
