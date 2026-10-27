@@ -348,9 +348,12 @@
                                                                 <td class="border-start align-middle">
                                                                     @if($sppm->status == 'completed' && $childDetail->material->pakai_seri == 1 && $childDetail->target_qty > 0)
                                                                         @php
+                                                                            // PERBAIKAN: Menggunakan relasi stock untuk mencari material_id
                                                                             $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
                                                                                 $q->where('out_sppm_id', $sppm->id);
-                                                                            })->where('material_id', $childDetail->material_id)->get();
+                                                                            })->whereHas('stock', function($q) use ($childDetail) {
+                                                                                $q->where('material_id', $childDetail->material_id);
+                                                                            })->get();
                                                                         @endphp
                                                                         @forelse($outStocks as $st)
                                                                             @if($st->seri_awal || $st->seri_akhir)
@@ -387,9 +390,12 @@
                                                         <td class="border-start align-middle">
                                                             @if($sppm->status == 'completed' && $parentDetail->material->pakai_seri == 1 && $parentDetail->target_qty > 0)
                                                                 @php
+                                                                    // PERBAIKAN: Menggunakan relasi stock untuk mencari material_id
                                                                     $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
                                                                         $q->where('out_sppm_id', $sppm->id);
-                                                                    })->where('material_id', $parentDetail->material_id)->get();
+                                                                    })->whereHas('stock', function($q) use ($parentDetail) {
+                                                                        $q->where('material_id', $parentDetail->material_id);
+                                                                    })->get();
                                                                 @endphp
                                                                 @forelse($outStocks as $st)
                                                                     @if($st->seri_awal || $st->seri_akhir)
