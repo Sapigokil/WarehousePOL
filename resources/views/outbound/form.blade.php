@@ -221,12 +221,11 @@
                                             
                                             <!-- Render Serial dari Log OutStock -->
                                             @if($detail->material->pakai_seri == 1 && $detail->target_qty > 0)
+                                                
                                                 @php
-                                                    $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound){
-                                                        $q->where('out_sppm_id', $outbound->id);
-                                                    })->whereHas('stock', function($q) use ($detail){
-                                                        $q->where('material_id', $detail->material_id);
-                                                    })->get();
+                                                    $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
+                                                        $q->where('out_sppm_id', $sppm->id);
+                                                    })->where('material_id', $detail->material_id)->get();
                                                 @endphp
                                                 @if($outStocks->count() > 0)
                                                     <div class="mt-1">
