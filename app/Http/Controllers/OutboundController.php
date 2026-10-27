@@ -6,7 +6,7 @@ use App\Models\OutSppm;
 use App\Models\OutDetail;
 use App\Models\OutLog;
 use App\Models\OutStock;
-use App\Models\InStock; // Ditambahkan untuk kalkulasi Ledger
+use App\Models\InStock;
 use App\Models\Material;
 use App\Models\MaterialCategory;
 use App\Models\Destination;
@@ -138,7 +138,6 @@ class OutboundController extends Controller
         $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
 
         $modelTable = (new OutSppm)->getTable();
-        // HAPUS RELASI .stock YANG BIKIN ERROR
         $query = OutSppm::with(['destination', 'details.material', 'logs.outStocks', 'updater'])
                     ->select($modelTable . '.*');
 
@@ -316,7 +315,6 @@ class OutboundController extends Controller
                     'harga_total'  => $hargaTotal,
                 ]);
 
-                // LOGIKA LEDGER: Langsung insert log pengeluaran, tidak perlu loop baris stok!
                 if ($action === 'final') {
                     $inQty = InStock::where('material_id', $material->id)->sum('qty_received');
                     $outQty = OutStock::where('material_id', $material->id)->sum('qty_keluar');
@@ -581,7 +579,6 @@ class OutboundController extends Controller
 
         DB::beginTransaction();
         try {
-            // LEDGER: Hapus Log & OutStock cukup untuk mengembalikan nilai stok In-Out
             foreach ($sppm->logs as $log) {
                 $log->outStocks()->delete();
                 $log->delete();
@@ -673,7 +670,6 @@ class OutboundController extends Controller
 
     public function print($id)
     {
-        // HAPUS RELASI .stock YANG BIKIN ERROR
         $sppm = OutSppm::with([
             'destination', 
             'details.material', 
@@ -949,7 +945,6 @@ class OutboundController extends Controller
                             'harga_total'  => 0,
                         ]);
 
-                        // LOGIKA LEDGER: Cukup simpan 1 baris
                         OutStock::create([
                             'out_log_id'  => $log->id,
                             'material_id' => $material->id,
