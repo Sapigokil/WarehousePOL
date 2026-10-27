@@ -67,23 +67,21 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. DIUBAH KE LEDGER FISIK (SINGLE SOURCE OF TRUTH)
-        // Membaca langsung dari in_stocks dan out_stocks, BUKAN in_details/out_details
-        $inTotals = DB::table('in_stocks')
-            ->selectRaw('material_id, SUM(qty_received) as total')
+        // 1. DIKEMBALIKAN KE IN_DETAILS & OUT_DETAILS (Sesuai Konfirmasi Bahwa Ini Benar)
+        $inTotals = DB::table('in_details')
+            ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
             
-        $outTotals = DB::table('out_stocks')
-            ->selectRaw('material_id, SUM(qty_keluar) as total')
+        $outTotals = DB::table('out_details')
+            ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
 
         $materialsList = Material::with('children')->get();
 
-        // 2. Kalkulasi On-The-Fly Murni (Inbound Fisik - Outbound Fisik)
         $stockTotals = [];
         foreach ($materialsList as $mat) {
             $in = $inTotals[$mat->id] ?? 0;
@@ -113,6 +111,14 @@ class StockController extends Controller
         $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
         $outStocks = OutStock::where('material_id', $id)->get();
 
+        // 1. Sinkronisasi Total Stok dengan halaman Index (Menggunakan Dokumen)
+        $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
+        $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
+        $documentTotal = $inTotalBulk - $outTotalBulk;
+        
+        // Memaksa angka Total Header sama persis dengan index (mengatasi error sebelumnya)
+        $totalStock = $documentTotal;
+
         $normalStocks = collect();
         $mergedMinusRanges = [];
         $totalMinusQty = 0;
@@ -126,7 +132,6 @@ class StockController extends Controller
                     return ['start' => $o->seri_awal, 'end' => $o->seri_akhir];
                 })->toArray();
                 
-                // Kalkulasi Sisa Stok Seri Positif
                 foreach ($inForPrefix as $in) {
                     $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
                     
@@ -153,7 +158,6 @@ class StockController extends Controller
                     }
                 }
                 
-                // Kalkulasi Hutang Stok Seri Minus
                 $hutangRanges = $outForPrefix;
                 foreach ($inForPrefix as $in) {
                     $hutangRanges = $this->subtractRanges($hutangRanges, ['start' => $in->serial_start, 'end' => $in->serial_end]);
@@ -169,32 +173,47 @@ class StockController extends Controller
                     ];
                 }
             }
+
+            // Menjembatani dokumen (Index) dengan seri fisik.
+            // Jika ada selisih dokumen yang belum punya seri fisik, kita buatkan baris placeholder
+            $physicalQty = $normalStocks->sum('qty');
+            if ($documentTotal > $physicalQty) {
+                $unrealizedQty = $documentTotal - $physicalQty;
+                $normalStocks->push((object)[
+                    'id'             => 999999,
+                    'no_surat_masuk' => 'DOKUMEN SPPM',
+                    'tgl_masuk'      => date('Y-m-d'),
+                    'warehouse'      => (object)['name' => 'MENUNGGU UPDATE FISIK'],
+                    'warehouse_id'   => 1,
+                    'prefix'         => '-',
+                    'seri_awal'      => null,
+                    'seri_akhir'     => null,
+                    'qty'            => $unrealizedQty,
+                    'harga_satuan'   => 0,
+                    'keterangan'     => 'Stok dari dokumen SPPM yang nomor serinya belum di-import/diinput ke database.',
+                ]);
+            }
+
         } else {
-            // Kalkulasi Bulk / Satuan (Non-Seri) secara On-The-Fly menggunakan Ledger Fisik
-            $inTotalBulk = $inStocks->sum('qty_received');
-            $outTotalBulk = $outStocks->sum('qty_keluar');
-            
-            $available = $inTotalBulk - $outTotalBulk;
-            
-            if ($available > 0) {
+            if ($documentTotal > 0) {
                 $firstIn = $inStocks->last(); 
                 $price = $firstIn ? ($inDetails->get($firstIn->log->in_sppm_id)->harga_satuan ?? 0) : 0;
 
                 $normalStocks->push((object)[
                     'id'             => $firstIn->id ?? 1,
-                    'no_surat_masuk' => 'AKUMULASI GLOBAL',
+                    'no_surat_masuk' => 'AKUMULASI GLOBAL DOKUMEN',
                     'tgl_masuk'      => date('Y-m-d'),
                     'warehouse'      => (object)['name' => $firstIn->log->sppm->warehouse->name ?? 'GUDANG UTAMA'],
                     'warehouse_id'   => $firstIn->log->sppm->warehouse_id ?? 1,
                     'prefix'         => null,
                     'seri_awal'      => null,
                     'seri_akhir'     => null,
-                    'qty'            => $available,
+                    'qty'            => $documentTotal,
                     'harga_satuan'   => $price,
-                    'keterangan'     => 'Akumulasi Tersedia',
+                    'keterangan'     => 'Akumulasi Dokumen Tersedia',
                 ]);
-            } elseif ($available < 0) {
-                $totalMinusQty = $available;
+            } elseif ($documentTotal < 0) {
+                $totalMinusQty = $documentTotal;
             }
         }
 
@@ -220,8 +239,6 @@ class StockController extends Controller
             $normalStocks = $normalStocks->sortByDesc('tgl_masuk');
         }
 
-        $totalStock = $normalStocks->sum('qty');
-        
         if ($material->pakai_seri == 1 && $normalStocks->isNotEmpty()) {
             $normalStocks = $normalStocks->groupBy(function($item) {
                 $prefix = $item->prefix ?: 'TANPA PREFIX';
