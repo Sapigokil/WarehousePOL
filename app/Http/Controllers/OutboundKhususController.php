@@ -507,4 +507,5 @@ class OutboundKhususController extends Controller
 
         return redirect()->back()->with('success', "Migrasi selesai! Memproses $insertedDataCount Dokumen SPPM dengan Layout Kolom Baru.");
     }
+    
 }

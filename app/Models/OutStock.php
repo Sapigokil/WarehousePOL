@@ -29,4 +29,9 @@ class OutStock extends Model
     {
         return $this->belongsTo(Stock::class, 'stock_id');
     }
+
+    public function material(): BelongsTo
+    {
+        return $this->belongsTo(Material::class, 'material_id');
+    }
 }

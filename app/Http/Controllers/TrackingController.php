@@ -45,126 +45,118 @@ class TrackingController extends Controller
         $singleResults = [];
         $rangeResults = [];
 
-        // Deteksi SoftDeletes HANYA untuk menelusuri riwayat gudang asal pada barang keluar
-        $applyWithTrashed = function($q) {
-            if (in_array(SoftDeletes::class, class_uses_recursive($q->getModel()))) {
-                $q->withTrashed();
-            }
-        };
-
-        // Aturan Pencarian Prefix
+        // Aturan Pencarian Prefix untuk Stock
         $applyPrefixFilter = function($q) use ($prefix) {
             if ($prefix !== null) {
                 $q->where('prefix', $prefix);
             }
         };
 
-        // Aturan Pencarian Filter Material (Kategori + IsMain + Pakai Seri)
+        // Aturan Pencarian Prefix untuk OutStock
+        $applyPrefixFilterOut = function($q) use ($prefix) {
+            if ($prefix !== null) {
+                $q->where('prefix', $prefix);
+            }
+        };
+
+        // Aturan Pencarian Filter Material untuk Stock
         $applyMaterialFilters = function($q) use ($categoryId) {
             $q->whereHas('material', function($mQ) use ($categoryId) {
                 if ($categoryId) {
                     $mQ->where('material_category_id', $categoryId);
                 }
-                // Wajib material utama dan berseri
                 $mQ->where('pakai_seri', 1)->where('ismain', 1);
             });
         };
 
-        // Filter dropdown Kategori (Sama seperti di index)
+        // Aturan Pencarian Filter Material untuk OutStock
+        $applyMaterialFiltersOut = function($q) use ($categoryId) {
+            $q->whereHas('material', function($mQ) use ($categoryId) {
+                if ($categoryId) {
+                    $mQ->where('material_category_id', $categoryId);
+                }
+                $mQ->where('pakai_seri', 1)->where('ismain', 1);
+            });
+        };
+
+        // Filter dropdown Kategori
         $categories = MaterialCategory::whereHas('materials', function($q) {
             $q->where('pakai_seri', 1)->where('ismain', 1);
         })->get();
 
         if ($searchData['search_type'] === 'single') {
             
-            // ==========================================
-            // TAHAP 1: CARI DI GUDANG (STOCK - AVAILABLE)
-            // ==========================================
-            // PERBAIKAN: Hanya cari stok yang jumlahnya > 0 dan BUKAN yang terhapus
-            $stockQuery = Stock::with(['material', 'warehouse'])->where('qty', '>', 0);
-            $applyPrefixFilter($stockQuery);
-            $applyMaterialFilters($stockQuery); 
-            
-            $stocks = $stockQuery->where('seri_awal', '<=', $serialStart)
-                                 ->where('seri_akhir', '>=', $serialStart)
-                                 ->get();
+            // 1. Cari data Inbound secara mandiri
+            $inboundMatches = InStock::with(['log.sppm.warehouse', 'material'])
+                ->whereHas('material', function($q) use ($categoryId) {
+                    if ($categoryId) {
+                        $q->where('material_category_id', $categoryId);
+                    }
+                    $q->where('pakai_seri', 1)->where('ismain', 1);
+                })
+                ->when($prefix !== null, function($q) use ($prefix) {
+                    $q->where('serial_prefix', $prefix);
+                })
+                ->where('serial_start', '<=', $serialStart)
+                ->where('serial_end', '>=', $serialStart)
+                ->get();
 
-            foreach ($stocks as $stock) {
-                // Cari Inbound (Masuk) terkait
-                $inStock = InStock::with(['log.sppm', 'material'])
-                                  ->where('material_id', $stock->material_id)
-                                  ->where('serial_prefix', $stock->prefix)
-                                  ->where('serial_start', '<=', $serialStart)
-                                  ->where('serial_end', '>=', $serialStart)
-                                  ->first();
+            // 2. Cari data Outbound secara mandiri
+            $outboundMatches = OutStock::with(['outLog.outSppm.destination', 'material'])
+                ->whereHas('material', function($q) use ($categoryId) {
+                    if ($categoryId) {
+                        $q->where('material_category_id', $categoryId);
+                    }
+                    $q->where('pakai_seri', 1)->where('ismain', 1);
+                })
+                ->when($prefix !== null, function($q) use ($prefix) {
+                    $q->where('prefix', $prefix);
+                })
+                ->where('seri_awal', '<=', $serialStart)
+                ->where('seri_akhir', '>=', $serialStart)
+                ->get();
 
-                $singleResults[] = [
-                    'stock' => $stock,
-                    'inStock' => $inStock,
-                    'outStock' => null,
-                    'status' => 'available',
-                    'prefix' => $stock->prefix
-                ];
-            }
+            // Gabungkan hasilnya secara independen ke singleResults
+            // Ambil semua material_id unik yang ditemukan dari kedua sisi
+            $materialIds = $inboundMatches->pluck('material_id')
+                ->merge($outboundMatches->pluck('material_id'))
+                ->unique();
 
-            // ==========================================
-            // TAHAP 2: CARI DI LINI OUTBOUND (DISTRIBUTED)
-            // ==========================================
-            $outStockQuery = OutStock::with(['outLog.outSppm.destination', 'stock' => function($q) use ($applyWithTrashed) {
-                // Biarkan withTrashed di sini agar tetap tahu gudang asalnya meskipun stok aslinya sudah habis/dihapus
-                $applyWithTrashed($q);
-                $q->with(['material', 'warehouse']);
-            }]);
-
-            $outStockQuery->whereHas('stock', function($q) use ($applyPrefixFilter, $applyWithTrashed, $applyMaterialFilters) {
-                $applyWithTrashed($q);
-                $applyPrefixFilter($q);
-                $applyMaterialFilters($q); 
-            });
-
-            $outStocks = $outStockQuery->where('seri_awal', '<=', $serialStart)
-                                       ->where('seri_akhir', '>=', $serialStart)
-                                       ->get();
-
-            foreach ($outStocks as $outStock) {
-                $stock = $outStock->stock;
+            foreach ($materialIds as $matId) {
+                $inStock = $inboundMatches->where('material_id', $matId)->first();
+                $outStock = $outboundMatches->where('material_id', $matId)->first();
                 
-                // Cari Inbound (Masuk) terkait
-                $inStock = null;
-                if ($stock) {
-                    $inStock = InStock::with(['log.sppm', 'material'])
-                                      ->where('material_id', $stock->material_id)
-                                      ->where('serial_prefix', $stock->prefix)
-                                      ->where('serial_start', '<=', $serialStart)
-                                      ->where('serial_end', '>=', $serialStart)
-                                      ->first();
-                }
+                // Tentukan referensi material & prefix dari mana saja yang ada
+                $matRef = $inStock->material ?? optional($outStock)->material;
+                $prefRef = $inStock->serial_prefix ?? optional($outStock)->prefix;
+
+                // Cari data stok fisik gudang jika diperlukan untuk status
+                $stock = Stock::with('warehouse')
+                    ->where('material_id', $matId)
+                    ->where('prefix', $prefRef)
+                    ->where('seri_awal', '<=', $serialStart)
+                    ->where('seri_akhir', '>=', $serialStart)
+                    ->first();
+
+                $status = $outStock ? 'distributed' : 'available';
 
                 $singleResults[] = [
-                    'stock' => $stock,
-                    'inStock' => $inStock,
-                    'outStock' => $outStock,
-                    'status' => 'distributed',
-                    'prefix' => $stock ? $stock->prefix : null
+                    'stock'    => $stock,
+                    'inStock'  => $inStock,  // Bisa null jika inbound tidak ada
+                    'outStock' => $outStock, // Bisa null jika outbound tidak ada
+                    'status'   => $status,
+                    'prefix'   => $prefRef
                 ];
             }
-
         } else {
             // ==========================================
             // PENCARIAN RENTANG (RANGE) / MATRIX
             // ==========================================
             
             // A. Ambil data Outbound 
-            $outStockQuery = OutStock::with(['outLog.outSppm.destination', 'stock' => function($q) use ($applyWithTrashed) {
-                $applyWithTrashed($q);
-                $q->with('warehouse');
-            }]);
-
-            $outStockQuery->whereHas('stock', function($q) use ($applyPrefixFilter, $applyWithTrashed, $applyMaterialFilters) {
-                $applyWithTrashed($q);
-                $applyPrefixFilter($q);
-                $applyMaterialFilters($q); 
-            });
+            $outStockQuery = OutStock::with(['outLog.outSppm.destination', 'material']);
+            $applyPrefixFilterOut($outStockQuery);
+            $applyMaterialFiltersOut($outStockQuery);
 
             $outStocks = $outStockQuery->where('seri_awal', '<=', $serialEnd)
                                        ->where('seri_akhir', '>=', $serialStart)
@@ -173,6 +165,11 @@ class TrackingController extends Controller
             foreach ($outStocks as $os) {
                 $start = max($serialStart, $os->seri_awal);
                 $end = min($serialEnd, $os->seri_akhir);
+
+                $stockRef = Stock::with('warehouse')
+                                 ->where('material_id', $os->material_id)
+                                 ->where('prefix', $os->prefix)
+                                 ->first();
                 
                 $rangeResults[] = [
                     'prefix'=> $os->prefix,
@@ -180,7 +177,7 @@ class TrackingController extends Controller
                     'end'   => $end,
                     'qty'   => ($end - $start) + 1,
                     'status'=> 'distributed',
-                    'warehouse' => $os->stock->warehouse->name ?? 'Tidak Diketahui',
+                    'warehouse' => $stockRef->warehouse->name ?? 'Tidak Diketahui',
                     'destination' => $os->outLog->outSppm->destination->name ?? 'Tidak Diketahui',
                     'sppm_no' => $os->outLog->outSppm->sppm_no ?? 'Tidak Diketahui',
                     'sppm_id' => $os->outLog->outSppm->id ?? null,
@@ -188,14 +185,13 @@ class TrackingController extends Controller
             }
 
             // B. Ambil data Stock
-            // PERBAIKAN: Hanya cari stok yang jumlahnya > 0 dan BUKAN yang terhapus
             $stockQuery = Stock::with(['warehouse'])->where('qty', '>', 0);
             $applyPrefixFilter($stockQuery);
             $applyMaterialFilters($stockQuery); 
             
             $stocks = $stockQuery->where('seri_awal', '<=', $serialEnd)
-                                 ->where('seri_akhir', '>=', $serialStart)
-                                 ->get();
+                                   ->where('seri_akhir', '>=', $serialStart)
+                                   ->get();
 
             foreach ($stocks as $st) {
                 $start = max($serialStart, $st->seri_awal);

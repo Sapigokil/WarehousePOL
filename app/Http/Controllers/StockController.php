@@ -6,9 +6,12 @@ use App\Models\Stock;
 use App\Models\InStock;
 use App\Models\OutStock;
 use App\Models\InDetail;
+use App\Models\OutDetail;
+use App\Models\OutLog;
 use App\Models\Material;
 use App\Models\Warehouse;
 use App\Models\MaterialCategory;
+use App\Models\StockBuku; // Model baru ditambahkan
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -67,7 +70,7 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. DIKEMBALIKAN KE IN_DETAILS & OUT_DETAILS (Sesuai Konfirmasi Bahwa Ini Benar)
+        // Menggunakan dokumen In_Detail & Out_Detail sesuai kesepakatan Index
         $inTotals = DB::table('in_details')
             ->selectRaw('material_id, SUM(target_qty) as total')
             ->groupBy('material_id')
@@ -95,163 +98,254 @@ class StockController extends Controller
         return view('stocks.stock_index', compact('categories', 'stockTotals', 'search', 'category_filter', 'allCategories'));
     }
 
+    /**
+     * TAMPILAN SHOW BERDASARKAN TABEL STOCK_BUKU
+     */
     public function show(Request $request, $id)
     {
-        $material = Material::with('category')->findOrFail($id);
+        // Mutlak hanya ambil material yang pakai_seri = 1. Jika 0, akan otomatis ditolak (404 Not Found).
+        $material = Material::with('category')->where('pakai_seri', 1)->findOrFail($id);
         
         $search = $request->input('search');
-        $sortBy = $request->input('sort', 'tgl_masuk'); 
-        $sortOrder = $request->input('order', 'desc'); 
 
-        $inStocks = InStock::with(['log.sppm.warehouse'])
-                           ->where('material_id', $id)
-                           ->orderBy('created_at', 'asc')
-                           ->get();
-        
-        $inDetails = InDetail::where('material_id', $id)->get()->keyBy('in_sppm_id');
-        $outStocks = OutStock::where('material_id', $id)->get();
-
-        // 1. Sinkronisasi Total Stok dengan halaman Index (Menggunakan Dokumen)
-        $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
-        $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
-        $documentTotal = $inTotalBulk - $outTotalBulk;
-        
-        // Memaksa angka Total Header sama persis dengan index (mengatasi error sebelumnya)
-        $totalStock = $documentTotal;
-
-        $normalStocks = collect();
-        $mergedMinusRanges = [];
-        $totalMinusQty = 0;
-
-        if ($material->pakai_seri == 1) {
-            $prefixes = $inStocks->pluck('serial_prefix')->merge($outStocks->pluck('prefix'))->unique()->filter();
-            
-            foreach ($prefixes as $prefix) {
-                $inForPrefix = $inStocks->where('serial_prefix', $prefix);
-                $outForPrefix = $outStocks->where('prefix', $prefix)->map(function($o) {
-                    return ['start' => $o->seri_awal, 'end' => $o->seri_akhir];
-                })->toArray();
+        // Tarik data dari Buku Alokasi (StockBuku)
+        $bukuData = StockBuku::with([
+            'inSppm.warehouse',
+            'inSppm.details' => function($q) use ($id) {
+                $q->where('material_id', $id);
+            },
+            'outSppm'
+        ])
+        ->where('material_id', $id)
+        ->when($search, function($query) use ($search) {
+            $cleanNum = preg_replace('/[^0-9]/', '', $search);
+            $query->where(function($q) use ($search, $cleanNum) {
+                $q->whereHas('inSppm', function($sub) use ($search) {
+                    $sub->where('sppm_no', 'like', "%{$search}%");
+                })
+                ->orWhereHas('outSppm', function($sub) use ($search) {
+                    $sub->where('sppm_no', 'like', "%{$search}%");
+                })
+                ->orWhere('prefix', 'like', "%{$search}%");
                 
-                foreach ($inForPrefix as $in) {
-                    $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
-                    
-                    foreach ($outForPrefix as $out) {
-                        $availRanges = $this->subtractRanges($availRanges, $out);
-                    }
-                    
-                    $price = $inDetails->get($in->log->in_sppm_id)->harga_satuan ?? 0;
-                    
-                    foreach ($availRanges as $r) {
-                        $normalStocks->push((object)[
-                            'id'             => $in->id,
-                            'no_surat_masuk' => $in->log->sppm->sppm_no ?? 'UNKNOWN',
-                            'tgl_masuk'      => $in->log->receive_date ?? $in->created_at,
-                            'warehouse'      => $in->log->sppm->warehouse ?? (object)['name' => 'GUDANG UTAMA'],
-                            'warehouse_id'   => $in->log->sppm->warehouse_id ?? 1,
-                            'prefix'         => $prefix,
-                            'seri_awal'      => $r['start'],
-                            'seri_akhir'     => $r['end'],
-                            'qty'            => $r['end'] - $r['start'] + 1,
-                            'harga_satuan'   => $price,
-                            'keterangan'     => 'Sisa Inbound ' . ($in->log->sppm->sppm_no ?? ''),
-                        ]);
-                    }
+                if ($cleanNum !== '') {
+                    $q->orWhere(function($sub2) use ($cleanNum) {
+                        $sub2->where('seri_awal', '<=', (int)$cleanNum)
+                             ->where('seri_akhir', '>=', (int)$cleanNum);
+                    });
                 }
+            });
+        })
+        ->orderBy('prefix', 'asc')
+        ->orderBy('seri_awal', 'asc')
+        ->get();
+
+        $groupedInbounds = [];
+        $unserializedIns = [];
+        $orphanOuts      = [];
+        
+        $sumAvailable      = 0;
+        $sumUnserializedIn = 0;
+        $sumOrphanOut      = 0;
+
+        foreach ($bukuData as $buku) {
+            if ($buku->tipe_baris === 'UNSERIALIZED_IN') {
+                $unserializedIns[] = $buku;
+                $sumUnserializedIn += $buku->qty;
+            } elseif ($buku->tipe_baris === 'ORPHAN_OUT') {
+                $orphanOuts[] = $buku;
+                $sumOrphanOut += $buku->qty;
+            } else {
+                $sppmId = $buku->in_sppm_id ?? 0;
                 
-                $hutangRanges = $outForPrefix;
-                foreach ($inForPrefix as $in) {
-                    $hutangRanges = $this->subtractRanges($hutangRanges, ['start' => $in->serial_start, 'end' => $in->serial_end]);
-                }
-                
-                foreach ($hutangRanges as $h) {
-                    $qty = $h['end'] - $h['start'] + 1;
-                    $totalMinusQty -= $qty;
-                    $mergedMinusRanges[] = [
-                        'prefix' => $prefix,
-                        'awal'   => $h['start'],
-                        'akhir'  => $h['end']
+                if (!isset($groupedInbounds[$sppmId])) {
+                    // AMBIL DATA SERI INBOUND LANGSUNG DARI TABEL IN_STOCKS BERDASARKAN SPPM & MATERIAL
+                    $inStockInfo = InStock::where('material_id', $id)
+                        ->whereHas('log', function($q) use ($sppmId) {
+                            $q->where('in_sppm_id', $sppmId);
+                        })
+                        ->first();
+
+                    $groupedInbounds[$sppmId] = [
+                        'sppm'            => $buku->inSppm,
+                        'prefix'          => $inStockInfo->serial_prefix ?? null,
+                        'seri_awal'       => $inStockInfo->serial_start ?? null,
+                        'seri_akhir'      => $inStockInfo->serial_end ?? null,
+                        'total_in'        => 0,
+                        'total_used'      => 0,
+                        'total_available' => 0,
+                        'items_available' => [],
+                        'items_used'      => []
                     ];
                 }
-            }
-
-            // Menjembatani dokumen (Index) dengan seri fisik.
-            // Jika ada selisih dokumen yang belum punya seri fisik, kita buatkan baris placeholder
-            $physicalQty = $normalStocks->sum('qty');
-            if ($documentTotal > $physicalQty) {
-                $unrealizedQty = $documentTotal - $physicalQty;
-                $normalStocks->push((object)[
-                    'id'             => 999999,
-                    'no_surat_masuk' => 'DOKUMEN SPPM',
-                    'tgl_masuk'      => date('Y-m-d'),
-                    'warehouse'      => (object)['name' => 'MENUNGGU UPDATE FISIK'],
-                    'warehouse_id'   => 1,
-                    'prefix'         => '-',
-                    'seri_awal'      => null,
-                    'seri_akhir'     => null,
-                    'qty'            => $unrealizedQty,
-                    'harga_satuan'   => 0,
-                    'keterangan'     => 'Stok dari dokumen SPPM yang nomor serinya belum di-import/diinput ke database.',
-                ]);
-            }
-
-        } else {
-            if ($documentTotal > 0) {
-                $firstIn = $inStocks->last(); 
-                $price = $firstIn ? ($inDetails->get($firstIn->log->in_sppm_id)->harga_satuan ?? 0) : 0;
-
-                $normalStocks->push((object)[
-                    'id'             => $firstIn->id ?? 1,
-                    'no_surat_masuk' => 'AKUMULASI GLOBAL DOKUMEN',
-                    'tgl_masuk'      => date('Y-m-d'),
-                    'warehouse'      => (object)['name' => $firstIn->log->sppm->warehouse->name ?? 'GUDANG UTAMA'],
-                    'warehouse_id'   => $firstIn->log->sppm->warehouse_id ?? 1,
-                    'prefix'         => null,
-                    'seri_awal'      => null,
-                    'seri_akhir'     => null,
-                    'qty'            => $documentTotal,
-                    'harga_satuan'   => $price,
-                    'keterangan'     => 'Akumulasi Dokumen Tersedia',
-                ]);
-            } elseif ($documentTotal < 0) {
-                $totalMinusQty = $documentTotal;
-            }
-        }
-
-        if (!empty($search)) {
-            $cleanNum = preg_replace('/[^0-9]/', '', $search);
-            $cleanNum = $cleanNum !== '' ? (int)$cleanNum : null;
-            $prefixStr = trim(preg_replace('/[0-9.\-]/', '', $search));
-
-            $normalStocks = $normalStocks->filter(function($item) use ($search, $cleanNum, $prefixStr) {
-                if (stripos($item->no_surat_masuk, $search) !== false) return true;
-                if (stripos($item->prefix, $search) !== false) return true;
-                if ($cleanNum !== null && $item->seri_awal <= $cleanNum && $item->seri_akhir >= $cleanNum) {
-                    if (empty($prefixStr) || stripos($item->prefix, $prefixStr) !== false) return true;
+                
+                if ($buku->tipe_baris === 'USED') {
+                    $groupedInbounds[$sppmId]['items_used'][] = $buku;
+                    $groupedInbounds[$sppmId]['total_used'] += $buku->qty;
+                    $groupedInbounds[$sppmId]['total_in'] += $buku->qty;
+                } elseif ($buku->tipe_baris === 'AVAILABLE') {
+                    $groupedInbounds[$sppmId]['items_available'][] = $buku;
+                    $groupedInbounds[$sppmId]['total_available'] += $buku->qty;
+                    $groupedInbounds[$sppmId]['total_in'] += $buku->qty;
+                    
+                    $sumAvailable += $buku->qty;
                 }
-                return false;
-            })->values();
+            }
         }
 
-        $allowedSorts = ['no_surat_masuk', 'tgl_masuk', 'warehouse_id', 'seri_awal', 'qty'];
-        if (in_array($sortBy, $allowedSorts)) {
-            $normalStocks = $sortOrder == 'asc' ? $normalStocks->sortBy($sortBy) : $normalStocks->sortByDesc($sortBy);
-        } else {
-            $normalStocks = $normalStocks->sortByDesc('tgl_masuk');
-        }
-
-        if ($material->pakai_seri == 1 && $normalStocks->isNotEmpty()) {
-            $normalStocks = $normalStocks->groupBy(function($item) {
-                $prefix = $item->prefix ?: 'TANPA PREFIX';
-                $tahun = date('Y', strtotime($item->tgl_masuk));
-                return $prefix . ' - TAHUN ' . $tahun;
-            });
-        } elseif ($material->pakai_seri == 0 && $normalStocks->isNotEmpty()) {
-            $normalStocks = $normalStocks->groupBy('warehouse_id');
-        }
+        $totalTersedia = $sumAvailable + $sumUnserializedIn - $sumOrphanOut;
+        $needsSync = $bukuData->isEmpty();
 
         return view('stocks.stock_detail', compact(
-            'material', 'normalStocks', 'totalStock', 'totalMinusQty', 'mergedMinusRanges', 'sortBy', 'sortOrder'
+            'material', 'groupedInbounds', 'unserializedIns', 'orphanOuts', 'totalTersedia', 'needsSync', 'search'
         ));
+    }
+
+    /**
+     * FUNGSI SYNC / REBUILD BUKU ALOKASI
+     */
+    public function syncBuku(Request $request, $id)
+    {
+        // FILTER: Pastikan fungsi sync mutlak hanya beroperasi pada material berseri (pakai_seri = 1)
+        $material = Material::where('pakai_seri', 1)->findOrFail($id);
+        
+        $inStocks = InStock::with('log.sppm.warehouse')->where('material_id', $id)->get();
+        $outStocks = OutStock::with(['outLog.outSppm.details'])->where('material_id', $id)->get();
+
+        DB::beginTransaction();
+        try {
+            // Hapus mutlak semua buku pada material_id aktif ini sebelum dibuild ulang
+            StockBuku::where('material_id', $id)->delete();
+
+            foreach ($outStocks as $out) {
+                $outSppmId = $out->outLog->out_sppm_id ?? null;
+
+                if (!$out->seri_awal || !$out->seri_akhir) {
+                    // StockBuku::create([
+                    //     'material_id'  => $id, // Mutlak menggunakan $id material aktif
+                    //     'out_sppm_id'  => $outSppmId,
+                    //     'out_stock_id' => $out->id,
+                    //     'tipe_baris'   => 'ORPHAN_OUT',
+                    //     'prefix'       => $out->prefix,
+                    //     'seri_awal'    => $out->seri_awal,
+                    //     'seri_akhir'   => $out->seri_akhir,
+                    //     'qty'          => $out->qty_keluar,
+                    //     'keterangan'   => 'Pengeluaran tanpa nomor seri.'
+                    // ]);
+                    continue;
+                }
+
+                $unfulfilledOut = [['start' => $out->seri_awal, 'end' => $out->seri_akhir]];
+                $prefix = $out->prefix;
+
+                foreach ($inStocks as $in) {
+                    if ($in->serial_prefix !== $prefix) continue;
+                    if (!$in->serial_start) continue;
+
+                    $inSppmId = $in->log->in_sppm_id ?? null;
+
+                    $newUnfulfilledOut = [];
+                    foreach ($unfulfilledOut as $uo) {
+                        $overlapStart = max($uo['start'], $in->serial_start);
+                        $overlapEnd = min($uo['end'], $in->serial_end);
+
+                        if ($overlapStart <= $overlapEnd) {
+                            $qtyOverlap = ($overlapEnd - $overlapStart) + 1;
+                            
+                            StockBuku::create([
+                                'material_id'  => $id, // Mutlak menggunakan $id material aktif
+                                'in_sppm_id'   => $inSppmId,
+                                'in_stock_id'  => $in->id,
+                                'out_sppm_id'  => $outSppmId,
+                                'out_stock_id' => $out->id,
+                                'tipe_baris'   => 'USED',
+                                'prefix'       => $prefix,
+                                'seri_awal'    => $overlapStart,
+                                'seri_akhir'   => $overlapEnd,
+                                'qty'          => $qtyOverlap
+                            ]);
+
+                            if ($uo['start'] < $overlapStart) {
+                                $newUnfulfilledOut[] = ['start' => $uo['start'], 'end' => $overlapStart - 1];
+                            }
+                            if ($uo['end'] > $overlapEnd) {
+                                $newUnfulfilledOut[] = ['start' => $overlapEnd + 1, 'end' => $uo['end']];
+                            }
+                        } else {
+                            $newUnfulfilledOut[] = $uo;
+                        }
+                    }
+                    $unfulfilledOut = $newUnfulfilledOut;
+                    if (empty($unfulfilledOut)) break;
+                }
+
+                foreach ($unfulfilledOut as $uo) {
+                    $qtySisa = $uo['end'] - $uo['start'] + 1;
+                    StockBuku::create([
+                        'material_id'  => $id, // Mutlak menggunakan $id material aktif
+                        'out_sppm_id'  => $outSppmId,
+                        'out_stock_id' => $out->id,
+                        'tipe_baris'   => 'ORPHAN_OUT',
+                        'prefix'       => $prefix,
+                        'seri_awal'    => $uo['start'],
+                        'seri_akhir'   => $uo['end'],
+                        'qty'          => $qtySisa,
+                        'keterangan'   => 'SPPM Inbound (Asal-usul) tidak ditemukan.'
+                    ]);
+                }
+            }
+
+            foreach ($inStocks as $in) {
+                $inSppmId = $in->log->in_sppm_id ?? null;
+
+                if (!$in->serial_start || !$in->serial_end) {
+                    StockBuku::create([
+                        'material_id'  => $id, // Mutlak menggunakan $id material aktif
+                        'in_sppm_id'   => $inSppmId,
+                        'in_stock_id'  => $in->id,
+                        'tipe_baris'   => 'UNSERIALIZED_IN',
+                        'prefix'       => $in->serial_prefix,
+                        'qty'          => $in->qty_received,
+                        'keterangan'   => 'Inbound tanpa rincian nomor seri.'
+                    ]);
+                    continue;
+                }
+
+                $usedRanges = StockBuku::where('in_stock_id', $in->id)
+                    ->where('tipe_baris', 'USED')
+                    ->get()
+                    ->map(function($u) {
+                        return ['start' => $u->seri_awal, 'end' => $u->seri_akhir];
+                    })->toArray();
+
+                $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
+                
+                foreach ($usedRanges as $used) {
+                    $availRanges = $this->subtractRanges($availRanges, $used);
+                }
+
+                foreach ($availRanges as $ar) {
+                    $qtyAvail = $ar['end'] - $ar['start'] + 1;
+                    StockBuku::create([
+                        'material_id'  => $id, // Mutlak menggunakan $id material aktif
+                        'in_sppm_id'   => $inSppmId,
+                        'in_stock_id'  => $in->id,
+                        'tipe_baris'   => 'AVAILABLE',
+                        'prefix'       => $in->serial_prefix,
+                        'seri_awal'    => $ar['start'],
+                        'seri_akhir'   => $ar['end'],
+                        'qty'          => $qtyAvail
+                    ]);
+                }
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', 'Buku Alokasi berhasil disinkronisasi ulang secara sempurna.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Gagal menyinkronisasi: ' . $e->getMessage());
+        }
     }
 
     private function subtractRanges($ranges, $subtract)
@@ -340,4 +434,42 @@ class StockController extends Controller
     {
         return redirect()->back()->with('error', 'Sistem Buku Besar aktif. Penyesuaian stok harus dilakukan melalui menu Inbound / Outbound.');
     }
+
+    public function fixOutStockMaterialIdBySequence()
+{
+    DB::beginTransaction();
+    try {
+        $updatedCount = 0;
+        
+        $outLogs = OutLog::has('outStocks')->with(['outStocks', 'outSppm.details'])->get();
+
+        foreach ($outLogs as $log) {
+            $details = $log->outSppm?->details;
+            $stocks = $log->outStocks;
+
+            if (!$details || $details->isEmpty() || $stocks->isEmpty()) {
+                continue;
+            }
+
+            foreach ($stocks as $index => $stock) {
+                if (isset($details[$index])) {
+                    $correctMaterialId = $details[$index]->material_id;
+
+                    if ($stock->material_id !== $correctMaterialId) {
+                        $stock->material_id = $correctMaterialId;
+                        $stock->save();
+                        $updatedCount++;
+                    }
+                }
+            }
+        }
+
+        DB::commit();
+        return redirect()->back()->with('success', "Berhasil merapikan material_id pada $updatedCount data out_stock berdasarkan urutan waktu import.");
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return redirect()->back()->with('error', 'Gagal memperbarui data: ' . $e->getMessage());
+    }
+}
 }

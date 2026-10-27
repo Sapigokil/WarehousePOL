@@ -115,9 +115,13 @@
                         <input type="text" name="prefix" class="form-control custom-input text-center fw-bold" placeholder="Cth: J" value="{{ $searchData['prefix'] ?? '' }}">
                     </div>
 
-                    <div class="col-md-3">
+                    {{-- <div class="col-md-3">
                         <label class="field-label">Nomor Seri</label>
                         <input type="number" name="seri_awal" class="form-control custom-input text-center fw-bold text-primary" placeholder="Cth: 12345" required value="{{ $searchData['seri_awal'] ?? '' }}">
+                    </div> --}}
+                    <div class="col-md-3">
+                        <label class="field-label">Nomor Seri</label>
+                        <input type="text" name="seri_awal" class="form-control custom-input text-center fw-bold text-primary" placeholder="Cth: 006684001" required value="{{ $searchData['seri_awal'] ?? '' }}">
                     </div>
 
                     <div class="col-md-3 d-flex gap-2">
@@ -149,7 +153,14 @@
                                     
                                     <div class="d-flex flex-column align-items-start">
                                         <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem; text-transform: uppercase;">Materiil Ditemukan</div>
-                                        <h6 class="fw-bold mb-2 text-dark">{{ strtoupper($result['stock']->material->name ?? 'MATERIIL TIDAK DIKETAHUI') }}</h6>
+                                        <h6 class="fw-bold mb-2 text-dark">
+                                            {{ strtoupper(
+                                                $result['stock']->material->name 
+                                                ?? optional($result['inStock'])->material->name 
+                                                ?? optional($result['outStock'])->material->name 
+                                                ?? 'MATERIIL TIDAK DIKETAHUI'
+                                            ) }}
+                                        </h6>
                                         <div class="serial-box bg-white border">
                                             <i class="fa-solid fa-barcode me-2 text-secondary"></i> {!! $formatSeri($result['prefix'], $searchData['seri_awal']) !!}
                                         </div>
@@ -308,6 +319,18 @@
         typeRange.addEventListener('change', toggleSearchType);
 
         toggleSearchType();
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Sesuaikan selector dengan ID atau class input seri Anda, contoh: input[name="seri_awal"]
+        const seriInputs = document.querySelectorAll('input[name="seri_awal"], input[name="seri_akhir"]');
+
+        seriInputs.forEach(input => {
+            input.addEventListener('input', function (e) {
+                // Hapus semua karakter selain angka (termasuk titik)
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        });
     });
 </script>
 @endpush
