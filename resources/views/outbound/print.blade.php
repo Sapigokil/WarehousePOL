@@ -253,11 +253,9 @@
                                         
                                         @if($childDetail->material->pakai_seri == 1 && $childDetail->target_qty > 0)
                                             @php
-                                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($sppm) {
-                                                    $q->where('out_sppm_id', $sppm->id);
-                                                })->whereHas('stock', function($q) use ($childDetail) {
-                                                    $q->where('material_id', $childDetail->material_id);
-                                                })->get();
+                                                $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound) {
+                                                    $q->where('out_sppm_id', $outbound->id);
+                                                })->where('material_id', $detail->material_id)->get();
                                             @endphp
                                             @foreach($outStocks as $st)
                                                 @if($st->seri_awal !== null)

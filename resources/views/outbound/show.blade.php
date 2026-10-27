@@ -160,9 +160,7 @@
                                                 @php
                                                     $outStocks = App\Models\OutStock::whereHas('outLog', function($q) use ($outbound) {
                                                         $q->where('out_sppm_id', $outbound->id);
-                                                    })->whereHas('stock', function($q) use ($childDetail) {
-                                                        $q->where('material_id', $childDetail->material_id);
-                                                    })->get();
+                                                    })->where('material_id', $detail->material_id)->get();
                                                 @endphp
                                                 @forelse($outStocks as $st)
                                                     @if($st->seri_awal || $st->seri_akhir)
