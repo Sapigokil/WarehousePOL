@@ -9,7 +9,6 @@ use App\Models\OutSppm;
 use App\Models\OutDetail;
 use App\Models\OutLog;
 use App\Models\OutStock;
-use App\Models\Stock;
 use App\Models\Destination;
 use App\Models\Warehouse;
 use Illuminate\Support\Facades\DB;
@@ -177,27 +176,24 @@ class OutboundKhususController extends Controller
         $sheet->setCellValue('E3', 'V');
         $sheet->setCellValue('F3', '2024-05-24');
 
-        $colDummy = 7; // Dimulai dari G (Setelah F)
+        $colDummy = 7; 
         foreach ($flatMaterials as $mat) {
-            // QTY
             $sheet->setCellValue($colString($colDummy) . '3', '1000'); 
             $colDummy++;
             
-            // HURUF
             if ($mat->ismain == 1) {
                 $sheet->setCellValue($colString($colDummy) . '3', 'H'); 
                 $colDummy++;
             }
             
-            // SERI
             if ($mat->pakai_seri == 1) {
-                $sheet->setCellValue($colString($colDummy) . '3', 'A'); // CODE
+                $sheet->setCellValue($colString($colDummy) . '3', 'A'); 
                 $colDummy++;
                 for ($i = 1; $i <= $maxSeriCount; $i++) {
                     if ($i == 1) {
-                        $sheet->setCellValue($colString($colDummy) . '3', '29001'); // AWAL
+                        $sheet->setCellValue($colString($colDummy) . '3', '29001'); 
                         $colDummy++;
-                        $sheet->setCellValue($colString($colDummy) . '3', '30000'); // AKHIR
+                        $sheet->setCellValue($colString($colDummy) . '3', '30000'); 
                         $colDummy++;
                     } else {
                         $sheet->setCellValue($colString($colDummy) . '3', ''); 
@@ -208,7 +204,6 @@ class OutboundKhususController extends Controller
                 }
             }
             
-            // HARGA
             if ($mat->is_harga == 1) {
                 $sheet->setCellValue($colString($colDummy) . '3', '32838'); 
                 $colDummy++;
@@ -217,28 +212,20 @@ class OutboundKhususController extends Controller
             }
         }
 
-        // Bamat Data Dummy
         $sheet->setCellValue($colString($colDummy) . '3', 'ENDRO SUSILO'); $colDummy++;
         $sheet->setCellValue($colString($colDummy) . '3', 'BRIPKA/ 86041391'); $colDummy++;
         $sheet->setCellValue($colString($colDummy) . '3', 'BAMAT POLRESTA BANYUMAS');
         
         $maxColAlpha = $colString($colDummy);
 
-        // =================================================================
-        // AUTO SIZE COLUMNS & BORDERS
-        // =================================================================
         $sheet->getStyle("A1:{$maxColAlpha}3")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
         
         foreach (range(1, $colDummy) as $columnID) {
             $sheet->getColumnDimension($colString($columnID))->setAutoSize(true);
         }
         
-        // Aktifkan Wrap Text untuk baris Header yang ada newline (\n)
         $sheet->getStyle("A1:F1")->getAlignment()->setWrapText(true);
 
-        // =================================================================
-        // OUTPUT FILE MURNI XLSX
-        // =================================================================
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $fileName = 'Template_Outbound_' . str_replace(' ', '_', strtoupper($category->name)) . '_' . date('Ymd') . '.xlsx';
 
@@ -268,9 +255,6 @@ class OutboundKhususController extends Controller
         $file = $request->file('file_excel');
         $category = MaterialCategory::findOrFail($categoryId);
 
-        $defaultWarehouse = Warehouse::first();
-        $defaultWarehouseId = $defaultWarehouse ? $defaultWarehouse->id : 1; 
-
         $topLevelMaterials = Material::with(['children' => function($q) {
                 $q->orderBy('nomor_urut', 'asc');
             }])
@@ -283,7 +267,6 @@ class OutboundKhususController extends Controller
             return redirect()->back()->with('error', 'Kategori ini tidak memiliki daftar material.');
         }
 
-        // Susun material sama persis seperti saat Export
         $flatMaterials = collect();
         foreach ($topLevelMaterials as $parent) {
             if ($parent->children->count() > 0) {
@@ -296,15 +279,8 @@ class OutboundKhususController extends Controller
             }
         }
 
-        // --- ATURAN RENTANG SERI (MENYAMAKAN EXPORT) ---
-        $isSTNK = stripos($category->name, 'STNK') !== false;
-        // $maxSeriCount = $isSTNK ? 20 : 1;
         $maxSeriCount = 1;
 
-        // =================================================================
-        // PEMETAAN INDEX KOLOM DINAMIS (0-BASED INDEX)
-        // =================================================================
-        // Col 0:NO, 1:POLRES, 2:KESATUAN, 3:NO SPPM, 4:BLN, 5:TGL
         $currentCol = 6; 
         $colMap = [];
         $lastParentHargaCol = null;
@@ -338,12 +314,11 @@ class OutboundKhususController extends Controller
 
             if ($mat->is_harga == 1) {
                 $map['harga_satuan'] = $currentCol++;
-                $currentCol++; // Skip JUMLAH HARGA (Kita hitung ulang otomatis di sistem)
+                $currentCol++; 
                 if ($isParent) {
                     $lastParentHargaCol = $map['harga_satuan'];
                 }
             } else {
-                // Jika Child tidak punya is_harga, warisi kolom harga milik Parent-nya
                 if (!is_null($mat->parent_id)) {
                     $map['fallback_harga_satuan'] = $lastParentHargaCol;
                 }
@@ -352,14 +327,12 @@ class OutboundKhususController extends Controller
             $colMap[] = $map;
         }
 
-        // Index untuk Blok Bamat di ujung tabel
         $colNamaBamat = $currentCol++;
         $colPangkat   = $currentCol++;
         $colJabatan   = $currentCol++;
 
         try {
             $spreadsheet = IOFactory::load($file->getPathname());
-            // returnCellRef = false membuat array menggunakan index angka (0-based)
             $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false); 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Sistem gagal membaca file Excel: ' . $e->getMessage());
@@ -370,15 +343,13 @@ class OutboundKhususController extends Controller
         DB::beginTransaction();
         try {
             foreach ($rows as $index => $row) {
-                if ($index < 2) continue; // Skip Baris 1 & 2 (Header)
+                if ($index < 2) continue; 
                 
                 $tujuanStr   = trim($row[2] ?? '');
                 $noSppmRaw   = trim($row[3] ?? '');
                 
-                // Skip baris jika kosong
                 if (empty($noSppmRaw) || empty($tujuanStr)) continue; 
                 
-                // Skip Baris Dummy Contoh (No SPPM 933 Polresta Banyumas)
                 if ($noSppmRaw == '933' && str_contains(strtoupper($tujuanStr), 'BANYUMAS')) continue;
 
                 $blnSppm     = trim($row[4] ?? '');
@@ -389,7 +360,6 @@ class OutboundKhususController extends Controller
 
                 if (!$tglSppmStr) continue;
 
-                // --- LOGIKA TRANSLATE TANGGAL ---
                 if (is_numeric($tglSppmStr)) {
                     $tglSppm = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($tglSppmStr)->format('Y-m-d');
                 } else {
@@ -441,7 +411,6 @@ class OutboundKhususController extends Controller
                     'keterangan'   => 'Import & Realisasi Otomatis',
                 ]);
 
-                // PROSES SETIAP BLOK MATERIIL
                 foreach ($colMap as $map) {
                     $mat = $map['material'];
                     $qtyRaw = $row[$map['qty']] ?? 0;
@@ -449,7 +418,6 @@ class OutboundKhususController extends Controller
 
                     if ($targetQty <= 0) continue;
 
-                    // Ambil Prefix (Prioritas: Kolom CODE, lalu HURUF)
                     $prefix = null;
                     if ($map['code']) {
                         $prefix = strtoupper(preg_replace('/[^a-zA-Z]/', '', $row[$map['code']] ?? ''));
@@ -458,18 +426,15 @@ class OutboundKhususController extends Controller
                         $prefix = strtoupper(preg_replace('/[^a-zA-Z]/', '', $row[$map['huruf']] ?? ''));
                     }
 
-                    // Ambil Harga
                     $hargaSatuan = 0;
                     $hargaTotal = 0;
                     
-                    // Cek apakah punya kolom harga sendiri ATAU mewarisi harga dari Parent
                     $colHargaToRead = $map['harga_satuan'] ?? $map['fallback_harga_satuan'];
                     if ($colHargaToRead !== null) {
                         $hargaSatuan = (int) str_replace(['.', ','], '', $row[$colHargaToRead] ?? 0);
                         $hargaTotal = $hargaSatuan * $targetQty;
                     }
 
-                    // Ambil Seri
                     $seriesList = [];
                     $totalSeriQty = 0;
                     if ($mat->pakai_seri == 1 && !empty($map['series'])) {
@@ -490,7 +455,7 @@ class OutboundKhususController extends Controller
 
                     $isSerialized = ($mat->pakai_seri == 1 && !empty($seriesList));
                     if ($isSerialized) {
-                        $targetQty = $totalSeriQty; // Timpa QTY dengan perhitungan fisik seri
+                        $targetQty = $totalSeriQty; 
                         if ($hargaSatuan > 0) {
                             $hargaTotal = $hargaSatuan * $targetQty;
                         }
@@ -504,169 +469,27 @@ class OutboundKhususController extends Controller
                         'harga_total'  => $hargaTotal,
                     ]);
 
-                    // LOGIKA POTONG STOK
+                    // SIMPAN LANGSUNG KE OUT_STOCK MENGGUNAKAN MATERIAL_ID TANPA STOCK_ID
                     if ($isSerialized) {
                         foreach ($seriesList as $seri) {
-                            $unfulfilled = [['awal' => $seri['awal'], 'akhir' => $seri['akhir']]];
-                            
-                            $queryStock = Stock::where('material_id', $mat->id)
-                                               ->where('qty', '>', 0)
-                                               ->where('seri_awal', '<=', $seri['akhir'])
-                                               ->where('seri_akhir', '>=', $seri['awal']);
-                            
-                            if ($prefix) {
-                                $queryStock->where('prefix', $prefix);
-                            }
-                            
-                            $availableStocks = $queryStock->orderBy('tgl_masuk', 'asc')->lockForUpdate()->get();
-                            
-                            foreach ($availableStocks as $stock) {
-                                if (empty($unfulfilled)) break;
-                                
-                                $newUnfulfilled = [];
-                                $stockConsumed = false;
-                                
-                                foreach ($unfulfilled as $u) {
-                                    if ($stockConsumed) { 
-                                        $newUnfulfilled[] = $u; 
-                                        continue; 
-                                    }
-                                    
-                                    $overlapAwal = max($stock->seri_awal, $u['awal']);
-                                    $overlapAkhir = min($stock->seri_akhir, $u['akhir']);
-                                    
-                                    if ($overlapAwal <= $overlapAkhir) {
-                                        $stockConsumed = true; 
-                                        $overlapQty = $overlapAkhir - $overlapAwal + 1;
-                                        
-                                        OutStock::create([
-                                            'out_log_id' => $log->id,
-                                            'stock_id'   => $stock->id,
-                                            'qty_keluar' => $overlapQty,
-                                            'prefix'     => $stock->prefix,
-                                            'seri_awal'  => $overlapAwal,
-                                            'seri_akhir' => $overlapAkhir,
-                                        ]);
-                                        
-                                        if ($stock->seri_awal < $overlapAwal) {
-                                            $leftStock = $stock->replicate();
-                                            $leftStock->qty = ($overlapAwal - 1) - $stock->seri_awal + 1;
-                                            $leftStock->seri_akhir = $overlapAwal - 1;
-                                            $leftStock->save();
-                                        }
-                                        
-                                        if ($stock->seri_akhir > $overlapAkhir) {
-                                            $rightStock = $stock->replicate();
-                                            $rightStock->qty = $stock->seri_akhir - ($overlapAkhir + 1) + 1;
-                                            $rightStock->seri_awal = $overlapAkhir + 1;
-                                            $rightStock->save();
-                                        }
-                                        
-                                        $stock->qty = 0;
-                                        $stock->seri_awal = null;
-                                        $stock->seri_akhir = null;
-                                        $stock->save();
-                                        
-                                        if ($u['awal'] < $overlapAwal) {
-                                            $newUnfulfilled[] = ['awal' => $u['awal'], 'akhir' => $overlapAwal - 1];
-                                        }
-                                        if ($u['akhir'] > $overlapAkhir) {
-                                            $newUnfulfilled[] = ['awal' => $overlapAkhir + 1, 'akhir' => $u['akhir']];
-                                        }
-                                    } else {
-                                        $newUnfulfilled[] = $u;
-                                    }
-                                }
-                                $unfulfilled = $newUnfulfilled;
-                            }
-                            
-                            // JIKA STOK MINUS (SERI)
-                            foreach ($unfulfilled as $u) {
-                                $missingQty = $u['akhir'] - $u['awal'] + 1;
-                                $negStock = Stock::create([
-                                    'no_surat_masuk' => 'MINUS-' . $currentSppmNo, 
-                                    'material_id'    => $mat->id,
-                                    'warehouse_id'   => $defaultWarehouseId, 
-                                    'qty'            => -$missingQty,
-                                    'prefix'         => $prefix,
-                                    'seri_awal'      => $u['awal'],
-                                    'seri_akhir'     => $u['akhir'],
-                                    'tgl_masuk'      => $tglSppm,
-                                    'harga_satuan'   => $hargaSatuan,
-                                    'total_harga'    => -($missingQty * $hargaSatuan),
-                                    'status'         => 'Minus',
-                                    'keterangan'     => 'Stok Minus Otomatis (Migrasi)',
-                                ]);
-                                
-                                OutStock::create([
-                                    'out_log_id' => $log->id,
-                                    'stock_id'   => $negStock->id,
-                                    'qty_keluar' => $missingQty,
-                                    'prefix'     => $prefix,
-                                    'seri_awal'  => $u['awal'],
-                                    'seri_akhir' => $u['akhir'],
-                                ]);
-                            }
+                            OutStock::create([
+                                'out_log_id'  => $log->id,
+                                'material_id' => $mat->id,
+                                'qty_keluar'  => $seri['qty'],
+                                'prefix'      => $prefix,
+                                'seri_awal'   => $seri['awal'],
+                                'seri_akhir'  => $seri['akhir'],
+                            ]);
                         }
-
                     } else {
-                        // LOGIKA STOK FIFO (BULK)
-                        $sisaKebutuhan = $targetQty;
-                        $queryStock = Stock::where('material_id', $mat->id)
-                                           ->where('qty', '>', 0);
-                        
-                        if ($prefix) {
-                            $queryStock->where('prefix', $prefix);
-                        }
-                                           
-                        $availableStocks = $queryStock->orderBy('tgl_masuk', 'asc')->lockForUpdate()->get();
-                        
-                        foreach ($availableStocks as $stock) {
-                            if ($sisaKebutuhan <= 0) break;
-                            
-                            $qtyAmbil = min($stock->qty, $sisaKebutuhan);
-                            
-                            OutStock::create([
-                                'out_log_id' => $log->id,
-                                'stock_id'   => $stock->id,
-                                'qty_keluar' => $qtyAmbil,
-                                'prefix'     => $stock->prefix,
-                                'seri_awal'  => null,
-                                'seri_akhir' => null,
-                            ]);
-                            
-                            $stock->qty -= $qtyAmbil;
-                            $stock->save();
-                            
-                            $sisaKebutuhan -= $qtyAmbil;
-                        }
-                        
-                        // JIKA STOK MINUS (FIFO)
-                        if ($sisaKebutuhan > 0) {
-                            $negStock = Stock::create([
-                                'no_surat_masuk' => 'MINUS-' . $currentSppmNo,
-                                'material_id'    => $mat->id,
-                                'warehouse_id'   => $defaultWarehouseId, 
-                                'qty'            => -$sisaKebutuhan,
-                                'prefix'         => $prefix,
-                                'seri_awal'      => null,
-                                'seri_akhir'     => null,
-                                'tgl_masuk'      => $tglSppm,
-                                'harga_satuan'   => $hargaSatuan,
-                                'total_harga'    => -($sisaKebutuhan * $hargaSatuan),
-                                'status'         => 'Minus',
-                                'keterangan'     => 'Stok Minus Otomatis (Migrasi)',
-                            ]);
-                            
-                            OutStock::create([
-                                'out_log_id' => $log->id,
-                                'stock_id'   => $negStock->id,
-                                'qty_keluar' => $sisaKebutuhan,
-                                'prefix'     => $prefix,
-                                'seri_awal'  => null,
-                                'seri_akhir' => null,
-                            ]);
-                        }
+                        OutStock::create([
+                            'out_log_id'  => $log->id,
+                            'material_id' => $mat->id,
+                            'qty_keluar'  => $targetQty,
+                            'prefix'      => $prefix,
+                            'seri_awal'   => null,
+                            'seri_akhir'  => null,
+                        ]);
                     } 
                 } 
                 $insertedDataCount++;
