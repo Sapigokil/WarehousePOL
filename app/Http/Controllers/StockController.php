@@ -67,22 +67,23 @@ class StockController extends Controller
         })
         ->orderBy('nomor_urut', 'asc')->get();
 
-        // 1. DIKEMBALIKAN KE IN_DETAILS: Ambil Total Inbound & Outbound persis seperti versi yang benar
-        $inTotals = DB::table('in_details')
-            ->selectRaw('material_id, SUM(target_qty) as total')
+        // 1. DIUBAH KE LEDGER FISIK (SINGLE SOURCE OF TRUTH)
+        // Membaca langsung dari in_stocks dan out_stocks, BUKAN in_details/out_details
+        $inTotals = DB::table('in_stocks')
+            ->selectRaw('material_id, SUM(qty_received) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
             
-        $outTotals = DB::table('out_details')
-            ->selectRaw('material_id, SUM(target_qty) as total')
+        $outTotals = DB::table('out_stocks')
+            ->selectRaw('material_id, SUM(qty_keluar) as total')
             ->groupBy('material_id')
             ->pluck('total', 'material_id')
             ->toArray();
 
         $materialsList = Material::with('children')->get();
 
-        // 2. Kalkulasi Murni tanpa penyesuaian (Sesuai instruksi Anda)
+        // 2. Kalkulasi On-The-Fly Murni (Inbound Fisik - Outbound Fisik)
         $stockTotals = [];
         foreach ($materialsList as $mat) {
             $in = $inTotals[$mat->id] ?? 0;
@@ -125,6 +126,7 @@ class StockController extends Controller
                     return ['start' => $o->seri_awal, 'end' => $o->seri_akhir];
                 })->toArray();
                 
+                // Kalkulasi Sisa Stok Seri Positif
                 foreach ($inForPrefix as $in) {
                     $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
                     
@@ -132,14 +134,14 @@ class StockController extends Controller
                         $availRanges = $this->subtractRanges($availRanges, $out);
                     }
                     
-                    $price = $inDetails->get($in->log->sppm_id)->harga_satuan ?? 0;
+                    $price = $inDetails->get($in->log->in_sppm_id)->harga_satuan ?? 0;
                     
                     foreach ($availRanges as $r) {
                         $normalStocks->push((object)[
                             'id'             => $in->id,
                             'no_surat_masuk' => $in->log->sppm->sppm_no ?? 'UNKNOWN',
                             'tgl_masuk'      => $in->log->receive_date ?? $in->created_at,
-                            'warehouse'      => $in->log->sppm->warehouse,
+                            'warehouse'      => $in->log->sppm->warehouse ?? (object)['name' => 'GUDANG UTAMA'],
                             'warehouse_id'   => $in->log->sppm->warehouse_id ?? 1,
                             'prefix'         => $prefix,
                             'seri_awal'      => $r['start'],
@@ -151,6 +153,7 @@ class StockController extends Controller
                     }
                 }
                 
+                // Kalkulasi Hutang Stok Seri Minus
                 $hutangRanges = $outForPrefix;
                 foreach ($inForPrefix as $in) {
                     $hutangRanges = $this->subtractRanges($hutangRanges, ['start' => $in->serial_start, 'end' => $in->serial_end]);
@@ -166,16 +169,16 @@ class StockController extends Controller
                     ];
                 }
             }
-
         } else {
-            $inTotalBulk = DB::table('in_details')->where('material_id', $id)->sum('target_qty');
-            $outTotalBulk = DB::table('out_details')->where('material_id', $id)->sum('target_qty');
+            // Kalkulasi Bulk / Satuan (Non-Seri) secara On-The-Fly menggunakan Ledger Fisik
+            $inTotalBulk = $inStocks->sum('qty_received');
+            $outTotalBulk = $outStocks->sum('qty_keluar');
             
             $available = $inTotalBulk - $outTotalBulk;
             
             if ($available > 0) {
                 $firstIn = $inStocks->last(); 
-                $price = $firstIn ? ($inDetails->get($firstIn->log->sppm_id)->harga_satuan ?? 0) : 0;
+                $price = $firstIn ? ($inDetails->get($firstIn->log->in_sppm_id)->harga_satuan ?? 0) : 0;
 
                 $normalStocks->push((object)[
                     'id'             => $firstIn->id ?? 1,
