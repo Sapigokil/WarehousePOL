@@ -57,25 +57,30 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="fw-bold text-dark mb-1">Selamat Datang, {{ Auth::user()->name }}! 👋</h4>
-            <p class="text-muted small mb-0">Ini adalah ringkasan operasional dan pemantauan stok gudang Anda hari ini.</p>
+            <p class="text-muted small mb-0">Ringkasan operasional dan pemantauan stok gudang terdaftar hari ini.</p>
         </div>
+        
+        {{-- TOMBOL SHORTCUT SPPM MASUK & SPPM KELUAR --}}
         <div class="d-flex gap-2">
+            <a href="{{ route('inbound.create') }}" class="btn btn-sm btn-outline-success fw-bold px-3 shadow-sm">
+                <i class="fa-solid fa-download me-1"></i> SPPM Masuk
+            </a>
             <a href="{{ route('outbounds.create') }}" class="btn btn-sm btn-theme fw-bold px-3 shadow-sm">
-                <i class="fa-solid fa-plus me-1"></i> SPPM Outbound
+                <i class="fa-solid fa-upload me-1"></i> SPPM Keluar
             </a>
         </div>
     </div>
 
     {{-- KARTU RINGKASAN (KPI CARDS) --}}
     <div class="row g-3 mb-4">
-        {{-- Total Komoditas --}}
+        {{-- Total Komoditas Terpantau --}}
         <div class="col-md-3">
             <div class="card kpi-card shadow-sm p-3" style="border-left: 4px solid #01a9ac !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
-                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Total Komoditas</h6>
+                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Material Dipantau</h6>
                         <h3 class="fw-bold mb-0 text-dark">{{ number_format($totalMaterialCount, 0, ',', '.') }}</h3>
-                        <small class="text-muted">Item Terdaftar</small>
+                        <small class="text-muted">Jenis Material</small>
                     </div>
                     <div class="kpi-icon bg-info bg-opacity-10 text-info">
                         <i class="fa-solid fa-boxes-stacked"></i>
@@ -105,9 +110,9 @@
             <div class="card kpi-card shadow-sm p-3" style="border-left: 4px solid #e74c3c !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
-                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Depleksi Kritis (<3 Bln)</h6>
+                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Depleksi Kritis</h6>
                         <h3 class="fw-bold mb-0 text-danger">{{ $criticalDepletionCount }}</h3>
-                        <small class="text-danger fw-semibold">Terancam Habis</small>
+                        <small class="text-danger fw-semibold">< 3 Bulan Terakhir</small>
                     </div>
                     <div class="kpi-icon bg-danger bg-opacity-10 text-danger">
                         <i class="fa-solid fa-hourglass-half"></i>
@@ -116,14 +121,14 @@
             </div>
         </div>
 
-        {{-- Inbound Draft / Pending --}}
+        {{-- SPPM Masuk Process --}}
         <div class="col-md-3">
             <div class="card kpi-card shadow-sm p-3" style="border-left: 4px solid #2ecc71 !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
-                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Inbound Process</h6>
+                        <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">SPPM Masuk Proses</h6>
                         <h3 class="fw-bold mb-0 text-dark">{{ $pendingInboundCount }}</h3>
-                        <small class="text-success fw-semibold">Dokumen Pending</small>
+                        <small class="text-success fw-semibold">Dokumen Draft</small>
                     </div>
                     <div class="kpi-icon bg-success bg-opacity-10 text-success">
                         <i class="fa-solid fa-truck-ramp-box"></i>
@@ -133,14 +138,14 @@
         </div>
     </div>
 
-    {{-- GRAFIK & PANAUAN DEPLEKSI KRITIS --}}
+    {{-- GRAFIK & PANTAUAN DEPLEKSI KRITIS --}}
     <div class="row g-3 mb-4">
-        {{-- GRAFIK TREN 6 BULAN --}}
+        {{-- GRAFIK TREN 1 TAHUN (12 BULAN) --}}
         <div class="col-lg-7">
             <div class="card card-custom shadow-sm h-100 p-3">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="fw-bold mb-0 text-dark">
-                        <i class="fa-solid fa-chart-area text-theme me-2"></i> Tren Pergerakan Barang (6 Bulan Terakhir)
+                        <i class="fa-solid fa-chart-area text-theme me-2"></i> Tren Pergerakan Barang (1 Tahun Terakhir)
                     </h6>
                 </div>
                 <div style="height: 280px;">
@@ -149,14 +154,14 @@
             </div>
         </div>
 
-        {{-- TABEL ANCAMAN DEPLEKSI STOK TERRENDAH (< 3 BULAN) --}}
+        {{-- TABEL DEPLEKSI STOK KRITIS (SORTED BY TERAKHIR/PAST FEWEST) --}}
         <div class="col-lg-5">
             <div class="card card-custom shadow-sm h-100 p-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="fw-bold mb-0 text-dark">
-                        <i class="fa-solid fa-fire text-danger me-2"></i> Depleksi Stok Kritis (< 3 Bulan)
+                        <i class="fa-solid fa-fire text-danger me-2"></i> Depleksi Stok Kritis (Terdekat)
                     </h6>
-                    <a href="{{ route('settings.rate.index') }}" class="btn btn-link btn-sm text-theme p-0 fw-semibold text-decoration-none" style="font-size: 0.75rem;">Lihat Semua</a>
+                    <a href="{{ route('settings.rate.index') }}" class="btn btn-link btn-sm text-theme p-0 fw-semibold text-decoration-none" style="font-size: 0.75rem;">Setting Rate</a>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-dashboard mb-0">
@@ -173,7 +178,7 @@
                                     <td>
                                         <strong class="text-dark d-block">{{ $item->name }}</strong>
                                         @if($item->parent)
-                                            <small class="text-muted" style="font-size: 0.7rem;">{{ $item->parent->name }}</small>
+                                            <small class="text-muted" style="font-size: 0.7rem;">Induk: {{ $item->parent->name }}</small>
                                         @endif
                                     </td>
                                     <td class="text-center fw-bold text-primary">
@@ -182,9 +187,14 @@
                                     <td class="text-center">
                                         @if($item->current_stock <= 0)
                                             <span class="badge bg-danger px-2 py-1" style="font-size: 0.7rem;">Stok Habis</span>
+                                        @elseif($item->months_left >= 9999)
+                                            <span class="badge bg-light text-muted border px-2 py-1" style="font-size: 0.7rem;">Tanpa Estimasi</span>
                                         @else
-                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1" style="font-size: 0.7rem;">
-                                                <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $item->months_left }} Bulan
+                                            @php
+                                                $badgeClass = $item->months_left < 2 ? 'bg-danger' : ($item->months_left <= 5 ? 'bg-warning text-dark' : 'bg-success');
+                                            @endphp
+                                            <span class="badge {{ $badgeClass }} px-2 py-1" style="font-size: 0.7rem;">
+                                                {{ $item->months_left }} Bulan
                                             </span>
                                         @endif
                                     </td>
@@ -193,7 +203,7 @@
                                 <tr>
                                     <td colspan="3" class="text-center py-4 text-muted">
                                         <i class="fa-solid fa-circle-check text-success fs-3 mb-1 d-block"></i>
-                                        <span class="small">Tidak ada stok dalam ancaman depleksi kritis (< 3 bulan).</span>
+                                        <span class="small">Belum ada data material aktif yang dipantau.</span>
                                     </td>
                                 </tr>
                             @endforelse
@@ -245,7 +255,7 @@
                                 <tr>
                                     <td colspan="4" class="text-center py-4 text-muted">
                                         <i class="fa-solid fa-shield-halved text-success fs-3 mb-1 d-block"></i>
-                                        <span class="small">Seluruh stok barang berada di atas batas minimal.</span>
+                                        <span class="small">Seluruh stok barang terpantau berada di atas batas minimal.</span>
                                     </td>
                                 </tr>
                             @endforelse
@@ -278,10 +288,10 @@
                             @forelse($recentActivities as $act)
                                 <tr>
                                     <td>
-                                        @if($act->type == 'INBOUND')
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-0.5" style="font-size: 0.7rem;">INBOUND</span>
+                                        @if($act->type == 'SPPM Masuk')
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-0.5" style="font-size: 0.7rem;">SPPM MASUK</span>
                                         @else
-                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-0.5" style="font-size: 0.7rem;">OUTBOUND</span>
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-0.5" style="font-size: 0.7rem;">SPPM KELUAR</span>
                                         @endif
                                     </td>
                                     <td class="fw-bold text-dark">
@@ -334,7 +344,7 @@
                 labels: chartLabels,
                 datasets: [
                     {
-                        label: 'Barang Masuk (Inbound)',
+                        label: 'SPPM Masuk (Inbound)',
                         data: chartInbound,
                         borderColor: '#2ecc71',
                         backgroundColor: 'rgba(46, 204, 113, 0.1)',
@@ -344,7 +354,7 @@
                         pointRadius: 4
                     },
                     {
-                        label: 'Barang Keluar (Outbound)',
+                        label: 'SPPM Keluar (Outbound)',
                         data: chartOutbound,
                         borderColor: '#e74c3c',
                         backgroundColor: 'rgba(231, 76, 60, 0.1)',

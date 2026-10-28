@@ -32,13 +32,13 @@ class RateController extends Controller
             ->pluck('total', 'material_id')
             ->toArray();
 
-        // 3. Jika Mode Auto Generate Aktif, Analisa Penggunaan 24 Bulan Terakhir
-        $out24Totals = [];
+        // 3. Jika Mode Auto Generate Aktif, Analisa Penggunaan 12 Bulan Terakhir
+        $out12Totals = [];
         if ($isAutoGenerate) {
-            $out24Totals = DB::table('out_details')
+            $out12Totals = DB::table('out_details')
                 ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
                 ->where('out_sppms.status', 'completed')
-                ->where('out_sppms.created_at', '>=', now()->subMonths(24))
+                ->where('out_sppms.created_at', '>=', now()->subMonths(12))
                 ->selectRaw('material_id, SUM(target_qty) as total')
                 ->groupBy('material_id')
                 ->pluck('total', 'material_id')
@@ -68,8 +68,8 @@ class RateController extends Controller
             $mat->current_stock = max(0, $in - $out);
 
             if ($isAutoGenerate) {
-                $total24 = $out24Totals[$mat->id] ?? 0;
-                $mat->auto_rate = (int) round($total24 / 24);
+                $total12 = $out12Totals[$mat->id] ?? 0;
+                $mat->auto_rate = (int) round($total12 / 12);
             }
         }
 

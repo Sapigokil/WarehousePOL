@@ -141,7 +141,7 @@
             z-index: 1030;
             overflow-y: auto;
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
-            transition: background-color 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         #sidebar::-webkit-scrollbar { width: 6px; }
@@ -214,7 +214,7 @@
             flex-direction: column;
             min-height: 100vh;
             background-color: var(--layout-bg) !important; 
-            transition: background-color 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         #navbar {
@@ -272,10 +272,56 @@
             border-radius: 8px 8px 0 0 !important;
         }
         .card-body { padding: 25px; }
+
+        /* =========================================
+           KONTROL TRANSISI & TOGGLE SIDEBAR
+           ========================================= */
+
+        /* Tampilan Desktop ketika Sidebar Disembunyikan */
+        body.sidebar-toggled #sidebar {
+            left: -260px;
+        }
+
+        body.sidebar-toggled #right-wrapper {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        /* Responsmode Mobile (< 992px) */
+        @media (max-width: 991.98px) {
+            #sidebar {
+                left: -260px;
+            }
+            #right-wrapper {
+                margin-left: 0 !important;
+                width: 100% !important;
+            }
+            body.sidebar-toggled #sidebar {
+                left: 0;
+            }
+            body.sidebar-toggled #sidebar-overlay {
+                display: block !important;
+            }
+        }
+
+        /* Overlay gelap saat sidebar terbuka di layar Mobile */
+        #sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1025;
+        }
     </style>
     @stack('styles')
 </head>
 <body class="theme-{{ $activeTheme }}">
+
+    <!-- Overlay Transparan untuk Layar HP/Mobile -->
+    <div id="sidebar-overlay"></div>
 
     @include('partials.sidebar')
 
@@ -292,6 +338,42 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- SCRIPT TOGGLE SIDEBAR & MENGINGAT STATUS DI LOCAL STORAGE -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const toggleBtn = document.getElementById('toggle-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const body = document.body;
+
+            // Restore status sidebar dari localStorage untuk Desktop
+            if (window.innerWidth >= 992) {
+                if (localStorage.getItem('sidebar-toggled') === 'true') {
+                    body.classList.add('sidebar-toggled');
+                }
+            }
+
+            // Handler Klik Tombol Hamburger
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    body.classList.toggle('sidebar-toggled');
+
+                    // Simpan status toggle untuk tampilan Desktop
+                    if (window.innerWidth >= 992) {
+                        localStorage.setItem('sidebar-toggled', body.classList.contains('sidebar-toggled'));
+                    }
+                });
+            }
+
+            // Close sidebar saat overlay di-klik (Khusus tampilan Mobile)
+            if (overlay) {
+                overlay.addEventListener('click', function () {
+                    body.classList.remove('sidebar-toggled');
+                });
+            }
+        });
+    </script>
     @stack('scripts')
 </body>
 </html>

@@ -28,8 +28,9 @@ class DashboardController extends Controller
             ->pluck('total', 'material_id')
             ->toArray();
 
-        // 2. KETAHUI SELURUH MATERIAL TUNGGAL & VARIAN (ECLUDED KELOMPOK INDUK)
+        // 2. KETAHUI MATERIAL HANYA YANG MEMILIKI rate_usage >= 0 (EXCLUDE NULL & KELOMPOK INDUK)
         $materials = Material::with(['category', 'parent'])
+            ->whereNotNull('rate_usage')
             ->where('satuan', '!=', '-')
             ->get();
 
@@ -46,48 +47,46 @@ class DashboardController extends Controller
             $currentStock = max(0, $in - $out);
             $mat->current_stock = $currentStock;
 
-            // A. Cek Warning Stok Minimal (Low Stock)
+            // A. Warning Stok Minimal (Hanya material rate_usage >= 0)
             if ($currentStock <= $mat->minimal_stok) {
                 $lowStockCount++;
                 $lowStockItems->push($mat);
             }
 
-            // B. Cek Depleksi Kritis (< 3 Bulan atau Stok Habis)
-            if (!is_null($mat->rate_usage) && $mat->rate_usage >= 0) {
-                if ($currentStock <= 0) {
-                    $mat->months_left = 0;
-                    $criticalDepletionCount++;
-                    $depletionItems->push($mat);
-                } elseif ($mat->rate_usage > 0) {
+            // B. Depleksi Stok (Kalkulasi Daya Tahan)
+            if ($currentStock <= 0) {
+                $mat->months_left = 0;
+                $criticalDepletionCount++;
+                $depletionItems->push($mat);
+            } else {
+                if ($mat->rate_usage > 0) {
                     $months = round($currentStock / $mat->rate_usage, 1);
                     $mat->months_left = $months;
-                    if ($months < 3) {
-                        $criticalDepletionCount++;
-                        $depletionItems->push($mat);
-                    }
+                } else {
+                    $mat->months_left = 9999; // Tanpa batas jika rate 0
                 }
+                
+                if ($mat->months_left < 3) {
+                    $criticalDepletionCount++;
+                }
+                
+                $depletionItems->push($mat);
             }
         }
 
-        // Urutkan Depleksi dari yang paling terancam habis (terrendah)
+        // Urutkan Depleksi Kritis dari daya tahan yang paling terdekat (rendah)
         $depletionItems = $depletionItems->sortBy('months_left')->take(5);
         $lowStockItems = $lowStockItems->sortBy('current_stock')->take(5);
 
         // 3. STATISTIK DOKUMEN & TRANSAKSI HARI INI
-        $todayOutboundCount = DB::table('out_details')
-            ->join('out_sppms', 'out_details.out_sppm_id', '=', 'out_sppms.id')
-            ->where('out_sppms.status', 'completed')
-            ->whereDate('out_sppms.created_at', Carbon::today())
-            ->sum('out_details.target_qty');
-
         $pendingInboundCount = InSppm::where('status', 'draft')->count();
 
-        // 4. DATA GRAFIK 6 BULAN TERAKHIR (INBOUND VS OUTBOUND)
+        // 4. DATA GRAFIK 1 TAHUN TERAKHIR (12 BULAN)
         $chartLabels = [];
         $chartInbound = [];
         $chartOutbound = [];
 
-        for ($i = 5; $i >= 0; $i--) {
+        for ($i = 11; $i >= 0; $i--) {
             $date = Carbon::now()->subMonths($i);
             $monthYear = $date->format('M Y');
             $chartLabels[] = $monthYear;
@@ -111,12 +110,12 @@ class DashboardController extends Controller
 
         // 5. DOKUMEN RECENT ACTIVITY (MIX INBOUND & OUTBOUND)
         $recentInbound = InSppm::with('warehouse')->latest()->take(5)->get()->map(function($item) {
-            $item->type = 'INBOUND';
+            $item->type = 'SPPM Masuk';
             return $item;
         });
 
         $recentOutbound = OutSppm::with('destination')->latest()->take(5)->get()->map(function($item) {
-            $item->type = 'OUTBOUND';
+            $item->type = 'SPPM Keluar';
             return $item;
         });
 
@@ -126,7 +125,6 @@ class DashboardController extends Controller
             'totalMaterialCount',
             'lowStockCount',
             'criticalDepletionCount',
-            'todayOutboundCount',
             'pendingInboundCount',
             'lowStockItems',
             'depletionItems',

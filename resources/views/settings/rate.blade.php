@@ -23,7 +23,7 @@
     <div class="d-flex gap-2">
         @if(!$isAutoGenerate)
             <a href="{{ route('settings.rate.index', array_merge(request()->all(), ['auto_generate' => 1])) }}" class="btn btn-sm btn-outline-primary fw-bold shadow-sm">
-                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Auto Generate (2 Tahun)
+                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Auto Generate (1 Tahun)
             </a>
         @else
             <a href="{{ route('settings.rate.index', request()->except('auto_generate')) }}" class="btn btn-sm btn-outline-secondary fw-bold shadow-sm">
