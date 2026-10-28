@@ -280,8 +280,8 @@
                             <tr>
                                 <th>Tipe</th>
                                 <th>No. SPPM / Dokumen</th>
-                                <th>Kategori Material</th>
-                                <th class="text-center">Total Qty</th>
+                                <th>Kategori</th>
+                                <th class="text-center">Qty</th>
                                 <th class="text-center">Status</th>
                                 <th class="text-center">Tanggal</th>
                             </tr>
@@ -304,11 +304,14 @@
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.75rem;">
-                                            {{ $act->category_summary }}
+                                            {{ $act->sample_category }}
                                         </span>
+                                        @if($act->more_items_count > 0)
+                                            <small class="text-muted d-block" style="font-size: 0.65rem;">+{{ $act->more_items_count }} item lainnya</small>
+                                        @endif
                                     </td>
                                     <td class="text-center fw-bold text-primary">
-                                        {{ number_format($act->total_qty, 0, ',', '.') }}
+                                        {{ number_format($act->sample_qty, 0, ',', '.') }} {{ $act->sample_satuan }}
                                     </td>
                                     <td class="text-center">
                                         @if($act->status == 'completed')

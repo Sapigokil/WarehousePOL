@@ -108,21 +108,24 @@ class DashboardController extends Controller
             $chartOutbound[] = (int) $outQty;
         }
 
-        // 5. DOKUMEN RECENT ACTIVITY (MIX INBOUND & OUTBOUND DENGAN KATEGORI & TOTAL QTY)
+        // 5. DOKUMEN RECENT ACTIVITY (MIX INBOUND & OUTBOUND DENGAN SAMPEL ITEM PERTAMA / RATE USAGE >= 0)
         $recentInbound = InSppm::with(['warehouse', 'details.material.category'])
             ->latest()
             ->take(5)
             ->get()
             ->map(function($item) {
                 $item->type = 'SPPM Masuk';
-                $item->total_qty = $item->details->sum('target_qty');
                 
-                // Ambil daftar kategori unik dari detail barang di dokumen ini
-                $categories = $item->details->map(function($d) {
-                    return $d->material->category->name ?? null;
-                })->filter()->unique()->values();
+                // Cari detail pertama yang memiliki rate_usage >= 0, atau fallback ke item detail pertama
+                $sampleDetail = $item->details->first(function($d) {
+                    return !is_null($d->material->rate_usage ?? null) && $d->material->rate_usage >= 0;
+                }) ?? $item->details->first();
 
-                $item->category_summary = $categories->count() > 0 ? $categories->implode(', ') : '-';
+                $item->sample_category = $sampleDetail->material->category->name ?? '-';
+                $item->sample_qty = $sampleDetail->target_qty ?? 0;
+                $item->sample_satuan = $sampleDetail->material->satuan ?? '';
+                $item->more_items_count = max(0, $item->details->count() - 1);
+
                 return $item;
             });
 
@@ -132,14 +135,17 @@ class DashboardController extends Controller
             ->get()
             ->map(function($item) {
                 $item->type = 'SPPM Keluar';
-                $item->total_qty = $item->details->sum('target_qty');
                 
-                // Ambil daftar kategori unik dari detail barang di dokumen ini
-                $categories = $item->details->map(function($d) {
-                    return $d->material->category->name ?? null;
-                })->filter()->unique()->values();
+                // Cari detail pertama yang memiliki rate_usage >= 0, atau fallback ke item detail pertama
+                $sampleDetail = $item->details->first(function($d) {
+                    return !is_null($d->material->rate_usage ?? null) && $d->material->rate_usage >= 0;
+                }) ?? $item->details->first();
 
-                $item->category_summary = $categories->count() > 0 ? $categories->implode(', ') : '-';
+                $item->sample_category = $sampleDetail->material->category->name ?? '-';
+                $item->sample_qty = $sampleDetail->target_qty ?? 0;
+                $item->sample_satuan = $sampleDetail->material->satuan ?? '';
+                $item->more_items_count = max(0, $item->details->count() - 1);
+
                 return $item;
             });
 
