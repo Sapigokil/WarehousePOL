@@ -80,7 +80,7 @@
                     <div>
                         <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Material Dipantau</h6>
                         <h3 class="fw-bold mb-0 text-dark">{{ number_format($totalMaterialCount, 0, ',', '.') }}</h3>
-                        <small class="text-muted">Jenis Material</small>
+                        <small class="text-muted">Rate Usage Active</small>
                     </div>
                     <div class="kpi-icon bg-info bg-opacity-10 text-info">
                         <i class="fa-solid fa-boxes-stacked"></i>
@@ -154,7 +154,7 @@
             </div>
         </div>
 
-        {{-- TABEL DEPLEKSI STOK KRITIS (SORTED BY TERAKHIR/PAST FEWEST) --}}
+        {{-- TABEL DEPLEKSI STOK KRITIS --}}
         <div class="col-lg-5">
             <div class="card card-custom shadow-sm h-100 p-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -167,7 +167,7 @@
                     <table class="table table-dashboard mb-0">
                         <thead>
                             <tr>
-                                <th>Nama Barang</th>
+                                <th>Jenis Material</th>
                                 <th class="text-center">Sisa Stok</th>
                                 <th class="text-center">Daya Tahan</th>
                             </tr>
@@ -176,10 +176,9 @@
                             @forelse($depletionItems as $item)
                                 <tr>
                                     <td>
-                                        <strong class="text-dark d-block">{{ $item->name }}</strong>
-                                        @if($item->parent)
-                                            <small class="text-muted" style="font-size: 0.7rem;">Induk: {{ $item->parent->name }}</small>
-                                        @endif
+                                        <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.75rem;">
+                                            {{ $item->category->name ?? '-' }}
+                                        </span>
                                     </td>
                                     <td class="text-center fw-bold text-primary">
                                         {{ number_format($item->current_stock, 0, ',', '.') }} {{ $item->satuan }}
@@ -229,7 +228,7 @@
                     <table class="table table-dashboard mb-0">
                         <thead>
                             <tr>
-                                <th>Barang</th>
+                                <th>Jenis Material</th>
                                 <th class="text-center">Sisa</th>
                                 <th class="text-center">Min. Stok</th>
                                 <th class="text-center">Status</th>
@@ -239,7 +238,9 @@
                             @forelse($lowStockItems as $item)
                                 <tr>
                                     <td>
-                                        <strong class="text-dark d-block">{{ $item->name }}</strong>
+                                        <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.75rem;">
+                                            {{ $item->category->name ?? '-' }}
+                                        </span>
                                     </td>
                                     <td class="text-center fw-bold text-danger">
                                         {{ number_format($item->current_stock, 0, ',', '.') }}
