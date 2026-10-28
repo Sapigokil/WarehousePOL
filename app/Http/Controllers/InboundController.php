@@ -70,16 +70,16 @@ class InboundController extends Controller
             ->when($search, function ($query, $search) {
                 return $query->where(function($q) use ($search) {
                     $q->where('sppm_no', 'like', '%' . $search . '%')
-                      ->orWhereHas('details.material', function($q2) use ($search) {
-                          $q2->where('name', 'like', '%' . $search . '%')
-                             ->orWhere('code', 'like', '%' . $search . '%');
-                      })
-                      ->orWhereHas('details', function($q3) use ($search) {
-                          $cleanSearch = str_replace('.', '', $search);
-                          $q3->where('sppm_serial_start', 'like', '%' . $cleanSearch . '%')
-                             ->orWhere('sppm_serial_end', 'like', '%' . $cleanSearch . '%')
-                             ->orWhere('sppm_serial_prefix', 'like', '%' . $search . '%');
-                      });
+                    ->orWhereHas('details.material', function($q2) use ($search) {
+                        $q2->where('name', 'like', '%' . $search . '%')
+                            ->orWhere('code', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('details', function($q3) use ($search) {
+                        $cleanSearch = str_replace('.', '', $search);
+                        $q3->where('sppm_serial_start', 'like', '%' . $cleanSearch . '%')
+                            ->orWhere('sppm_serial_end', 'like', '%' . $cleanSearch . '%')
+                            ->orWhere('sppm_serial_prefix', 'like', '%' . $search . '%');
+                    });
                 });
             })
             ->when($category_id, function ($query, $category_id) {
@@ -114,6 +114,18 @@ class InboundController extends Controller
         if (!$availableYears->contains($currentYear)) {
             $availableYears->prepend($currentYear);
         }
+
+        // Tambahkan tepat sebelum return view('inbound.index', ...)
+        $sppms->getCollection()->transform(function ($sppm) {
+            // Cari detail pertama yang target_qty nya lebih dari 0
+            $firstValidDetail = $sppm->details->first(function ($detail) {
+                return (int) $detail->target_qty > 0;
+            });
+
+            $sppm->main_qty = $firstValidDetail ? $firstValidDetail->target_qty : 0;
+            $sppm->main_satuan = $firstValidDetail?->material?->satuan ?? '';
+            return $sppm;
+        });
 
         return view('inbound.index', compact(
             'sppms', 'categories', 'search', 'limit', 
@@ -280,20 +292,33 @@ class InboundController extends Controller
         return redirect($redirect)->with('success', 'Data berhasil diverifikasi dan disimpan.');
     }
 
+    public function edit($id)
+    {
+        $inbound = InSppm::with(['details.material', 'logs' => function($q){
+            $q->orderBy('batch_number', 'asc');
+        }, 'logs.stocks'])->findOrFail($id);
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $warehouses = Warehouse::orderBy('id', 'asc')->get();
+        $inboundMode = $this->inboundMode ?? 'mode-1';
+
+        return view('inbound.form', compact('inbound', 'categories', 'warehouses', 'inboundMode'));
+    }
+
     public function update(Request $request, $id)
     {
         $sppm = InSppm::with('details.material', 'logs.stocks')->findOrFail($id);
         
-        // Ambil current mode dari request, jika tidak ada (disabled form), asumsikan mode-1 / lihat dari data yang ada
-        $currentMode = $request->input('inbound_mode') ?? 'mode-1';
+        // Ambil current mode dari request
+        $currentMode = $request->input('inbound_mode', 'mode-1');
         $oldSppmNo = $sppm->sppm_no;
         $oldDate = $sppm->sppm_date;
 
-        // 1. LAKUKAN VALIDASI REQUEST TERLEBIH DAHULU (PENTING)
+        // 1. VALIDASI INPUT TERLINDUNGI
         if ($currentMode === 'mode-2') {
             $request->validate([
-                'batch_date'          => 'required|date',
-                'items'               => 'required|array',
+                'batch_date' => 'required|date',
+                'items'      => 'required|array',
             ]);
         } else {
             $request->validate([
@@ -302,31 +327,38 @@ class InboundController extends Controller
                 'warehouse_id' => 'required|exists:warehouses,id',
                 'file_lampiran'=> 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'items'        => 'required|array',
+            ], [
+                'sppm_no.required'   => 'Nomor SPPM wajib diisi.',
+                'sppm_no.unique'     => 'Nomor SPPM sudah digunakan oleh dokumen lain.',
+                'sppm_date.required' => 'Tanggal SPPM wajib diisi.',
+                'items.required'     => 'Rincian item barang wajib diisi.'
             ]);
         }
 
         // 2. PENGECEKAN DUPLIKASI NOMOR SERI
-        foreach ($request->items as $key => $item) {
-            // Support 2 jenis array: array list biasa atau array assosiative (key = material_id)
-            $matId = $item['material_id'] ?? $key; 
-            
-            $prefix = $item['sppm_serial_prefix'] ?? null;
-            $startStr = $item['sppm_serial_start'] ?? null;
-            $endStr = $item['sppm_serial_end'] ?? null;
+        if ($request->has('items') && is_array($request->items)) {
+            foreach ($request->items as $key => $item) {
+                $matId = $item['material_id'] ?? $key; 
+                
+                $prefix   = $item['sppm_serial_prefix'] ?? $item['serial_prefix'] ?? null;
+                $startStr = $item['sppm_serial_start'] ?? $item['serial_start'] ?? null;
+                $endStr   = $item['sppm_serial_end'] ?? $item['serial_end'] ?? null;
 
-            if ($startStr && $endStr) {
-                $start = (int) str_replace('.', '', $startStr);
-                $end = (int) str_replace('.', '', $endStr);
+                if ($startStr && $endStr) {
+                    $start = (int) str_replace('.', '', $startStr);
+                    $end   = (int) str_replace('.', '', $endStr);
 
-                $isOverlap = Stock::where('material_id', $matId)
-                    ->where('no_surat_masuk', '!=', $sppm->sppm_no) 
-                    ->where('prefix', $prefix)
-                    ->where('seri_awal', '<=', $end)
-                    ->where('seri_akhir', '>=', $start)
-                    ->exists();
+                    // Mengecek duplikasi dengan mengecualikan nomor SPPM lama
+                    $isOverlap = Stock::where('material_id', $matId)
+                        ->where('no_surat_masuk', '!=', $oldSppmNo) 
+                        ->where('prefix', $prefix)
+                        ->where('seri_awal', '<=', $end)
+                        ->where('seri_akhir', '>=', $start)
+                        ->exists();
 
-                if ($isOverlap) {
-                    return back()->withInput()->with('error', "GAGAL UPDATE! Rentang Seri duplikat dengan dokumen surat masuk lain pada prefix {$prefix}.");
+                    if ($isOverlap) {
+                        return back()->withInput()->with('error', "GAGAL UPDATE! Rentang Seri ({$startStr} s/d {$endStr}) duplikat dengan dokumen lain pada prefix {$prefix}.");
+                    }
                 }
             }
         }
@@ -358,8 +390,8 @@ class InboundController extends Controller
                         $receivedItemsLog["Masuk: {$matName}"] = $qtyReceived;
 
                         $realPrefix = $item['serial_prefix'] ?? null;
-                        $realStart = isset($item['serial_start']) ? (int) str_replace('.', '', $item['serial_start']) : null;
-                        $realEnd = isset($item['serial_end']) ? (int) str_replace('.', '', $item['serial_end']) : null;
+                        $realStart  = isset($item['serial_start']) ? (int) str_replace('.', '', $item['serial_start']) : null;
+                        $realEnd    = isset($item['serial_end']) ? (int) str_replace('.', '', $item['serial_end']) : null;
 
                         InStock::create([
                             'in_log_id'    => $log->id,
@@ -412,12 +444,13 @@ class InboundController extends Controller
                     'Status Baru'=> $sppm->status
                 ], $receivedItemsLog);
 
-                $this->recordLog('UPDATED', 'DOKUMEN SPPM', $sppm->id, [ 'Status Sebelumnya' => 'partial' ], $newValuesLog);
+                if (method_exists($this, 'recordLog')) {
+                    $this->recordLog('UPDATED', 'DOKUMEN SPPM', $sppm->id, ['Status Sebelumnya' => 'partial'], $newValuesLog);
+                }
             });
 
             return redirect()->route('inbound.index')->with('success', 'Penerimaan fisik Tahap Baru berhasil dicatat.');
         }
-
 
         // ==========================================
         // EKSEKUSI PENYIMPANAN MODE-1 (KOREKSI SPPM)
@@ -451,12 +484,12 @@ class InboundController extends Controller
         
         foreach ($request->items as $key => $item) {
             if (isset($item['target_qty'])) {
-                $matId = $item['material_id'] ?? $key;
+                $matId  = $item['material_id'] ?? $key;
                 $newQty = (int) $item['target_qty'];
                 $oldDetail = $oldDetails->get($matId);
                 
-                $matName = $oldDetail ? $oldDetail->material->name : Material::find($matId)->name;
-                $oldQty = $oldDetail ? (int) $oldDetail->target_qty : 0;
+                $matName = $oldDetail ? $oldDetail->material->name : (Material::find($matId)->name ?? "Barang ID {$matId}");
+                $oldQty  = $oldDetail ? (int) $oldDetail->target_qty : 0;
                 
                 if ($oldQty !== $newQty) {
                     $oldChanges["Jml " . strtoupper($matName)] = $oldQty;
@@ -466,7 +499,7 @@ class InboundController extends Controller
         }
 
         if (empty($oldChanges) && empty($newChanges)) {
-             $newChanges['Keterangan'] = 'Update dilakukan namun tidak terdeteksi perubahan kuantitas/nomor SPPM.';
+            $newChanges['Keterangan'] = 'Update dilakukan namun tidak terdeteksi perubahan kuantitas/nomor SPPM.';
         }
 
         DB::transaction(function () use ($request, $sppm, $oldSppmNo, $oldChanges, $newChanges, $lampiranPath) {
@@ -490,14 +523,14 @@ class InboundController extends Controller
             foreach ($request->items as $key => $item) {
                 if (isset($item['target_qty'])) {
                     
-                    $matId = $item['material_id'] ?? $key;
+                    $matId     = $item['material_id'] ?? $key;
                     $targetQty = (int) $item['target_qty'];
 
-                    $sppmPrefix = $item['sppm_serial_prefix'] ?? null;
-                    $sppmStart = isset($item['sppm_serial_start']) ? (int) str_replace('.', '', $item['sppm_serial_start']) : null;
-                    $sppmEnd = isset($item['sppm_serial_end']) ? (int) str_replace('.', '', $item['sppm_serial_end']) : null;
+                    $sppmPrefix = $item['sppm_serial_prefix'] ?? $item['serial_prefix'] ?? null;
+                    $sppmStart  = isset($item['sppm_serial_start']) ? (int) str_replace('.', '', $item['sppm_serial_start']) : (isset($item['serial_start']) ? (int) str_replace('.', '', $item['serial_start']) : null);
+                    $sppmEnd    = isset($item['sppm_serial_end']) ? (int) str_replace('.', '', $item['sppm_serial_end']) : (isset($item['serial_end']) ? (int) str_replace('.', '', $item['serial_end']) : null);
 
-                    // --- SIMPAN/UPDATE SEMUA KE IN_DETAILS (Termasuk Qty 0) ---
+                    // --- SIMPAN/UPDATE SEMUA KE IN_DETAILS ---
                     InDetail::updateOrCreate(
                         ['in_sppm_id' => $sppm->id, 'material_id' => $matId],
                         [
@@ -514,7 +547,6 @@ class InboundController extends Controller
                     $firstLog = $sppm->logs()->where('batch_number', 1)->first();
                     
                     if ($firstLog) {
-                        // Jika ada Quantity > 0, buat/perbarui fisik Stock
                         if ($targetQty > 0) {
                             InStock::updateOrCreate(
                                 ['in_log_id' => $firstLog->id, 'material_id' => $matId],
@@ -545,7 +577,6 @@ class InboundController extends Controller
                                 ]
                             );
                         } else {
-                            // Jika user merubah Qty menjadi 0, hapus dari tabel Stock Fisik (agar gudang tidak nyangkut)
                             InStock::where('in_log_id', $firstLog->id)->where('material_id', $matId)->delete();
                             Stock::where('no_surat_masuk', $request->sppm_no)->where('material_id', $matId)->delete();
                         }
@@ -553,23 +584,12 @@ class InboundController extends Controller
                 }
             }
 
-            $this->recordLog('UPDATED', 'DOKUMEN SPPM', $sppm->id, $oldChanges, $newChanges);
+            if (method_exists($this, 'recordLog')) {
+                $this->recordLog('UPDATED', 'DOKUMEN SPPM', $sppm->id, $oldChanges, $newChanges);
+            }
         });
 
         return redirect()->route('inbound.index')->with('success', 'Pembaruan Dokumen & Seri berhasil disimpan.');
-    }
-
-    public function edit($id)
-    {
-        $inbound = InSppm::with(['details.material', 'logs' => function($q){
-            $q->orderBy('batch_number', 'asc');
-        }, 'logs.stocks'])->findOrFail($id);
-        
-        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-        $warehouses = Warehouse::orderBy('id', 'asc')->get();
-        $inboundMode = $this->inboundMode;
-
-        return view('inbound.form', compact('inbound', 'categories', 'warehouses', 'inboundMode'));
     }
 
     public function destroy($id)

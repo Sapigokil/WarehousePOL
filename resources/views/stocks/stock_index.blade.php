@@ -144,9 +144,15 @@
                                     <td></td>
                                     <td class="ps-5 text-secondary">
                                         <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i>
-                                        <a href="{{ route('stocks.show', $child->id) }}" target="_blank" class="text-decoration-none text-secondary">
-                                            {{ $child->name }} 
-                                        </a>
+                                        
+                                        @if($child->pakai_seri == 1)
+                                            <a href="{{ route('stocks.show', $child->id) }}" target="_blank" class="text-decoration-none text-secondary">
+                                                {{ $child->name }} 
+                                            </a>
+                                        @else
+                                            <span>{{ $child->name }}</span>
+                                        @endif
+
                                         @if($child->code) <small class="text-muted ms-2">[{{ $child->code }}]</small> @endif
                                     </td>
                                     <td class="text-center fw-semibold text-muted">{{ $child->satuan }}</td>
@@ -156,9 +162,13 @@
                                         </span>
                                     </td>
                                     <td class="text-center">
-                                        <a href="{{ route('stocks.show', $child->id) }}" target="_blank" class="btn btn-sm btn-white border fw-bold text-theme" style="font-size: 0.75rem;">
-                                            <i class="fa-solid fa-eye me-1"></i> Detail
-                                        </a>
+                                        @if($child->pakai_seri == 1)
+                                            <a href="{{ route('stocks.show', $child->id) }}" target="_blank" class="btn btn-sm btn-white border fw-bold text-theme" style="font-size: 0.75rem;">
+                                                <i class="fa-solid fa-eye me-1"></i> Detail
+                                            </a>
+                                        @else
+                                            <span class="text-muted small">-</span>
+                                        @endif
                                     </td>
                                 </tr>
                             @endforeach
@@ -168,9 +178,15 @@
                                 <td></td>
                                 <td class="ps-4">
                                     <i class="fa-solid fa-minus text-muted me-2 opacity-50"></i>
-                                    <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="text-decoration-none text-dark fw-semibold">
-                                        {{ $parent->name }}
-                                    </a>
+                                    
+                                    @if($parent->pakai_seri == 1)
+                                        <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="text-decoration-none text-dark fw-semibold">
+                                            {{ $parent->name }}
+                                        </a>
+                                    @else
+                                        <span class="text-dark fw-semibold">{{ $parent->name }}</span>
+                                    @endif
+
                                     @if($parent->code) <small class="text-muted ms-2">[{{ $parent->code }}]</small> @endif
                                 </td>
                                 <td class="text-center fw-semibold text-muted">{{ $parent->satuan }}</td>
@@ -180,9 +196,13 @@
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="btn btn-sm btn-light border fw-bold text-theme" style="font-size: 0.75rem;">
-                                        <i class="fa-solid fa-eye me-1"></i> Detail
-                                    </a>
+                                    @if($parent->pakai_seri == 1)
+                                        <a href="{{ route('stocks.show', $parent->id) }}" target="_blank" class="btn btn-sm btn-light border fw-bold text-theme" style="font-size: 0.75rem;">
+                                            <i class="fa-solid fa-eye me-1"></i> Detail
+                                        </a>
+                                    @else
+                                        <span class="text-muted small">-</span>
+                                    @endif
                                 </td>
                             </tr>
                         @endif

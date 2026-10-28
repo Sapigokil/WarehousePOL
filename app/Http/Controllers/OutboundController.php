@@ -138,15 +138,15 @@ class OutboundController extends Controller
         $sortDir = strtolower($sortDir) === 'asc' ? 'asc' : 'desc';
 
         $modelTable = (new OutSppm)->getTable();
-        $query = OutSppm::with(['destination', 'details.material', 'logs.outStocks', 'updater'])
+        $query = OutSppm::with(['destination', 'details.material.category', 'logs.outStocks', 'updater'])
                     ->select($modelTable . '.*');
 
         if ($search) {
             $query->where(function ($q) use ($search, $modelTable) {
                 $q->where($modelTable . '.sppm_no', 'like', "%{$search}%")
-                  ->orWhereHas('destination', function($q2) use ($search) {
-                      $q2->where('name', 'like', "%{$search}%");
-                  });
+                ->orWhereHas('destination', function($q2) use ($search) {
+                    $q2->where('name', 'like', "%{$search}%");
+                });
             });
         }
 
@@ -166,7 +166,7 @@ class OutboundController extends Controller
 
         if ($sortBy === 'destination_name') {
             $query->leftJoin('destinations', $modelTable . '.destination_id', '=', 'destinations.id')
-                  ->orderBy('destinations.name', $sortDir);
+                ->orderBy('destinations.name', $sortDir);
         } elseif ($sortBy === 'sppm_no') {
             $query->orderByRaw("CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(" . $modelTable . ".sppm_no, '/', 2), '/', -1) AS UNSIGNED) $sortDir");
         } else {
@@ -174,6 +174,18 @@ class OutboundController extends Controller
         }
 
         $outbounds = $query->paginate($limit)->withQueryString();
+
+        // SINKRONISASI KATEGORI DAN QTY UTAMA (Ambil baris detail pertama dengan QTY > 0)
+        $outbounds->getCollection()->transform(function ($sppm) {
+            $firstValidDetail = $sppm->details->first(function ($detail) {
+                return (int) $detail->target_qty > 0;
+            });
+
+            $sppm->main_category = $firstValidDetail?->material?->category?->name ?? '-';
+            $sppm->main_qty = $firstValidDetail ? $firstValidDetail->target_qty : 0;
+            $sppm->main_satuan = $firstValidDetail?->material?->satuan ?? '';
+            return $sppm;
+        });
 
         $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
         $destinations = Destination::orderBy('nomor_urut', 'asc')->get();

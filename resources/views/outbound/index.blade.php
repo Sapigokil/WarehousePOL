@@ -161,6 +161,7 @@
     @method('DELETE')
     <div class="table-responsive shadow-sm" style="border-radius: 8px; background: white;">
         <table class="table-dense">
+            <table class="table-dense">
             <thead>
                 <tr>
                     @can('Outbound Delete')
@@ -170,7 +171,7 @@
                         </div>
                     </th>
                     @endcan
-                    <th width="22%">
+                    <th width="18%">
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_no', 'sort_dir' => ($sortBy == 'sppm_no' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                             No Dokumen SPPM
                             @if($sortBy == 'sppm_no')
@@ -180,7 +181,7 @@
                             @endif
                         </a>
                     </th>
-                    <th width="20%">
+                    <th width="16%">
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'destination_name', 'sort_dir' => ($sortBy == 'destination_name' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                             Tujuan Pengiriman
                             @if($sortBy == 'destination_name')
@@ -190,7 +191,9 @@
                             @endif
                         </a>
                     </th>
-                    <th width="15%">
+                    <th width="12%">Kategori</th>
+                    <th width="9%" class="text-center">QTY</th>
+                    <th width="11%">
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_date', 'sort_dir' => ($sortBy == 'sppm_date' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                             Tgl Dokumen
                             @if($sortBy == 'sppm_date')
@@ -200,7 +203,7 @@
                             @endif
                         </a>
                     </th>
-                    <th width="15%">
+                    <th width="13%">
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'created_at', 'sort_dir' => ($sortBy == 'created_at' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                             Pembaruan Terakhir
                             @if($sortBy == 'created_at')
@@ -210,8 +213,8 @@
                             @endif
                         </a>
                     </th>
-                    <th width="10%" class="text-center">Status</th>
-                    <th width="15%" class="text-center">Aksi</th>
+                    <th width="8%" class="text-center">Status</th>
+                    <th width="10%" class="text-center">Aksi</th>
                 </tr>
             </thead>
             <tbody>
@@ -220,9 +223,8 @@
                     @can('Outbound Delete')
                     <td class="text-center px-2">
                         <div class="form-check d-flex justify-content-center m-0">
-                            <!-- Input Checkbox untuk tiap baris -->
                             <input class="form-check-input item-checkbox" type="checkbox" name="ids[]" value="{{ $sppm->id }}" 
-                                   data-status="{{ $sppm->status }}">
+                                data-status="{{ $sppm->status }}">
                         </div>
                     </td>
                     @endcan
@@ -235,6 +237,24 @@
                     </td>
                     <td class="fw-bold text-secondary">
                         <i class="fa-solid fa-map-location-dot me-1 opacity-50"></i> {{ $sppm->destination->name ?? 'Tidak Diketahui' }}
+                    </td>
+                    <td>
+                        <!-- STYLING BADGE KATEGORI MEMBUNGKUS TEKS -->
+                        @if($sppm->main_category != '-')
+                            <span class="badge bg-light text-dark border border-secondary-subtle px-2 py-1 fw-semibold" style="font-size: 0.75rem;">
+                                {{ $sppm->main_category }}
+                            </span>
+                        @else
+                            <span class="text-muted fw-normal">-</span>
+                        @endif
+                    </td>
+                    <td class="text-center fw-bold">
+                        @if($sppm->main_qty > 0)
+                            {{ number_format($sppm->main_qty, 0, ',', '.') }}
+                            <small class="text-muted fw-normal">{{ $sppm->main_satuan }}</small>
+                        @else
+                            <span class="text-muted fw-normal">-</span>
+                        @endif
                     </td>
                     <td class="fw-semibold">
                         {{ \Carbon\Carbon::parse($sppm->sppm_date)->format('d M Y') }}
@@ -258,13 +278,11 @@
                                 </a>
                             @endif
                             
-                            <!-- TOMBOL SHOW (READ-ONLY) -->
                             <a href="{{ route('outbounds.show', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Detail (Read-Only)">
                                 <i class="fa-solid fa-eye text-info"></i>
                             </a>
 
                             @can('Outbound Edit')
-                                <!-- TOMBOL EDIT HANYA MUNCUL JIKA DOKUMEN BUKAN FINAL -->
                                 @if($sppm->status != 'completed')
                                 <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Edit / Koreksi Data">
                                     <i class="fa-solid fa-pen text-theme"></i>
@@ -273,7 +291,6 @@
                             @endcan
 
                             @can('Outbound Delete')
-                            <!-- Tombol Delete Tunggal Dialihkan ke onclick function untuk mencegah nested form -->
                             <button type="button" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5 text-danger" title="Batalkan & Hapus Data" 
                                 onclick="deleteSingle({{ $sppm->id }}, '{{ $sppm->status }}')">
                                 <i class="fa-solid fa-trash"></i>
@@ -283,7 +300,7 @@
                     </td>
                 </tr>
                 <tr class="border-0">
-                    <td colspan="{{ auth()->user()->can('Outbound Delete') ? 7 : 6 }}" class="p-0 border-0">
+                    <td colspan="{{ auth()->user()->can('Outbound Delete') ? 9 : 8 }}" class="p-0 border-0">
                         <div class="collapse" id="collapseSppm{{ $sppm->id }}">
                             <div class="nested-table-container px-4 py-3">
                                 <h6 class="fw-bold text-danger mb-2" style="font-size: 0.8rem;"><i class="fa-solid fa-list-check me-1"></i> RINCIAN BARANG KELUAR</h6>
@@ -419,7 +436,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="{{ auth()->user()->can('Outbound Delete') ? 7 : 6 }}" class="text-center py-5 text-muted bg-white">
+                    <td colspan="{{ auth()->user()->can('Outbound Delete') ? 9 : 8 }}" class="text-center py-5 text-muted bg-white">
                         <i class="fa-solid fa-file-circle-xmark fs-2 mb-2 opacity-25"></i>
                         <p class="mb-0 small">Belum ada dokumen SPPM Keluar atau data tidak ditemukan.</p>
                     </td>

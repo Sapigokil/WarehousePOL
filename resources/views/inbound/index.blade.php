@@ -207,7 +207,8 @@
                             @endif
                         </a>
                     </th>
-                    <th width="15%">Kategori</th>
+                    <th width="10%">Kategori</th>
+                    <th class="text-center" width="15%">QTY</th>
                     <th width="13%">
                         <!-- Link Sorting untuk Tgl Dokumen -->
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'sppm_date', 'sort_dir' => ($sortBy == 'sppm_date' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
@@ -219,7 +220,7 @@
                             @endif
                         </a>
                     </th>
-                    <th width="20%">
+                    <th width="10%">
                         <!-- Link Sorting untuk Pembaruan Terakhir -->
                         <a href="{{ request()->fullUrlWithQuery(['sort_by' => 'created_at', 'sort_dir' => ($sortBy == 'created_at' && $sortDir == 'asc') ? 'desc' : 'asc']) }}" class="text-dark text-decoration-none d-flex align-items-center">
                             Pembaruan Terakhir
@@ -272,6 +273,15 @@
                     </td>
                     <td>
                         <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.75rem;">{{ $sppm->category->name ?? '-' }}</span>
+                    </td>
+
+                    <td class="text-center fw-bold">
+                        @if($sppm->main_qty > 0)
+                            {{ number_format($sppm->main_qty, 0, ',', '.') }}
+                            <small class="text-muted fw-normal">{{ $sppm->main_satuan }}</small>
+                        @else
+                            <span class="text-muted fw-normal">-</span>
+                        @endif
                     </td>
                     <td class="fw-semibold">
                         {{ \Carbon\Carbon::parse($sppm->sppm_date)->format('d M Y') }}

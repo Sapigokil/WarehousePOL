@@ -73,7 +73,8 @@
     @csrf
     @if(isset($inbound)) @method('PUT') @endif
 
-    <input type="hidden" name="inbound_mode" id="inbound_mode_value" value="{{ old('inbound_mode', $inboundMode) }}">
+    {{-- <input type="hidden" name="inbound_mode" id="inbound_mode_value" value="{{ old('inbound_mode', $inboundMode) }}"> --}}
+    <input type="hidden" name="inbound_mode" value="{{ $inboundMode ?? 'mode-1' }}">
 
     <div class="row">
         <!-- HEADER (INFORMASI DOKUMEN & GUDANG) -->
