@@ -80,7 +80,7 @@
                     <div>
                         <h6 class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.75rem;">Material Dipantau</h6>
                         <h3 class="fw-bold mb-0 text-dark">{{ number_format($totalMaterialCount, 0, ',', '.') }}</h3>
-                        <small class="text-muted">Rate Usage Active</small>
+                        <small class="text-muted">Jenis Material</small>
                     </div>
                     <div class="kpi-icon bg-info bg-opacity-10 text-info">
                         <i class="fa-solid fa-boxes-stacked"></i>
