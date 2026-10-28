@@ -189,13 +189,13 @@
     <table class="table-dense" id="table-sortable-container">
         <thead>
             <tr>
-                <th width="5%" class="text-center">Geser</th>
-                <th width="8%" class="text-center">No Urut</th>
-                <th width="12%">Code</th>
-                <th width="20%">Nama Barang / Materiel</th>
-                <th width="15%">Kategori</th>
-                <th width="12%">Satuan</th>
+                <th width="4%" class="text-center">Geser</th>
+                <th width="6%" class="text-center">No Urut</th>
+                <th width="26%">Nama Barang / Materiel</th>
+                <th width="14%">Kategori</th>
+                <th width="10%">Satuan</th>
                 <th width="10%" class="text-center">Min. Stok</th>
+                <th width="12%" class="text-center">Penggunaan/Bln</th>
                 <th width="10%" class="text-center">Pelacakan Seri</th>
                 <th width="8%" class="text-center">Aksi</th>
             </tr>
@@ -209,9 +209,6 @@
                 </td>
                 <td class="text-center fw-bold text-muted item-nomor-urut">
                     {{ $material->nomor_urut ?? '-' }}
-                </td>
-                <td>
-                    <span class="text-secondary fw-semibold">{{ $material->code ?? '-' }}</span>
                 </td>
                 <td>
                     @if($material->satuan == '-')
@@ -232,6 +229,16 @@
                 </td>
                 <td class="text-center fw-semibold">
                     {{ $material->satuan == '-' ? '-' : $material->minimal_stok }}
+                </td>
+                <!-- KOLOM BARU: RATE USAGE INDUK / BARANG TUNGGAL -->
+                <td class="text-center fw-semibold">
+                    @if($material->satuan == '-')
+                        <span class="text-muted" style="font-size: 0.75rem;">-</span>
+                    @else
+                        <span class="badge bg-light text-dark border px-2 py-0.5" style="font-size: 0.75rem;">
+                            {{ number_format($material->rate_usage ?? 0, 0, ',', '.') }} / bln
+                        </span>
+                    @endif
                 </td>
                 <td class="text-center">
                     @if($material->satuan == '-')
@@ -266,11 +273,17 @@
                                 <tbody>
                                     @foreach($material->children as $child)
                                     <tr>
-                                        <td width="45%"><i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i> {{ $child->name }}</td>
+                                        <td width="35%"><i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-2 opacity-50"></i> {{ $child->name }}</td>
                                         <td width="15%"><span class="badge bg-white text-secondary border px-2 py-0.5" style="font-size: 0.7rem;">{{ $child->category->name ?? '-' }}</span></td>
-                                        <td width="15%">{{ $child->satuan }}</td>
-                                        <td width="15%" class="text-center">{{ $child->minimal_stok }}</td>
-                                        <td width="10%" class="text-center">
+                                        <td width="10%">{{ $child->satuan }}</td>
+                                        <td width="10%" class="text-center">{{ $child->minimal_stok }}</td>
+                                        <!-- KOLOM BARU: RATE USAGE VARIAN (CHILD) -->
+                                        <td width="15%" class="text-center">
+                                            <span class="badge bg-light text-dark border px-2 py-0.5" style="font-size: 0.7rem;">
+                                                {{ number_format($child->rate_usage ?? 0, 0, ',', '.') }} / bln
+                                            </span>
+                                        </td>
+                                        <td width="15%" class="text-center">
                                             @if($child->pakai_seri)
                                                 <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-0.5" style="font-size: 0.7rem;">Seri</span>
                                             @else
@@ -376,6 +389,15 @@
                                     </div>
                                 </div>
 
+                                <!-- TAMBAHAN RATE_USAGE (RATA-RATA PENGGUNAAN PER BULAN) -->
+                                {{-- <div class="col-md-4 mb-3">
+                                    <label class="form-label modal-label" for="edit_rate_usage_{{ $material->id }}">Penggunaan / Bulan</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" name="rate_usage" id="edit_rate_usage_{{ $material->id }}" value="{{ old('rate_usage', $material->rate_usage ?? 0) }}" min="0" placeholder="0">
+                                        <span class="input-group-text bg-light text-muted" style="font-size: 0.8rem;">/ bln</span>
+                                    </div>
+                                </div> --}}
+
                                 <div class="mb-0">
                                     <label class="form-label modal-label">Keterangan Kelompok</label>
                                     <textarea name="parent_keterangan" class="form-control modal-custom-input" rows="2">{{ old('parent_keterangan', $material->keterangan) }}</textarea>
@@ -391,11 +413,13 @@
                                 <table class="table table-bordered mb-0 table-variants">
                                     <thead class="bg-light">
                                         <tr>
-                                            <th width="35%">Nama Varian / Jenis</th>
-                                            <th width="15%">Satuan</th>
-                                            <th width="15%">Min. Stok</th>
-                                            <th width="15%">Lacak Seri?</th>
-                                            <th width="10%">Harga?</th>
+                                            <!-- PENYESUAIAN LEBAR KOLOM (TOTAL 100%) -->
+                                            <th width="28%">Nama Varian / Jenis</th>
+                                            <th width="12%">Satuan</th>
+                                            <th width="12%">Min. Stok</th>
+                                            <th width="14%">Penggunaan/Bln</th>
+                                            <th width="12%">Lacak Seri?</th>
+                                            <th width="12%">Harga?</th>
                                             <th width="10%" class="text-center">Hapus</th>
                                         </tr>
                                     </thead>
@@ -421,7 +445,11 @@
                                                     <option value="RIM" {{ $child->satuan == 'RIM' ? 'selected' : '' }}>RIM</option>
                                                 </select>
                                             </td>
-                                            <td><input type="number" name="variants[{{ $index }}][minimal_stok]" class="form-control form-control-sm" value="{{ $child->minimal_stok }}" required></td>
+                                            <td><input type="number" name="variants[{{ $index }}][minimal_stok]" class="form-control form-control-sm" value="{{ $child->minimal_stok }}" min="0" required></td>
+                                            
+                                            <!-- TAMBAHAN INPUT RATE_USAGE VARIAN (FORM EDIT) -->
+                                            <td><input type="number" name="variants[{{ $index }}][rate_usage]" class="form-control form-control-sm" value="{{ $child->rate_usage ?? 0 }}" min="0" placeholder="0" required></td>
+
                                             <td>
                                                 <select name="variants[{{ $index }}][pakai_seri]" class="form-select form-select-sm" required>
                                                     <option value="0" {{ $child->pakai_seri == 0 ? 'selected' : '' }}>TIDAK</option>
@@ -537,6 +565,14 @@
                                             <input class="form-check-input radio-isharga" type="radio" name="is_harga" id="edit_isharga_1_{{ $material->id }}" value="1" {{ $material->is_harga == 1 ? 'checked' : '' }}>
                                             <label class="form-check-label" for="edit_isharga_1_{{ $material->id }}">Ya</label>
                                         </div>
+                                    </div>
+                                </div>
+                                <!-- TAMBAHAN RATE_USAGE (RATA-RATA PENGGUNAAN PER BULAN) -->
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label modal-label" for="edit_rate_usage_{{ $material->id }}">Penggunaan / Bulan</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" name="rate_usage" id="edit_rate_usage_{{ $material->id }}" value="{{ old('rate_usage', $material->rate_usage ?? 0) }}" min="0" placeholder="0">
+                                        <span class="input-group-text bg-light text-muted" style="font-size: 0.8rem;">/ bln</span>
                                     </div>
                                 </div>
                             </div>
@@ -696,6 +732,15 @@
                             </div>
                         </div>
 
+                        <!-- TAMBAHAN RATE_USAGE (RATA-RATA PENGGUNAAN PER BULAN) -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label modal-label" for="edit_rate_usage_{{ $material->id }}">Penggunaan / Bulan</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="rate_usage" id="edit_rate_usage_{{ $material->id }}" value="{{ old('rate_usage', $material->rate_usage ?? 0) }}" min="0" placeholder="0">
+                                <span class="input-group-text bg-light text-muted" style="font-size: 0.8rem;">/ bln</span>
+                            </div>
+                        </div>
+
                         <div class="mb-2">
                             <label class="form-label modal-label">Keterangan Opsional</label>
                             <textarea name="keterangan" class="form-control modal-custom-input" rows="2"></textarea>
@@ -750,6 +795,15 @@
                                 </div>
                             </div>
 
+                            <!-- TAMBAHAN RATE_USAGE (RATA-RATA PENGGUNAAN PER BULAN) -->
+                            {{-- <div class="col-md-4 mb-3">
+                                <label class="form-label modal-label" for="edit_rate_usage_{{ $material->id }}">Penggunaan / Bulan</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" name="rate_usage" id="edit_rate_usage_{{ $material->id }}" value="{{ old('rate_usage', $material->rate_usage ?? 0) }}" min="0" placeholder="0">
+                                    <span class="input-group-text bg-light text-muted" style="font-size: 0.8rem;">/ bln</span>
+                                </div>
+                            </div> --}}
+
                             <div class="mb-0">
                                 <label class="form-label modal-label">Keterangan Kelompok Opsional</label>
                                 <textarea name="parent_keterangan" id="ket_kelompok" class="form-control modal-custom-input" rows="2" placeholder="Catatan kelompok komoditas..." disabled></textarea>
@@ -763,14 +817,15 @@
                         
                         <div class="table-responsive border rounded-3 pb-1">
                             <table class="table table-bordered mb-0 table-variants bg-white">
-                                <thead class="bg-light">
+                                <bg-light class="bg-light">
                                     <tr>
-                                        <!-- PENYESUAIAN LEBAR KOLOM UNTUK MENGAKOMODASI HARGA? -->
-                                        <th width="35%">Nama Varian / Jenis</th>
-                                        <th width="15%">Satuan</th>
-                                        <th width="15%">Min. Stok</th>
-                                        <th width="15%">Lacak Seri?</th>
-                                        <th width="10%">Harga?</th>
+                                        <!-- PENYESUAIAN LEBAR KOLOM (TOTAL 100%) -->
+                                        <th width="28%">Nama Varian / Jenis</th>
+                                        <th width="12%">Satuan</th>
+                                        <th width="12%">Min. Stok</th>
+                                        <th width="14%">Penggunaan/Bln</th>
+                                        <th width="12%">Lacak Seri?</th>
+                                        <th width="12%">Harga?</th>
                                         <th width="10%" class="text-center">Hapus</th>
                                     </tr>
                                 </thead>
@@ -789,14 +844,17 @@
                                                 <option value="RIM">RIM</option>
                                             </select>
                                         </td>
-                                        <td><input type="number" name="variants[0][minimal_stok]" class="form-control form-control-sm" value="0" disabled required></td>
+                                        <td><input type="number" name="variants[0][minimal_stok]" class="form-control form-control-sm" value="0" min="0" disabled required></td>
+                                        
+                                        <!-- TAMBAHAN KOLOM RATE_USAGE VARIAN -->
+                                        <td><input type="number" name="variants[0][rate_usage]" class="form-control form-control-sm" value="0" min="0" placeholder="0" disabled required></td>
+                                        
                                         <td>
                                             <select name="variants[0][pakai_seri]" class="form-select form-select-sm" disabled required>
                                                 <option value="0" selected>TIDAK</option>
                                                 <option value="1">YA</option>
                                             </select>
                                         </td>
-                                        <!-- TAMBAHAN IS_HARGA CHILD (VARIAN) -->
                                         <td>
                                             <select name="variants[0][is_harga]" class="form-select form-select-sm" disabled required>
                                                 <option value="0" selected>TDK</option>

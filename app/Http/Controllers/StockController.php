@@ -103,6 +103,8 @@ class StockController extends Controller
      */
     public function show(Request $request, $id)
     {
+        $this->executeSyncBuku($id);
+
         // Mutlak hanya ambil material yang pakai_seri = 1. Jika 0, akan otomatis ditolak (404 Not Found).
         $material = Material::with('category')->where('pakai_seri', 1)->findOrFail($id);
         
@@ -345,6 +347,135 @@ class StockController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Gagal menyinkronisasi: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper Privat untuk Sinkronisasi StockBuku per Material
+     */
+    private function executeSyncBuku($materialId)
+    {
+        $inStocks = InStock::with('log.sppm.warehouse')->where('material_id', $materialId)->get();
+        $outStocks = OutStock::with(['outLog.outSppm.details'])->where('material_id', $materialId)->get();
+
+        DB::beginTransaction();
+        try {
+            StockBuku::where('material_id', $materialId)->delete();
+
+            foreach ($outStocks as $out) {
+                $outSppmId = $out->outLog->out_sppm_id ?? null;
+
+                if (!$out->seri_awal || !$out->seri_akhir) {
+                    continue;
+                }
+
+                $unfulfilledOut = [['start' => $out->seri_awal, 'end' => $out->seri_akhir]];
+                $prefix = $out->prefix;
+
+                foreach ($inStocks as $in) {
+                    if ($in->serial_prefix !== $prefix) continue;
+                    if (!$in->serial_start) continue;
+
+                    $inSppmId = $in->log->in_sppm_id ?? null;
+
+                    $newUnfulfilledOut = [];
+                    foreach ($unfulfilledOut as $uo) {
+                        $overlapStart = max($uo['start'], $in->serial_start);
+                        $overlapEnd = min($uo['end'], $in->serial_end);
+
+                        if ($overlapStart <= $overlapEnd) {
+                            $qtyOverlap = ($overlapEnd - $overlapStart) + 1;
+                            
+                            StockBuku::create([
+                                'material_id'  => $materialId,
+                                'in_sppm_id'   => $inSppmId,
+                                'in_stock_id'  => $in->id,
+                                'out_sppm_id'  => $outSppmId,
+                                'out_stock_id' => $out->id,
+                                'tipe_baris'   => 'USED',
+                                'prefix'       => $prefix,
+                                'seri_awal'    => $overlapStart,
+                                'seri_akhir'   => $overlapEnd,
+                                'qty'          => $qtyOverlap
+                            ]);
+
+                            if ($uo['start'] < $overlapStart) {
+                                $newUnfulfilledOut[] = ['start' => $uo['start'], 'end' => $overlapStart - 1];
+                            }
+                            if ($uo['end'] > $overlapEnd) {
+                                $newUnfulfilledOut[] = ['start' => $overlapEnd + 1, 'end' => $uo['end']];
+                            }
+                        } else {
+                            $newUnfulfilledOut[] = $uo;
+                        }
+                    }
+                    $unfulfilledOut = $newUnfulfilledOut;
+                    if (empty($unfulfilledOut)) break;
+                }
+
+                foreach ($unfulfilledOut as $uo) {
+                    $qtySisa = $uo['end'] - $uo['start'] + 1;
+                    StockBuku::create([
+                        'material_id'  => $materialId,
+                        'out_sppm_id'  => $outSppmId,
+                        'out_stock_id' => $out->id,
+                        'tipe_baris'   => 'ORPHAN_OUT',
+                        'prefix'       => $prefix,
+                        'seri_awal'    => $uo['start'],
+                        'seri_akhir'   => $uo['end'],
+                        'qty'          => $qtySisa,
+                        'keterangan'   => 'SPPM Inbound (Asal-usul) tidak ditemukan.'
+                    ]);
+                }
+            }
+
+            foreach ($inStocks as $in) {
+                $inSppmId = $in->log->in_sppm_id ?? null;
+
+                if (!$in->serial_start || !$in->serial_end) {
+                    StockBuku::create([
+                        'material_id'  => $materialId,
+                        'in_sppm_id'   => $inSppmId,
+                        'in_stock_id'  => $in->id,
+                        'tipe_baris'   => 'UNSERIALIZED_IN',
+                        'prefix'       => $in->serial_prefix,
+                        'qty'          => $in->qty_received,
+                        'keterangan'   => 'Inbound tanpa rincian nomor seri.'
+                    ]);
+                    continue;
+                }
+
+                $usedRanges = StockBuku::where('in_stock_id', $in->id)
+                    ->where('tipe_baris', 'USED')
+                    ->get()
+                    ->map(function($u) {
+                        return ['start' => $u->seri_awal, 'end' => $u->seri_akhir];
+                    })->toArray();
+
+                $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
+                
+                foreach ($usedRanges as $used) {
+                    $availRanges = $this->subtractRanges($availRanges, $used);
+                }
+
+                foreach ($availRanges as $ar) {
+                    $qtyAvail = $ar['end'] - $ar['start'] + 1;
+                    StockBuku::create([
+                        'material_id'  => $materialId,
+                        'in_sppm_id'   => $inSppmId,
+                        'in_stock_id'  => $ar['start'] ? $in->id : null,
+                        'tipe_baris'   => 'AVAILABLE',
+                        'prefix'       => $in->serial_prefix,
+                        'seri_awal'    => $ar['start'],
+                        'seri_akhir'   => $ar['end'],
+                        'qty'          => $qtyAvail
+                    ]);
+                }
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
         }
     }
 

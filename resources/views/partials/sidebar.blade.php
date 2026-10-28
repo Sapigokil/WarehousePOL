@@ -159,22 +159,27 @@
                 </a>
             </li>
             <li>
-                <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
+                <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.index') ? 'active' : '' }}">
                     <i class="fa-solid fa-sliders"></i> Pengaturan Global
                 </a>
             </li>
             <li class="nav-item mb-1">
-                <a class="sidebar-link {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#warehouseSettingMenu" role="button" aria-expanded="{{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? 'true' : 'false' }}" aria-controls="warehouseSettingMenu">
+                <a class="sidebar-link {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') || request()->is('settings/rate*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#warehouseSettingMenu" role="button" aria-expanded="{{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') || request()->is('settings/rate*') ? 'true' : 'false' }}" aria-controls="warehouseSettingMenu">
                     <div class="d-flex w-100 justify-content-between align-items-center">
                         <div><i class="fa-solid fa-gear"></i> Pengaturan Warehouse</div>
                         <i class="fa-solid fa-chevron-down" style="font-size: 0.8rem;"></i>
                     </div>
                 </a>
-                <div class="collapse {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') ? 'show' : '' }}" id="warehouseSettingMenu">
+                <div class="collapse {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') || request()->is('settings/rate*') ? 'show' : '' }}" id="warehouseSettingMenu">
                     <ul style="list-style: none; padding-left: 20px; margin-top: 5px; margin-bottom: 5px;">
                         <li class="mb-1">
                             <a href="{{ route('materials.index') }}" class="sidebar-link {{ request()->routeIs('materials.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
                                 <i class="fa-solid fa-box me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Daftar Barang
+                            </a>
+                        </li>
+                        <li class="mb-1">
+                            <a href="{{ route('settings.rate.index') }}" class="sidebar-link {{ request()->routeIs('settings.rate.*') ? 'active' : '' }}" style="padding: 6px 25px; border-left: none; font-size: 0.8rem;">
+                                <i class="fa-solid fa-chart-line me-2" style="width: 20px; text-align: center; font-size: 0.85rem;"></i> Rate Usage
                             </a>
                         </li>
                         <li class="mb-1">

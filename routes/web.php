@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MaterialCategoryController;
 use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\MaterialController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\OutboundController;
 USe App\Http\Controllers\DestinationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReportAdjustmentController;
+use App\Http\Controllers\RateController;
 
 Route::get('/', function () {
     return redirect('/login');
@@ -31,11 +33,13 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
     /* ==============================================
        UTAMA
        ============================================== */
-    Route::middleware(['can:Dashboard Menu'])->group(function () {
-        Route::get('/dashboard', function () {
-            return view('dashboard');
-        })->name('dashboard');
-    });
+    // Route::middleware(['can:Dashboard Menu'])->group(function () {
+    //     Route::get('/dashboard', function () {
+    //         return view('dashboard');
+    //     })->name('dashboard');
+    // });
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     /* ==============================================
        OPERASIONAL
@@ -163,6 +167,13 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         // Menu Pengaturan Global
         Route::get('/settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
         Route::put('/settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
+        
+        // Pengaturan Rate Usage & Daya Tahan Stok
+        Route::get('/settings/rate', [\App\Http\Controllers\RateController::class, 'index'])->name('settings.rate.index');
+        Route::put('/settings/rate/bulk', [\App\Http\Controllers\RateController::class, 'updateBulk'])->name('settings.rate.update_bulk');
+        Route::post('/settings/rate/apply', [\App\Http\Controllers\RateController::class, 'applySelection'])->name('settings.rate.apply_selection');
+        Route::delete('/settings/rate/{id}', [\App\Http\Controllers\RateController::class, 'remove'])->name('settings.rate.remove');
+
         Route::post('categories/reorder', [ MaterialCategoryController::class, 'reorder' ])->name('categories.reorder');
         Route::resource('categories', MaterialCategoryController::class);
         Route::post('warehouses/reorder', [WarehouseController::class, 'reorder'])->name('warehouses.reorder');
@@ -173,6 +184,5 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::resource('destinations', \App\Http\Controllers\DestinationController::class)->except(['show']);
         Route::post('/destinations/import', [App\Http\Controllers\DestinationController::class, 'import'])->name('destinations.import');
         Route::get('system-logs', [\App\Http\Controllers\SystemLogController::class, 'index'])->name('sislogs.index');
-
     });
 });

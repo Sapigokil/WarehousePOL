@@ -58,6 +58,7 @@ class MaterialController extends Controller
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
             'minimal_stok'         => 'nullable|numeric',
+            'rate_usage'           => 'nullable|integer|min:0',
             'pakai_seri'           => 'nullable|boolean',
             'ismain'               => 'nullable|integer|in:0,1',
             'jmlxinduk'            => 'nullable|integer|in:0,1',
@@ -73,6 +74,7 @@ class MaterialController extends Controller
             $validated['jmlxinduk'] = ($validated['ismain'] == 1) ? 0 : $request->input('jmlxinduk', 0);
             $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
             $validated['is_harga'] = $request->input('is_harga') == 1 ? 1 : 0;
+            $validated['rate_usage'] = $request->input('rate_usage', 0) ?? 0;
             
             if (!$request->filled('nomor_urut')) {
                 $maxUrut = Material::where('material_category_id', $validated['material_category_id'])->max('nomor_urut');
@@ -91,6 +93,7 @@ class MaterialController extends Controller
                 'variants.*.name'         => 'required|string|max:255',
                 'variants.*.satuan'       => 'nullable|string',
                 'variants.*.minimal_stok' => 'nullable|numeric',
+                'variants.*.rate_usage'   => 'nullable|integer|min:0',
             ]);
 
             // Gunakan DB Transaction agar aman jika ada satu anak yang gagal
@@ -101,12 +104,13 @@ class MaterialController extends Controller
                     'name'                 => $request->input('parent_name'),
                     'code'                 => $request->input('parent_code'),
                     'material_category_id' => $validated['material_category_id'],
-                    'satuan'               => '-', // FIX: Samakan dengan data lama (induk strip)
+                    'satuan'               => '-', // Induk diset strip
                     'keterangan'           => $request->input('parent_keterangan'),
                     'is_harga'             => $request->input('parent_is_harga', 0) == 1 ? 1 : 0,
                     'ismain'               => 0,
                     'jmlxinduk'            => 0,
                     'pakai_seri'           => 0,
+                    'rate_usage'           => $request->input('parent_rate_usage', 0) ?? 0,
                 ];
 
                 if (!$request->filled('nomor_urut')) {
@@ -119,7 +123,7 @@ class MaterialController extends Controller
                 $parentMaterial = Material::create($parentData);
 
                 // 2. Buat Anak-anaknya (Variants)
-                $childUrut = 1; // FIX: Mulai dari 1 untuk urutan internal anak
+                $childUrut = 1;
                 
                 foreach ($request->variants as $variant) {
                     Material::create([
@@ -130,11 +134,12 @@ class MaterialController extends Controller
                         'material_category_id' => $validated['material_category_id'],
                         'satuan'               => $variant['satuan'] ?? '-',
                         'minimal_stok'         => $variant['minimal_stok'] ?? 0,
+                        'rate_usage'           => $variant['rate_usage'] ?? 0,
                         'pakai_seri'           => isset($variant['pakai_seri']) && $variant['pakai_seri'] == 1 ? 1 : 0,
                         'is_harga'             => isset($variant['is_harga']) && $variant['is_harga'] == 1 ? 1 : 0,
                         'ismain'               => 0,
                         'jmlxinduk'            => 0,
-                        'nomor_urut'           => $childUrut++, // FIX: Anak akan berurut 1, 2, 3, dst
+                        'nomor_urut'           => $childUrut++,
                     ]);
                 }
             });
@@ -155,12 +160,12 @@ class MaterialController extends Controller
         $validated = $request->validate([
             'parent_id'            => 'nullable|exists:materials,id',
             'code'                 => 'nullable|string|max:50|unique:materials,code,' . $material->id,
-            // Jika punya anak (kelompok), validasi parent_name. Jika tunggal, validasi name.
             'name'                 => $hasChildren ? 'nullable' : 'required|string|max:255',
             'parent_name'          => $hasChildren ? 'required|string|max:255' : 'nullable',
             'material_category_id' => 'required|exists:material_categories,id',
             'satuan'               => 'nullable|string|max:50',
             'minimal_stok'         => 'nullable|numeric',
+            'rate_usage'           => 'nullable|integer|min:0',
             'pakai_seri'           => 'nullable|boolean',
             'ismain'               => 'nullable|integer|in:0,1',
             'jmlxinduk'            => 'nullable|integer|in:0,1',
@@ -174,7 +179,7 @@ class MaterialController extends Controller
             $validated['name'] = $request->input('parent_name');
         }
 
-        // Aturan logika ismain & jmlxinduk yang sudah ada sebelumnya
+        // Aturan logika ismain & jmlxinduk
         if ($hasChildren || !empty($material->parent_id)) {
             $validated['ismain'] = 0;
             $validated['jmlxinduk'] = 0;
@@ -189,6 +194,7 @@ class MaterialController extends Controller
 
         $validated['pakai_seri'] = $request->input('pakai_seri') == 1 ? 1 : 0;
         $validated['is_harga'] = $request->input('is_harga') == 1 ? 1 : 0; 
+        $validated['rate_usage'] = $request->input('rate_usage', 0) ?? 0;
         
         if ($request->filled('nomor_urut')) {
              $validated['nomor_urut'] = $request->input('nomor_urut');

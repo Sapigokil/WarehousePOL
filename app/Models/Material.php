@@ -17,6 +17,7 @@ class Material extends Model
         'name',
         'material_category_id',
         'satuan',
+        'rate_usage',
         'minimal_stok',
         'pakai_seri',
         'ismain',
