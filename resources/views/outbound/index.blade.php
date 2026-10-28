@@ -278,7 +278,7 @@
                                 </a>
                             @endif
                             
-                            <a href="{{ route('outbounds.show', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Detail (Read-Only)">
+                            {{-- <a href="{{ route('outbounds.show', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Lihat Detail (Read-Only)">
                                 <i class="fa-solid fa-eye text-info"></i>
                             </a>
 
@@ -288,7 +288,11 @@
                                     <i class="fa-solid fa-pen text-theme"></i>
                                 </a>
                                 @endif
-                            @endcan
+                            @endcan --}}
+
+                            <a href="{{ route('outbounds.edit', $sppm->id) }}" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5" title="Edit / Koreksi Data">
+                                <i class="fa-solid fa-pen text-theme"></i>
+                            </a>
 
                             @can('Outbound Delete')
                             <button type="button" class="btn btn-sm btn-light border shadow-none rounded-1 px-2 py-0.5 text-danger" title="Batalkan & Hapus Data" 

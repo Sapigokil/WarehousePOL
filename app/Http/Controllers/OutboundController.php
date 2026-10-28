@@ -60,42 +60,79 @@ class OutboundController extends Controller
 
     /**
      * Fungsi Helper Privat untuk Mendapatkan Antrean Stok Tersedia (Untuk Wizard Frontend)
+     * Menggunakan metode On-The-Fly Calculation Real-Time (Sesuai dengan Stock Index)
      */
     private function calculateMaterialStock($mat)
     {
-        $inStocks = InStock::where('material_id', $mat->id)->get();
-        $outStocks = OutStock::where('material_id', $mat->id)->get();
+        // 1. HITUNG SISA STOK MURNI BERDASARKAN DOKUMEN (SAMA SEPERTI DI STOCK INDEX)
+        $totalInDetail = \App\Models\InDetail::where('material_id', $mat->id)->sum('target_qty');
         
-        $mat->current_stock = $inStocks->sum('qty_received') - $outStocks->sum('qty_keluar');
+        // Hanya hitung dokumen SPPM Outbound yang sudah 'completed'
+        // Jika Draft juga memotong stok, hapus klausa whereHas ini.
+        $totalOutDetail = \App\Models\OutDetail::where('material_id', $mat->id)
+            ->whereHas('outSppm', function($q) {
+                $q->where('status', 'completed');
+            })->sum('target_qty');
+
+        // Ini adalah nilai baku/absolut yang akan muncul sebagai total ketersediaan di form
+        $mat->current_stock = $totalInDetail - $totalOutDetail;
         $fifoQueue = [];
 
+        // 2. JIKA ADA STOK, DAN BARANG MENGGUNAKAN SERI, KITA RENDER WIZARD-NYA DARI STOK FISIK
         if ($mat->current_stock > 0) {
             if ($mat->pakai_seri == 1) {
-                $prefixes = $inStocks->pluck('serial_prefix')->merge($outStocks->pluck('prefix'))->unique()->filter();
+                // Tarik data seri masuk (fisik)
+                $inStocks = InStock::where('material_id', $mat->id)->get();
+                
+                // Tarik data seri keluar (fisik) dari SPPM yang completed
+                $outStocks = OutStock::where('material_id', $mat->id)
+                    ->whereHas('outLog.outSppm', function($q) {
+                        $q->where('status', 'completed');
+                    })->get();
+
+                // Dapatkan semua prefix unik (termasuk null / string kosong)
+                $prefixes = $inStocks->pluck('serial_prefix')
+                            ->merge($outStocks->pluck('prefix'))
+                            ->unique();
+                
                 foreach($prefixes as $prefix) {
-                    $inForPrefix = $inStocks->where('serial_prefix', $prefix);
-                    $outForPrefix = $outStocks->where('prefix', $prefix)->map(function($o) {
+                    $inForPrefix = $inStocks->filter(function($i) use ($prefix) {
+                        return $i->serial_prefix === $prefix;
+                    });
+                    
+                    $outForPrefix = $outStocks->filter(function($o) use ($prefix) {
+                        return $o->prefix === $prefix;
+                    })->map(function($o) {
                         return ['start' => $o->seri_awal, 'end' => $o->seri_akhir];
                     })->toArray();
                     
                     foreach($inForPrefix as $in) {
+                        // Lewati jika tidak ada rentang seri
+                        if (is_null($in->serial_start) || is_null($in->serial_end)) continue;
+
                         $availRanges = [['start' => $in->serial_start, 'end' => $in->serial_end]];
+                        
                         foreach($outForPrefix as $out) {
+                            if (is_null($out['start']) || is_null($out['end'])) continue;
                             $availRanges = $this->subtractRanges($availRanges, $out);
                         }
+                        
                         foreach($availRanges as $r) {
-                            $fifoQueue[] = [
-                                'id'         => $in->id,
-                                'qty'        => $r['end'] - $r['start'] + 1,
-                                'price'      => 0,
-                                'prefix'     => $prefix,
-                                'seri_awal'  => $r['start'],
-                                'seri_akhir' => $r['end']
-                            ];
+                            if ($r['start'] <= $r['end']) {
+                                $fifoQueue[] = [
+                                    'id'         => $in->id,
+                                    'qty'        => $r['end'] - $r['start'] + 1,
+                                    'price'      => $in->harga_satuan ?? 0,
+                                    'prefix'     => $prefix,
+                                    'seri_awal'  => $r['start'],
+                                    'seri_akhir' => $r['end']
+                                ];
+                            }
                         }
                     }
                 }
             } else {
+                // Untuk barang non-seri (Curah), langsung berikan slot sesuai $current_stock
                 $fifoQueue[] = [
                     'id'         => 1,
                     'qty'        => $mat->current_stock,
@@ -106,6 +143,11 @@ class OutboundController extends Controller
                 ];
             }
         }
+
+        // Urutkan FIFO berdasarkan urutan penerimaan (ID)
+        usort($fifoQueue, function($a, $b) {
+            return $a['id'] <=> $b['id'];
+        });
 
         $mat->fifo_queue = $fifoQueue;
         
@@ -175,7 +217,6 @@ class OutboundController extends Controller
 
         $outbounds = $query->paginate($limit)->withQueryString();
 
-        // SINKRONISASI KATEGORI DAN QTY UTAMA (Ambil baris detail pertama dengan QTY > 0)
         $outbounds->getCollection()->transform(function ($sppm) {
             $firstValidDetail = $sppm->details->first(function ($detail) {
                 return (int) $detail->target_qty > 0;
@@ -395,10 +436,11 @@ class OutboundController extends Controller
             'items.*.target_qty'  => 'nullable|numeric|min:0',
         ]);
 
-        $sppm = OutSppm::with('details.material')->findOrFail($id);
+        $sppm = OutSppm::with('details.material', 'logs.outStocks')->findOrFail($id);
 
-        if ($sppm->status === 'completed') {
-            return back()->withErrors('Dokumen yang sudah Final / Selesai tidak dapat diubah kembali.');
+        if ($sppm->status === 'completed' && $request->input('action_type') === 'completed') {
+            // Bypass pelarangan jika memang status lama dan baru adalah completed
+            // Dokumen final sekarang bisa diedit, stok lama dibebaskan, lalu dicek ulang.
         }
 
         $allowMinusStock = \App\Models\Setting::where('key', 'allow_minus_stock')->value('value') == '1';
@@ -427,7 +469,7 @@ class OutboundController extends Controller
                 $newQty = $item['target_qty'];
                 $oldDetail = $oldDetails->get($matId);
                 
-                $matName = $oldDetail ? $oldDetail->material->name : Material::find($matId)->name;
+                $matName = $oldDetail ? $oldDetail->material->name : (Material::find($matId)->name ?? 'Barang');
                 $oldQty = $oldDetail ? $oldDetail->target_qty : 0;
                 
                 if ($oldQty != $newQty) {
@@ -435,10 +477,6 @@ class OutboundController extends Controller
                     $newChanges["Jml " . strtoupper($matName)] = $newQty;
                 }
             }
-        }
-
-        if (empty($oldChanges) && empty($newChanges) && $request->input('action_type') == 'final') {
-             $newChanges['Status'] = 'Draft di-Finalisasi, tercatat di Ledger.';
         }
 
         DB::beginTransaction();
@@ -457,16 +495,32 @@ class OutboundController extends Controller
                 'updated_by'     => Auth::id(),
             ]);
 
+            // 1. Bersihkan Detail Lama (Dokumen)
             $sppm->details()->delete();
 
-            $log = null;
+            // 2. BEBASKAN STOK LAMA (Clear OutStock) agar tidak bentrok saat validasi ulang ketersediaan
+            foreach ($sppm->logs as $existingLog) {
+                $existingLog->outStocks()->delete(); 
+            }
+
+            // 3. Atur Induk Log
+            $log = $sppm->logs()->first();
             if ($action === 'final') {
-                $log = OutLog::create([
-                    'out_sppm_id'  => $sppm->id,
-                    'batch_number' => 1,
-                    'tgl_keluar'   => $request->sppm_date,
-                    'keterangan'   => 'Realisasi keluar otomatis (Update dari Draft).',
-                ]);
+                if (!$log) {
+                    $log = OutLog::create([
+                        'out_sppm_id'  => $sppm->id,
+                        'batch_number' => 1,
+                        'tgl_keluar'   => $request->sppm_date,
+                        'keterangan'   => 'Realisasi keluar otomatis (Pembaruan).',
+                    ]);
+                } else {
+                    $log->update(['tgl_keluar' => $request->sppm_date]);
+                }
+            } else {
+                if ($log) {
+                    $log->delete();
+                    $log = null;
+                }
             }
 
             $hasItems = false;
@@ -519,12 +573,13 @@ class OutboundController extends Controller
                 ]);
 
                 if ($action === 'final') {
+                    // Karena stok lama sudah dihapus di atas, $outQty saat ini murni sisa stok yang benar-benar ada
                     $inQty = InStock::where('material_id', $material->id)->sum('qty_received');
                     $outQty = OutStock::where('material_id', $material->id)->sum('qty_keluar');
                     $availableStock = $inQty - $outQty;
                     
                     if (!$allowMinusStock && $qty > $availableStock) {
-                        throw new \Exception("GAGAL DISIMPAN: Jumlah keluar [{$material->name}] adalah {$qty}, sedangkan stok tersedia hanya {$availableStock}.");
+                        throw new \Exception("GAGAL DISIMPAN: Jumlah keluar [{$material->name}] adalah {$qty}, sedangkan sisa stok tersedia hanya {$availableStock}.");
                     }
 
                     if ($isSerialized && !empty($seriesList)) {
@@ -555,12 +610,16 @@ class OutboundController extends Controller
                 throw new \Exception("SPPM harus memiliki minimal satu barang dengan target jumlah keluar lebih dari 0.");
             }
 
-            if (method_exists($this, 'recordLog')) {
+            if (empty($oldChanges) && empty($newChanges) && $action === 'final') {
+                 $newChanges['Status'] = 'Di-Finalisasi atau diperbarui, tercatat di Ledger.';
+            }
+
+            if (method_exists($this, 'recordLog') && (!empty($oldChanges) || !empty($newChanges))) {
                 $this->recordLog('UPDATED', 'DOKUMEN SPPM KELUAR', $sppm->id, $oldChanges, $newChanges);
             }
 
             DB::commit();
-            $msg = $action === 'final' ? 'Draft berhasil di-Finalisasi dan tercatat di Ledger.' : 'DRAFT berhasil diperbarui.';
+            $msg = $action === 'final' ? 'Dokumen & Stok berhasil diperbarui di Ledger.' : 'DRAFT berhasil diperbarui.';
             return redirect()->route('outbounds.index')->with('success', $msg);
 
         } catch (\Exception $e) {
@@ -579,7 +638,24 @@ class OutboundController extends Controller
         $firstDetail = $outbound->details->first();
         $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
 
-        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId'));
+        $isReadonly = false;
+
+        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId', 'isReadonly'));
+    }
+
+    public function show($id)
+    {
+        $outbound = OutSppm::with('details')->findOrFail($id);
+        
+        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
+        $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
+        
+        $firstDetail = $outbound->details->first();
+        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
+
+        $isReadonly = true;
+
+        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId', 'isReadonly'));
     }
 
     public function destroy($id)
@@ -596,10 +672,12 @@ class OutboundController extends Controller
                 $log->delete();
             }
             
-            $this->recordLog('DELETED', 'DOKUMEN SPPM KELUAR', $sppm->id, [
-                'Nomor SPPM Dihapus' => $deletedSppmNo,
-                'Tanggal SPPM'       => $deletedSppmDate
-            ], null);
+            if (method_exists($this, 'recordLog')) {
+                $this->recordLog('DELETED', 'DOKUMEN SPPM KELUAR', $sppm->id, [
+                    'Nomor SPPM Dihapus' => $deletedSppmNo,
+                    'Tanggal SPPM'       => $deletedSppmDate
+                ], null);
+            }
 
             $sppm->details()->delete();
             $sppm->delete(); 
@@ -693,10 +771,12 @@ class OutboundController extends Controller
             abort(403, 'Hanya dokumen yang sudah berstatus FINAL yang dapat dicetak.');
         }
 
-        $this->recordLog('PRINT', 'DOKUMEN SPPM KELUAR', $sppm->id, null, [
-            'Aksi' => 'Mencetak dokumen fisik SPPM',
-            'Nomor SPPM' => $sppm->sppm_no
-        ]);
+        if (method_exists($this, 'recordLog')) {
+            $this->recordLog('PRINT', 'DOKUMEN SPPM KELUAR', $sppm->id, null, [
+                'Aksi' => 'Mencetak dokumen fisik SPPM',
+                'Nomor SPPM' => $sppm->sppm_no
+            ]);
+        }
 
         $settings = \App\Models\Setting::pluck('value', 'key')->toArray();
         $signatory = [
@@ -715,10 +795,12 @@ class OutboundController extends Controller
         $categoryId = $request->input('category_id');
         $category = MaterialCategory::findOrFail($categoryId);
 
-        $this->recordLog('DOWNLOAD', 'TEMPLATE EXCEL KELUAR', null, null, [
-            'Aksi' => 'Mengunduh template import excel',
-            'Kategori' => $category->name
-        ]);
+        if (method_exists($this, 'recordLog')) {
+            $this->recordLog('DOWNLOAD', 'TEMPLATE EXCEL KELUAR', null, null, [
+                'Aksi' => 'Mengunduh template import excel',
+                'Kategori' => $category->name
+            ]);
+        }
 
         $topLevelMaterials = Material::with(['children' => function($q) {
                 $q->orderBy('nomor_urut', 'asc');
@@ -977,11 +1059,13 @@ class OutboundController extends Controller
                 throw new \Exception("Sistem membaca file, tetapi tidak ada baris data yang valid.");
             }
 
-            $this->recordLog('IMPORT', 'DOKUMEN SPPM KELUAR', null, null, [
-                'Nama File CSV'       => $originalFileName,
-                'Total Baris Sukses'  => $insertedDataCount,
-                'Daftar SPPM Keluar'  => implode(', ', $importedSppms)
-            ]);
+            if (method_exists($this, 'recordLog')) {
+                $this->recordLog('IMPORT', 'DOKUMEN SPPM KELUAR', null, null, [
+                    'Nama File CSV'       => $originalFileName,
+                    'Total Baris Sukses'  => $insertedDataCount,
+                    'Daftar SPPM Keluar'  => implode(', ', $importedSppms)
+                ]);
+            }
 
             DB::commit();
         } catch (\Exception $e) {
@@ -1036,20 +1120,5 @@ class OutboundController extends Controller
             DB::rollBack();
             return redirect()->route('outbounds.index')->with('error', "Gagal melakukan Auto-Fix: " . $e->getMessage());
         }
-    }
-
-    public function show($id)
-    {
-        $outbound = OutSppm::with('details')->findOrFail($id);
-        
-        $categories = MaterialCategory::orderBy('nomor_urut', 'asc')->get();
-        $destinations = Destination::orderBy('nomor_urut', 'asc')->get();
-        
-        $firstDetail = $outbound->details->first();
-        $selectedCategoryId = $firstDetail ? $firstDetail->material->material_category_id : null;
-
-        $isReadonly = true;
-
-        return view('outbound.form', compact('categories', 'destinations', 'outbound', 'selectedCategoryId', 'isReadonly'));
     }
 }

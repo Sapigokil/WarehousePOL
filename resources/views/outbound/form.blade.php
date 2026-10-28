@@ -30,8 +30,9 @@
     // Cek dengan isset untuk mencegah undefined variable error
     $isCompleted = isset($outbound) && $outbound->status === 'completed';
     $readOnlyMode = isset($isReadonly) && $isReadonly;
-    // Terapkan default false jika variabel dari controller tidak dikirim
-    $isLocked = $isCompleted || $readOnlyMode ? true : false;
+    
+    // REVISI: isLocked HANYA aktif jika benar-benar berada di halaman SHOW (readOnlyMode = true)
+    $isLocked = $readOnlyMode; 
 
     // BACA PENGATURAN ALLOW MINUS STOCK DARI DATABASE
     $allowMinusStock = \App\Models\Setting::where('key', 'allow_minus_stock')->value('value') == '1';
@@ -44,9 +45,9 @@
         if ($n < 12) return $bil[$n];
         if ($n < 20) return $terbilang($n - 10) . " belas";
         if ($n < 100) return $terbilang(floor($n / 10)) . " puluh " . ($bil[$n % 10] === "" ? "" : " " . $bil[$n % 10]);
-        if ($n < 200) return "seratus " . ($n - 100 === 0 ? "" : $terbilang($n - 100));
+        if ($n < 200) return "seratus " . (($n - 100) === 0 ? "" : $terbilang($n - 100));
         if ($n < 1000) return $terbilang(floor($n / 100)) . " ratus " . ($n % 100 === 0 ? "" : " " . $terbilang($n % 100));
-        if ($n < 2000) return "seribu " . ($n - 1000 === 0 ? "" : $terbilang($n - 1000));
+        if ($n < 2000) return "seribu " . (($n - 1000) === 0 ? "" : $terbilang($n - 1000));
         if ($n < 1000000) return $terbilang(floor($n / 1000)) . " ribu " . ($n % 1000 === 0 ? "" : " " . $terbilang($n % 1000));
         if ($n < 1000000000) return $terbilang(floor($n / 1000000)) . " juta " . ($n % 1000000 === 0 ? "" : " " . $terbilang($n % 1000000));
         return "";
@@ -65,6 +66,32 @@
         $p = $prefix ? "<span class='text-danger fw-bold'>{$prefix}.</span>" : '';
         return "{$p}<span class='fw-bold'>{$s_formatted}</span> <span class='fw-normal mx-1'>s/d</span> <span class='fw-bold'>{$e_formatted}</span>";
     };
+
+    // REVISI: Tarik rentang nomor seri lama yang sudah ter-simpan untuk disuntikkan kembali ke input
+    $savedSerials = [];
+    if(isset($outbound) && !$readOnlyMode) {
+        foreach($outbound->details as $det) {
+            if($det->material->pakai_seri == 1 && $det->target_qty > 0) {
+                $serialArr = [];
+                if($outbound->logs) {
+                    foreach($outbound->logs as $log) {
+                        foreach($log->outStocks->where('material_id', $det->material_id) as $st) {
+                            if($st->seri_awal !== null) {
+                                $serialArr[] = [
+                                    'prefix' => $st->prefix,
+                                    'start'  => $st->seri_awal,
+                                    'end'    => $st->seri_akhir
+                                ];
+                            }
+                        }
+                    }
+                }
+                if(!empty($serialArr)) {
+                    $savedSerials[$det->material_id] = $serialArr;
+                }
+            }
+        }
+    }
 @endphp
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -87,7 +114,7 @@
         </h5>
         
         @if($allowMinusStock && !$isLocked)
-            <small class="text-warning fw-bold"><i class="fa-solid fa-triangle-exclamation"></i> Peringatan: Mode Transaksi Stok Minus Sedang Aktif.</small>
+            <small class="text-warning fw-bold"><i class="fa-solid fa-triangle-exclamation"></i> Mode Transaksi Stok Minus Sedang Aktif.</small>
         @endif
     </div>
     <div class="d-flex gap-2">
@@ -209,7 +236,7 @@
                             </tr>
                         </thead>
                         <tbody id="outbound-items-container">
-                            <!-- Jika dokumen final / dikunci, langsung render data statis yang sudah tersimpan -->
+                            <!-- Jika mode Show (ReadOnly), render data statis secara langsung -->
                             @if($isLocked)
                                 @php $parentNo = 1; @endphp
                                 @foreach($outbound->details as $idx => $detail)
@@ -270,11 +297,11 @@
                     </table>
                 </div>
 
-                <!-- Tampilkan Tombol Simpan HANYA Jika Bukan Mode ReadOnly & Bukan Final -->
+                <!-- Tampilkan Tombol Simpan HANYA Jika Bukan Mode ReadOnly -->
                 @if(!$isLocked)
                 <div class="bg-light p-3 border-top d-flex justify-content-end gap-2">
                     <button type="submit" name="action_type" value="draft" class="btn btn-outline-secondary fw-bold px-4" style="border-radius: 6px;"><i class="fa-solid fa-pen-ruler me-1"></i> SIMPAN DRAFT</button>
-                    <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan memotong stok di Gudang dan dokumen tidak dapat diubah lagi. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
+                    <button type="submit" name="action_type" value="final" class="btn btn-theme fw-bold px-4" style="border-radius: 6px;" onclick="return confirm('PENTING: Menyimpan dokumen secara Final akan memotong / memperbarui stok di Gudang. Lanjutkan?');"><i class="fa-solid fa-box-open me-1"></i> SIMPAN & KELUARKAN STOK</button>
                 </div>
                 @endif
             </div>
@@ -336,8 +363,11 @@
     const itemsContainer = document.getElementById('outbound-items-container');
     const loadingIndicator = document.getElementById('loading-indicator');
     
-    // Injeksi data draft lama (cek isset agar aman)
+    // Injeksi data draft/lama
     const savedTargetData = {!! (isset($outbound) && isset($outbound->details)) ? json_encode($outbound->details->pluck('target_qty', 'material_id')) : '{}' !!};
+    
+    // Injeksi serial yang sudah tersimpan untuk form Edit
+    const savedSerials = {!! json_encode($savedSerials) !!};
 
     function terbilang(n) {
         const bil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
@@ -364,6 +394,76 @@
         if (!s) return '';
         s = s.padStart(9, '0');
         return s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+
+    // FUNGSI BARU: Auto-Fill Nomor Seri berdasarkan Qty dan FIFO Gudang
+    function autoFillSerials(idx, qty, stocksStr) {
+        const container = document.querySelector(`.serial-inputs-container[data-index="${idx}"]`);
+        if (!container) return; // Abaikan jika baris ini bukan material berseri
+
+        const currentBtn = container.querySelector('.btn-wizard');
+        const btnHtml = currentBtn ? currentBtn.outerHTML : '';
+
+        // Jika qty 0 atau dikosongkan, reset form ke 1 baris kosong
+        if (qty <= 0) {
+            container.innerHTML = `
+            <div class="d-flex gap-1 mb-1 serial-row">
+                <input type="text" name="items[${idx}][serials][0][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx">
+                <input type="text" name="items[${idx}][serials][0][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal">
+                <input type="text" name="items[${idx}][serials][0][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir">
+                ${btnHtml}
+            </div>`;
+            return;
+        }
+
+        let stocks = [];
+        try { stocks = JSON.parse(stocksStr); } catch(e) {}
+
+        let sisa = qty;
+        let newHtml = '';
+        let loopIdx = 0;
+
+        // Looping data stok di gudang, potong sesuai Qty (FIFO)
+        for (let i = 0; i < stocks.length; i++) {
+            if (sisa <= 0) break;
+            
+            let batch = stocks[i];
+            let batchQty = parseInt(batch.qty) || 0;
+            let ambil = Math.min(batchQty, sisa);
+
+            let startNum = batch.seri_awal ? parseInt(batch.seri_awal.toString().replace(/\D/g, '')) : null;
+            let endNum = startNum !== null ? startNum + ambil - 1 : null;
+
+            let pfx = batch.prefix || '';
+            let sStart = startNum !== null ? formatSeriVisual(startNum) : '';
+            let sEnd = endNum !== null ? formatSeriVisual(endNum) : '';
+
+            const appendHtml = (loopIdx === 0 && btnHtml) ? btnHtml : '<div style="width:31px;"></div>';
+
+            newHtml += `
+            <div class="d-flex gap-1 mb-1 serial-row">
+                <input type="text" name="items[${idx}][serials][${loopIdx}][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx" value="${pfx}">
+                <input type="text" name="items[${idx}][serials][${loopIdx}][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal" value="${sStart}">
+                <input type="text" name="items[${idx}][serials][${loopIdx}][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir" value="${sEnd}">
+                ${appendHtml}
+            </div>`;
+
+            sisa -= ambil;
+            loopIdx++;
+        }
+
+        // Jika gudang kosong (tapi admin paksa input karena allow_minus_stock aktif)
+        if (newHtml === '') {
+             newHtml = `
+            <div class="d-flex gap-1 mb-1 serial-row">
+                <input type="text" name="items[${idx}][serials][0][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx">
+                <input type="text" name="items[${idx}][serials][0][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal">
+                <input type="text" name="items[${idx}][serials][0][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir">
+                ${btnHtml}
+            </div>`;
+        }
+
+        container.innerHTML = newHtml;
     }
 
     // FUNGSI HELPER: Sinkronisasi Teks, Kalkulasi Harga & Total (FIFO)
@@ -423,6 +523,9 @@
             const idx = e.target.dataset.index;
             updateRowValues(idx, qty, e.target);
 
+            // ---> TAMBAHKAN BARIS INI <---
+            autoFillSerials(idx, qty, e.target.dataset.stocks);
+
             // OTOMATISASI: Sinkronkan ke anakan jika ismain diubah
             const isMain = e.target.dataset.ismain;
             if (isMain == "1" || isMain === 1) {
@@ -431,6 +534,9 @@
                     if (childInput !== e.target) {
                         childInput.value = qty;
                         updateRowValues(childInput.dataset.index, qty, childInput);
+
+                        // ---> TAMBAHKAN BARIS INI JUGA UNTUK ANAKAN <---
+                        autoFillSerials(childInput.dataset.index, qty, childInput.dataset.stocks);
                     }
                 });
             }
@@ -552,7 +658,7 @@
                         }
                     });
 
-                    // Trigger data draft lama
+                    // RESTORE DATA KUANTITAS (QTY) LAMA
                     document.querySelectorAll('.data-qty-input').forEach(input => {
                         const matId = input.closest('tr').querySelector('input[name*="[material_id]"]').value;
                         if (savedTargetData[matId]) {
@@ -560,6 +666,36 @@
                             input.dispatchEvent(new Event('input'));
                         }
                     });
+
+                    // RESTORE DATA INPUTAN SERIAL LAMA
+                    document.querySelectorAll('.serial-inputs-container').forEach(container => {
+                        const row = container.closest('tr');
+                        const matId = row.querySelector('input[name*="[material_id]"]').value;
+                        
+                        if (savedSerials[matId] && savedSerials[matId].length > 0) {
+                            const cIdx = container.dataset.index;
+                            let newHtml = '';
+                            const currentBtn = container.querySelector('.btn-wizard');
+                            const btnHtml = currentBtn ? currentBtn.outerHTML : '';
+                            
+                            savedSerials[matId].forEach((ser, loopIdx) => {
+                                const appendHtml = (loopIdx === 0 && btnHtml) ? btnHtml : '<div style="width:31px;"></div>'; 
+                                const startFormatted = ser.start ? formatSeriVisual(ser.start.toString()) : '';
+                                const endFormatted = ser.end ? formatSeriVisual(ser.end.toString()) : '';
+                                
+                                newHtml += `
+                                <div class="d-flex gap-1 mb-1 serial-row">
+                                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx" value="${ser.prefix || ''}">
+                                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal" value="${startFormatted}">
+                                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir" value="${endFormatted}">
+                                    ${appendHtml}
+                                </div>`;
+                            });
+                            
+                            container.innerHTML = newHtml;
+                        }
+                    });
+
                 })
                 .catch(error => {
                     console.error("Fetch Error:", error);
@@ -708,8 +844,6 @@
         const totalQty = parseInt(document.getElementById('wizard-total-taken').textContent) || 0;
 
         if(totalQty !== target) {
-            // Jika allow minus stock aktif, wizard tidak membatasi pemilihan lebih kecil dari form
-            // Tapi jika admin memaksa, tampilkan warning.
             if(!confirm(`Total Qty yang diambil (${totalQty}) tidak sama dengan target form (${target}). Ingin tetap menerapkan rentang ini?`)) {
                 return;
             }
@@ -751,13 +885,11 @@
         const originalIdx = document.getElementById('wizard-index').value;
         const targetQtyInput = document.querySelector(`.data-qty-input[data-index="${originalIdx}"]`);
 
-        // Update Target Qty jika ternyata berbeda (Hanya jika admin memilih untuk mengubah)
         if (targetQtyInput && totalQty !== target && totalQty > 0 && !allowMinusStock) {
             targetQtyInput.value = totalQty;
             targetQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
-        // Terapkan Harga secara Final
         if(totalQty > 0) {
             const priceSpan = document.getElementById(`price-span-${originalIdx}`);
             const totalSpan = document.getElementById(`total-span-${originalIdx}`);
@@ -770,10 +902,9 @@
             if (totalInput) totalInput.value = totalPrice;
         }
 
-        // Sebarkan format seri
         const allContainers = document.querySelectorAll('.serial-inputs-container[data-pakaiseri="1"]');
         allContainers.forEach(container => {
-            const cIdx = container.dataset.index;
+            if(container.dataset.index !== originalIdx) return;
             let newHtml = '';
             
             const currentBtn = container.querySelector('.btn-wizard');
@@ -784,9 +915,9 @@
                 
                 newHtml += `
                 <div class="d-flex gap-1 mb-1 serial-row">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx" value="${ser.prefix}">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal" value="${ser.start}">
-                    <input type="text" name="items[${cIdx}][serials][${loopIdx}][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir" value="${ser.end}">
+                    <input type="text" name="items[${originalIdx}][serials][${loopIdx}][prefix]" class="form-control form-control-sm text-center fw-bold" style="max-width:50px; font-size:0.7rem;" placeholder="Pfx" value="${ser.prefix}">
+                    <input type="text" name="items[${originalIdx}][serials][${loopIdx}][start]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Awal" value="${ser.start}">
+                    <input type="text" name="items[${originalIdx}][serials][${loopIdx}][end]" class="form-control form-control-sm text-center format-seri" style="font-size:0.7rem;" placeholder="Seri Akhir" value="${ser.end}">
                     ${appendHtml}
                 </div>`;
             });
