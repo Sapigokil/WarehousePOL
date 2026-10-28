@@ -108,19 +108,43 @@ class DashboardController extends Controller
             $chartOutbound[] = (int) $outQty;
         }
 
-        // 5. DOKUMEN RECENT ACTIVITY (MIX INBOUND & OUTBOUND)
-        $recentInbound = InSppm::with('warehouse')->latest()->take(5)->get()->map(function($item) {
-            $item->type = 'SPPM Masuk';
-            return $item;
-        });
+        // 5. DOKUMEN RECENT ACTIVITY (MIX INBOUND & OUTBOUND DENGAN KATEGORI & TOTAL QTY)
+        $recentInbound = InSppm::with(['warehouse', 'details.material.category'])
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(function($item) {
+                $item->type = 'SPPM Masuk';
+                $item->total_qty = $item->details->sum('target_qty');
+                
+                // Ambil daftar kategori unik dari detail barang di dokumen ini
+                $categories = $item->details->map(function($d) {
+                    return $d->material->category->name ?? null;
+                })->filter()->unique()->values();
 
-        $recentOutbound = OutSppm::with('destination')->latest()->take(5)->get()->map(function($item) {
-            $item->type = 'SPPM Keluar';
-            return $item;
-        });
+                $item->category_summary = $categories->count() > 0 ? $categories->implode(', ') : '-';
+                return $item;
+            });
+
+        $recentOutbound = OutSppm::with(['destination', 'details.material.category'])
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(function($item) {
+                $item->type = 'SPPM Keluar';
+                $item->total_qty = $item->details->sum('target_qty');
+                
+                // Ambil daftar kategori unik dari detail barang di dokumen ini
+                $categories = $item->details->map(function($d) {
+                    return $d->material->category->name ?? null;
+                })->filter()->unique()->values();
+
+                $item->category_summary = $categories->count() > 0 ? $categories->implode(', ') : '-';
+                return $item;
+            });
 
         $recentActivities = $recentInbound->concat($recentOutbound)->sortByDesc('created_at')->take(6);
-
+        
         return view('dashboard', compact(
             'totalMaterialCount',
             'lowStockCount',

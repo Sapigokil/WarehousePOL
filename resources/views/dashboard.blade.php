@@ -280,7 +280,8 @@
                             <tr>
                                 <th>Tipe</th>
                                 <th>No. SPPM / Dokumen</th>
-                                <th>Tujuan / Asal</th>
+                                <th>Kategori Material</th>
+                                <th class="text-center">Total Qty</th>
                                 <th class="text-center">Status</th>
                                 <th class="text-center">Tanggal</th>
                             </tr>
@@ -295,11 +296,19 @@
                                             <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-0.5" style="font-size: 0.7rem;">SPPM KELUAR</span>
                                         @endif
                                     </td>
-                                    <td class="fw-bold text-dark">
-                                        {{ $act->sppm_no ?? $act->no_sppm ?? '-' }}
+                                    <td>
+                                        <strong class="text-dark d-block">{{ $act->sppm_no ?? $act->no_sppm ?? '-' }}</strong>
+                                        <small class="text-muted" style="font-size: 0.7rem;">
+                                            {{ $act->warehouse->name ?? $act->destination->name ?? '-' }}
+                                        </small>
                                     </td>
-                                    <td class="text-muted">
-                                        {{ $act->warehouse->name ?? $act->destination->name ?? '-' }}
+                                    <td>
+                                        <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.75rem;">
+                                            {{ $act->category_summary }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center fw-bold text-primary">
+                                        {{ number_format($act->total_qty, 0, ',', '.') }}
                                     </td>
                                     <td class="text-center">
                                         @if($act->status == 'completed')
@@ -314,7 +323,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="text-center py-4 text-muted">
+                                    <td colspan="6" class="text-center py-4 text-muted">
                                         <span class="small">Belum ada aktivitas transaksi dokumen.</span>
                                     </td>
                                 </tr>
