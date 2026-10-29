@@ -193,7 +193,7 @@
         }
 
         .table-custom td {
-            padding: 11px 18px;
+            padding: 12px 18px;
             vertical-align: middle;
             font-size: 0.95rem;
             border-bottom: 1px solid #f1f5f9;
@@ -221,28 +221,18 @@
             font-size: 1.05rem;
         }
 
-        .badge-cat-tag {
-            font-size: 0.7rem;
-            font-weight: 800;
-            background: #e2e8f0;
-            color: #334155;
-            padding: 3px 8px;
-            border-radius: 4px;
-            margin-bottom: 3px;
-            display: inline-block;
-            text-transform: uppercase;
-        }
-
         .pill-qty {
             background: var(--pill-qty-bg);
             color: var(--pill-qty-text);
             font-size: 1.05rem;
             font-weight: 900;
-            padding: 6px 14px;
+            padding: 6px 16px;
             border-radius: 20px;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
+            min-width: 130px;
         }
 
         .pill-qty-unit {
@@ -254,18 +244,14 @@
         .text-daya-tahan {
             font-weight: 800;
             font-size: 0.95rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            display: inline-block;
         }
 
         .text-rate-usage {
             font-weight: 800;
             font-size: 0.95rem;
-            color: #475569;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            color: #334155;
+            display: inline-block;
         }
 
         /* FOOTER MONITOR BAR */
@@ -319,7 +305,7 @@
         </div>
     </div>
 
-    {{-- HEADER BRANDING KONTRASTING --}}
+    {{-- HEADER BRANDING --}}
     <div class="monitor-header-box d-flex justify-content-between align-items-center mb-2">
         <div class="d-flex align-items-center gap-3">
             <div class="bg-primary text-white p-2.5 rounded-3 shadow-sm d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
@@ -341,7 +327,7 @@
         </div>
     </div>
 
-    {{-- SUMMARY CARDS METRICS BAR (4 KOLOM DENGAN ICON KONTRAS TINGGI) --}}
+    {{-- SUMMARY CARDS METRICS BAR (4 KOLOM) --}}
     <div class="row g-2 mb-2">
         {{-- 1. Total Material --}}
         <div class="col-md-3">
@@ -410,11 +396,11 @@
             <table class="table-custom">
                 <thead>
                     <tr>
-                        <th width="5%" class="text-center">No</th>
-                        <th width="40%">Nama Material</th>
-                        <th width="18%">QTY Stock</th>
-                        <th width="18%">Daya Tahan</th>
-                        <th width="19%">Rate Usage / Bulan</th>
+                        <th width="6%" class="text-center">No</th>
+                        <th width="40%" class="text-start">Nama Material</th>
+                        <th width="18%" class="text-center">QTY Stock</th>
+                        <th width="18%" class="text-center">Daya Tahan</th>
+                        <th width="18%" class="text-center">Rate Usage / Bulan</th>
                     </tr>
                 </thead>
                 <tbody id="tbody-material-list">
@@ -538,34 +524,44 @@
 
             let html = '';
             allDisplayData.forEach((item, idx) => {
-                let dayaTahanColor = 'text-success';
-                if (item.status_color === 'danger') {
-                    dayaTahanColor = 'text-danger fw-extrabold';
-                } else if (item.status_color === 'warning') {
-                    dayaTahanColor = 'text-warning-emphasis fw-bold';
+                // Formatting Daya Tahan ("Tanpa Rate" -> "-")
+                let dayaTahanDisplay = '-';
+                if (item.daya_tahan && item.daya_tahan !== 'Tanpa Rate') {
+                    let dayaTahanColor = 'text-success';
+                    if (item.status_color === 'danger') {
+                        dayaTahanColor = 'text-danger fw-extrabold';
+                    } else if (item.status_color === 'warning') {
+                        dayaTahanColor = 'text-warning-emphasis fw-bold';
+                    }
+                    dayaTahanDisplay = `<span class="text-daya-tahan ${dayaTahanColor}">${escapeHtml(item.daya_tahan)}</span>`;
+                } else {
+                    dayaTahanDisplay = `<span class="text-muted fw-bold">-</span>`;
+                }
+
+                // Formatting Rate Usage (0 -> "-")
+                let rateUsageDisplay = '-';
+                if (item.rate_usage && item.rate_usage > 0) {
+                    rateUsageDisplay = `<span class="text-rate-usage">${numberFormat(item.rate_usage)} ${escapeHtml(item.satuan)}</span>`;
+                } else {
+                    rateUsageDisplay = `<span class="text-muted fw-bold">-</span>`;
                 }
 
                 html += `
                     <tr class="fade-in-anim">
-                        <td class="col-no">${idx + 1}</td>
-                        <td>
-                            <span class="badge-cat-tag">${escapeHtml(item.category)}</span>
+                        <td class="col-no text-center">${idx + 1}</td>
+                        <td class="text-start">
                             <div class="mat-name-text">${escapeHtml(item.display_name)}</div>
                         </td>
-                        <td>
+                        <td class="text-center">
                             <span class="pill-qty">
                                 ${numberFormat(item.stok)} <span class="pill-qty-unit">${escapeHtml(item.satuan)}</span>
                             </span>
                         </td>
-                        <td>
-                            <span class="text-daya-tahan ${dayaTahanColor}">
-                                ${escapeHtml(item.daya_tahan)}
-                            </span>
+                        <td class="text-center">
+                            ${dayaTahanDisplay}
                         </td>
-                        <td>
-                            <span class="text-rate-usage">
-                                ${numberFormat(item.rate_usage)} ${escapeHtml(item.satuan)}
-                            </span>
+                        <td class="text-center">
+                            ${rateUsageDisplay}
                         </td>
                     </tr>`;
             });
