@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SettingSeeder::class,
             RolePermissionSeeder::class,
+            DisplaySettingSeeder::class,
         ]);
         
         $this->command->info('Semua data Master dan Pengaturan berhasil diisi!');

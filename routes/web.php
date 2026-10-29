@@ -15,10 +15,18 @@ USe App\Http\Controllers\DestinationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReportAdjustmentController;
 use App\Http\Controllers\RateController;
+use App\Http\Controllers\DisplayController;
 
 Route::get('/', function () {
     return redirect('/login');
 });
+
+// =========================================================================
+// 1. ROUTE PUBLIC (NON-AUTH) - DAPT DIBUKA TANPA LOGIN
+// =========================================================================
+Route::get('/display/live', [DisplayController::class, 'showMonitor'])->name('display.live');
+Route::get('/display/api/data', [DisplayController::class, 'getMonitorData'])->name('display.api.data');
+
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'index'])->name('login');
@@ -184,5 +192,13 @@ Route::middleware(['auth', 'single.session', 'update.last.seen'])->group(functio
         Route::resource('destinations', \App\Http\Controllers\DestinationController::class)->except(['show']);
         Route::post('/destinations/import', [App\Http\Controllers\DestinationController::class, 'import'])->name('destinations.import');
         Route::get('system-logs', [\App\Http\Controllers\SystemLogController::class, 'index'])->name('sislogs.index');
+
+        // Halaman Setting Display Monitor
+        Route::get('/settings/display', [DisplayController::class, 'index'])->name('settings.display.index');
+        Route::put('/settings/display/global', [DisplayController::class, 'updateGlobalSettings'])->name('settings.display.update_global');
+        Route::post('/settings/display/materials', [DisplayController::class, 'storeMaterials'])->name('settings.display.store_materials');
+        Route::put('/settings/display/materials/bulk', [DisplayController::class, 'updateMaterialsBulk'])->name('settings.display.update_materials_bulk');
+        Route::delete('/settings/display/materials/{id}', [DisplayController::class, 'destroyMaterial'])->name('settings.display.destroy_material');
+
     });
 });

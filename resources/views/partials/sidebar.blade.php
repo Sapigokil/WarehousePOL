@@ -6,17 +6,17 @@
     <ul class="sidebar-menu">
         
         @can('Dashboard Menu')
-        <li class="sidebar-menu-header">Utama</li>
-        <li>
-            <a href="{{ route('dashboard') }}" class="sidebar-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-                <i class="fa-solid fa-house"></i> Dashboard
-            </a>
-        </li>
-        <li>
-            <a href="#" class="sidebar-link text-warning">
-                <i class="fa-solid fa-display"></i> Monitor Ruangan
-            </a>
-        </li>
+            <li class="sidebar-menu-header">Utama</li>
+            <li>
+                <a href="{{ route('dashboard') }}" class="sidebar-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+                    <i class="fa-solid fa-house"></i> Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="{{ route('display.live') }}" class="sidebar-link text-warning" onclick="launchDisplayMonitor(event)">
+                    <i class="fa-solid fa-display"></i> Display Monitor
+                </a>
+            </li>
         @endcan
 
         @canany(['Warehouse Menu', 'Inbound Menu', 'Outbound Menu'])
@@ -163,6 +163,11 @@
                     <i class="fa-solid fa-sliders"></i> Pengaturan Global
                 </a>
             </li>
+            <li>
+                <a href="{{ route('settings.display.index') }}" class="sidebar-link {{ request()->routeIs('settings.display.*') ? 'active' : '' }}">
+                    <i class="fa-solid fa-desktop"></i> Setting Display Monitor
+                </a>
+            </li>
             <li class="nav-item mb-1">
                 <a class="sidebar-link {{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') || request()->is('settings/rate*') ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#warehouseSettingMenu" role="button" aria-expanded="{{ request()->is('categories*') || request()->is('warehouses*') || request()->is('materials*') || request()->is('settings/rate*') ? 'true' : 'false' }}" aria-controls="warehouseSettingMenu">
                     <div class="d-flex w-100 justify-content-between align-items-center">
@@ -205,3 +210,43 @@
         @endcanany
     </ul>
 </nav>
+
+<script>
+    // FUNGSI GLOBAL LAUNCH DISPLAY MONITOR IN NEW WINDOW
+    async function launchDisplayMonitor(e) {
+        if (e) e.preventDefault();
+
+        const targetUrl = "{{ route('display.live') }}";
+
+        let targetLeft = 0;
+        let targetTop = 0;
+        let targetWidth = window.screen.availWidth || 1280;
+        let targetHeight = window.screen.availHeight || 720;
+
+        // Deteksi Layar Sekunder via Window Management API
+        if ('getScreenDetails' in window) {
+            try {
+                const screenDetails = await window.getScreenDetails();
+                const secondaryScreen = screenDetails.screens.find(screen => screen !== screenDetails.currentScreen) 
+                                    || screenDetails.screens.find(screen => !screen.isPrimary);
+
+                if (secondaryScreen) {
+                    targetLeft = secondaryScreen.availLeft;
+                    targetTop = secondaryScreen.availTop;
+                    targetWidth = secondaryScreen.availWidth;
+                    targetHeight = secondaryScreen.availHeight;
+                }
+            } catch (err) {
+                console.warn("Izin multi-screen ditolak, menggunakan dimensi layar utama:", err);
+            }
+        }
+
+        // Memaksa browser membuka Standalone Popup Window Baru
+        const windowFeatures = `popup=yes,left=${targetLeft},top=${targetTop},width=${targetWidth},height=${targetHeight},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no`;
+        
+        const monitorWindow = window.open(targetUrl, '_blank', windowFeatures);
+        if (monitorWindow) {
+            monitorWindow.focus();
+        }
+    }
+</script>

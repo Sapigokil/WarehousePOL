@@ -205,27 +205,40 @@
                         Centang material yang ingin dipantau tingkat penggunaannya. Material yang dicentang akan diberi nilai default <code>0</code>, sedangkan yang didecentang akan dikosongkan (<code>NULL</code>).
                     </p>
                     
-                    <div class="mb-2">
-                        <input type="text" id="filterModalMaterial" class="form-control form-control-sm" placeholder="Cari di daftar modal...">
+                    <div class="mb-3">
+                        <input type="text" id="filterModalMaterial" class="form-control form-control-sm" placeholder="Cari nama material atau kategori...">
                     </div>
 
-                    <div class="border rounded p-3 modal-scrollable bg-light">
-                        <div class="row" id="modalMaterialList">
-                            @foreach($allMaterials as $mat)
-                                @php $isChecked = !is_null($mat->rate_usage); @endphp
-                                <div class="col-md-6 mb-2 material-item-row" data-name="{{ strtolower($mat->name) }}">
-                                    <div class="form-check bg-white border rounded p-2 ps-4 h-100 d-flex align-items-center">
-                                        <input class="form-check-input me-2" type="checkbox" name="selected_materials[]" value="{{ $mat->id }}" id="chk_mat_{{ $mat->id }}" {{ $isChecked ? 'checked' : '' }}>
-                                        <label class="form-check-label w-100" for="chk_mat_{{ $mat->id }}" style="cursor: pointer; font-size: 0.85rem;">
-                                            <strong class="text-dark d-block">{{ $mat->name }}</strong>
-                                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                                Kategori: {{ $mat->category->name ?? '-' }} | Satuan: {{ $mat->satuan }}
-                                            </small>
-                                        </label>
-                                    </div>
+                    <div class="border rounded p-3 modal-scrollable bg-light" id="modalMaterialList">
+                        @forelse($allMaterials->groupBy(fn($item) => $item->category->name ?? 'Tanpa Kategori') as $categoryName => $materials)
+                            <div class="category-group-block mb-3">
+                                {{-- Header Kategori --}}
+                                <div class="fw-bold text-theme mb-2 pb-1 border-bottom border-primary border-opacity-25 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span><i class="fa-solid fa-folder-open me-2"></i>{{ $categoryName }}</span>
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border fw-normal" style="font-size: 0.7rem;">{{ $materials->count() }} Material</span>
                                 </div>
-                            @endforeach
-                        </div>
+
+                                {{-- Daftar Material 1 Kolom --}}
+                                @foreach($materials as $mat)
+                                    @php $isChecked = !is_null($mat->rate_usage); @endphp
+                                    <div class="material-item-row mb-2" data-name="{{ strtolower($mat->name) }}" data-category="{{ strtolower($categoryName) }}">
+                                        <div class="form-check bg-white border rounded p-2 ps-4 d-flex align-items-center">
+                                            <input class="form-check-input me-2" type="checkbox" name="selected_materials[]" value="{{ $mat->id }}" id="chk_mat_{{ $mat->id }}" {{ $isChecked ? 'checked' : '' }}>
+                                            <label class="form-check-label w-100" for="chk_mat_{{ $mat->id }}" style="cursor: pointer; font-size: 0.85rem;">
+                                                <strong class="text-dark d-block">{{ $mat->name }}</strong>
+                                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                                    Satuan: {{ $mat->satuan }}
+                                                </small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @empty
+                            <div class="text-center py-4 text-muted">
+                                <span class="small">Tidak ada data material yang ditemukan.</span>
+                            </div>
+                        @endforelse
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-0">
@@ -252,15 +265,30 @@
         }
     }
 
-    // Live Search Filter di Dalam Modal
+    // Live Search Filter di Dalam Modal (Support Grouping Kategori)
     document.getElementById('filterModalMaterial')?.addEventListener('keyup', function() {
         const query = this.value.toLowerCase();
-        document.querySelectorAll('.material-item-row').forEach(row => {
-            const name = row.dataset.name;
-            if (name.includes(query)) {
-                row.style.display = '';
+        
+        document.querySelectorAll('.category-group-block').forEach(group => {
+            let hasVisible = false;
+            
+            group.querySelectorAll('.material-item-row').forEach(row => {
+                const name = row.dataset.name;
+                const category = row.dataset.category;
+                
+                if (name.includes(query) || category.includes(query)) {
+                    row.style.display = '';
+                    hasVisible = true;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Sembunyikan header kategori jika seluruh material di dalamnya tidak cocok dengan kata kunci
+            if (hasVisible) {
+                group.style.display = '';
             } else {
-                row.style.display = 'none';
+                group.style.display = 'none';
             }
         });
     });
